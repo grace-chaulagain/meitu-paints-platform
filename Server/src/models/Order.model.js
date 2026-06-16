@@ -315,6 +315,16 @@ const OrderSchema = new mongoose.Schema(
       default: null,
     },
 
+    externalArchives: {
+      googleSheets: {
+        appendedAt: { type: Date, default: null },
+        lastAttemptedAt: { type: Date, default: null },
+        lastError: { type: String, default: "", trim: true },
+        spreadsheetId: { type: String, default: "", trim: true },
+        sheetName: { type: String, default: "", trim: true },
+      },
+    },
+
     archivedAt: {
       type: Date,
       default: null,

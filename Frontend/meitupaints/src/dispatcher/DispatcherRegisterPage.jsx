@@ -390,6 +390,7 @@ export default function DispatcherRegisterPage() {
       <NavBar />
 
       <div
+        className="dispatcher-apply-page"
         style={{
           minHeight: "100vh",
           paddingTop: 96,
@@ -398,12 +399,14 @@ export default function DispatcherRegisterPage() {
             "radial-gradient(900px 520px at 12% 0%, rgba(255,230,160,.46), transparent 52%), radial-gradient(900px 520px at 88% 10%, rgba(255,120,80,.18), transparent 45%), linear-gradient(180deg, #f5f6f8 0%, #edf1f5 100%)",
         }}
       >
-        <div className="container" style={{ maxWidth: 1440 }}>
+        <div className="container dispatcher-apply-container" style={{ maxWidth: 1440 }}>
           <GlassPanel style={{ padding: 30, marginBottom: 22 }}>
             <div
+              className="dispatcher-apply-hero-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, .8fr)",
+                gridTemplateColumns:
+                  "minmax(0, 1.45fr) minmax(320px, .8fr)",
                 gap: 24,
                 alignItems: "start",
               }}
@@ -412,6 +415,7 @@ export default function DispatcherRegisterPage() {
                 <SectionEyebrow>Dispatcher Registration</SectionEyebrow>
 
                 <div
+                  className="dispatcher-apply-title"
                   style={{
                     marginTop: 16,
                     fontSize: 52,
@@ -444,6 +448,7 @@ export default function DispatcherRegisterPage() {
               </div>
 
               <div
+                className="dispatcher-apply-metrics"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
@@ -463,6 +468,7 @@ export default function DispatcherRegisterPage() {
           </GlassPanel>
 
           <div
+            className="dispatcher-apply-content-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1fr) 380px",
@@ -480,6 +486,7 @@ export default function DispatcherRegisterPage() {
                   subtitle="Provide the main operational person Meitu should coordinate with during verification and future dispatcher-side order handling."
                 >
                   <div
+                    className="dispatcher-apply-field-grid"
                     style={{
                       display: "grid",
                       gridTemplateColumns: "1fr 1fr",
@@ -591,6 +598,7 @@ export default function DispatcherRegisterPage() {
                 <StatusMessage error={error} success={success} />
 
                 <div
+                  className="dispatcher-apply-actions"
                   style={{
                     display: "flex",
                     gap: 12,
@@ -644,6 +652,7 @@ export default function DispatcherRegisterPage() {
             </GlassPanel>
 
             <div
+              className="dispatcher-apply-aside"
               style={{ position: "sticky", top: 100, display: "grid", gap: 18 }}
             >
               <GlassPanel style={{ padding: 22 }}>
@@ -718,6 +727,120 @@ export default function DispatcherRegisterPage() {
           </div>
         </div>
       </div>
+
+      <style>{`
+        .dispatcher-apply-page{
+          overflow-x:hidden;
+        }
+
+        .dispatcher-apply-container{
+          width:min(100%, 1440px);
+        }
+
+        .dispatcher-apply-hero-grid,
+        .dispatcher-apply-content-grid{
+          min-width:0;
+        }
+
+        .dispatcher-apply-content-grid > *,
+        .dispatcher-apply-hero-grid > *,
+        .dispatcher-apply-field-grid > *{
+          min-width:0;
+        }
+
+        @media (max-width: 1180px){
+          .dispatcher-apply-hero-grid{
+            grid-template-columns:1fr !important;
+          }
+
+          .dispatcher-apply-content-grid{
+            grid-template-columns:minmax(0,1fr) !important;
+          }
+
+          .dispatcher-apply-aside{
+            position:static !important;
+            top:auto !important;
+            grid-template-columns:repeat(2,minmax(0,1fr));
+          }
+        }
+
+        @media (max-width: 820px){
+          .dispatcher-apply-page{
+            padding-top:84px !important;
+            padding-bottom:46px !important;
+          }
+
+          .dispatcher-apply-container{
+            padding-left:16px !important;
+            padding-right:16px !important;
+          }
+
+          .dispatcher-apply-page [style*="border-radius: 30px"]{
+            border-radius:22px !important;
+          }
+
+          .dispatcher-apply-title{
+            font-size:clamp(34px, 9vw, 44px) !important;
+            line-height:1.02 !important;
+            letter-spacing:-0.045em !important;
+          }
+
+          .dispatcher-apply-metrics,
+          .dispatcher-apply-field-grid,
+          .dispatcher-apply-aside{
+            grid-template-columns:1fr !important;
+          }
+
+          .dispatcher-apply-actions{
+            display:grid !important;
+            grid-template-columns:1fr !important;
+            gap:10px !important;
+          }
+
+          .dispatcher-apply-actions button{
+            width:100% !important;
+            min-height:54px !important;
+          }
+        }
+
+        @media (max-width: 560px){
+          .dispatcher-apply-page{
+            padding-top:76px !important;
+            padding-bottom:34px !important;
+          }
+
+          .dispatcher-apply-container{
+            padding-left:12px !important;
+            padding-right:12px !important;
+          }
+
+          .dispatcher-apply-page [style*="padding: 30px"]{
+            padding:18px !important;
+          }
+
+          .dispatcher-apply-page [style*="padding: 26px"]{
+            padding:18px !important;
+          }
+
+          .dispatcher-apply-page [style*="padding: 22px"]{
+            padding:18px !important;
+          }
+
+          .dispatcher-apply-page [style*="gap: 28px"]{
+            gap:22px !important;
+          }
+
+          .dispatcher-apply-page input{
+            height:52px !important;
+            border-radius:15px !important;
+          }
+
+          .dispatcher-apply-page textarea{
+            min-height:124px !important;
+            border-radius:15px !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

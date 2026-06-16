@@ -9,6 +9,7 @@ import {
 
 const SECTIONS = {
   OVERVIEW: "overview",
+  DRAFT_ORDER: "draftOrder",
   ORDERS: "orders",
   DEALERS: "dealers",
   NOTIFICATIONS: "notifications",
@@ -46,6 +47,10 @@ export default function DispatcherDashboardPage() {
       return SECTIONS.OVERVIEW;
     }
 
+    if (path.startsWith("/dispatcher/dashboard/draft-order")) {
+      return SECTIONS.DRAFT_ORDER;
+    }
+
     if (
       path.startsWith("/dispatcher/dashboard/orders") ||
       (path.includes("/dispatcher/dashboard/dealers/") &&
@@ -77,6 +82,13 @@ export default function DispatcherDashboardPage() {
         subtitle: "Operational summary",
         badge: "Home",
         href: "/dispatcher/dashboard",
+      },
+      {
+        key: SECTIONS.DRAFT_ORDER,
+        title: "Draft Order",
+        subtitle: "Price calculator",
+        badge: "Tool",
+        href: "/dispatcher/dashboard/draft-order",
       },
       {
         key: SECTIONS.ORDERS,
@@ -120,7 +132,9 @@ export default function DispatcherDashboardPage() {
       {
         label: "Workspace",
         items: navigationItems.filter((item) =>
-          [SECTIONS.OVERVIEW, SECTIONS.ORDERS].includes(item.key),
+          [SECTIONS.OVERVIEW, SECTIONS.DRAFT_ORDER, SECTIONS.ORDERS].includes(
+            item.key,
+          ),
         ),
       },
       {

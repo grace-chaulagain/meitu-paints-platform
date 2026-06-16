@@ -63,6 +63,7 @@ const ROUTING_OPTIONS = [
 ];
 
 const DATE_PRESETS = [
+  { value: "all", label: "All time" },
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
@@ -76,6 +77,8 @@ function isoDate(date) {
 }
 
 function rangeForPreset(preset) {
+  if (preset === "all") return { from: "", to: "" };
+
   const now = new Date();
   const to = new Date(now);
   const from = new Date(now);
@@ -114,6 +117,35 @@ function formatDate(value) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function compactCurrency(value, currency = "NPR") {
+  const amount = Number(value || 0);
+  if (!amount) return "0";
+  const compact = new Intl.NumberFormat(undefined, {
+    notation: "compact",
+    maximumFractionDigits: amount >= 100000 ? 1 : 0,
+  }).format(amount);
+  return `${currency} ${compact}`;
+}
+
+function formatTrendLabel(value) {
+  const label = String(value || "");
+  if (/^\d{4}-\d{2}$/.test(label)) {
+    const date = new Date(`${label}-01T00:00:00`);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      year: "2-digit",
+    });
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+    const date = new Date(`${label}T00:00:00`);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  }
+  return label;
 }
 
 function sectionFromPath(pathname) {
@@ -250,22 +282,41 @@ function BarList({ items = [], valueKey = "value", labelKey = "label", formatVal
 }
 
 function TrendStrip({ data = [], currency = "NPR" }) {
-  const max = Math.max(1, ...data.map((item) => Number(item.revenue || item.orders || 0)));
   if (!data.length) return <div className="insight-empty">No trend signal yet.</div>;
+  const visible = data.slice(-18);
+  const max = Math.max(1, ...visible.map((item) => Number(item.revenue || 0)));
+  const scale = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
+    ratio,
+    value: max * ratio,
+  }));
 
   return (
-    <div className="insight-trend">
-      {data.slice(-18).map((point) => (
-        <div className="insight-trend-point" key={point.label}>
-          <span
-            style={{
-              height: `${Math.max(8, (Number(point.revenue || point.orders || 0) / max) * 100)}%`,
-            }}
-            title={`${point.label}: ${money(point.revenue, currency)}`}
-          />
-          <em>{String(point.label).slice(5)}</em>
+    <div className="insight-trend-wrap">
+      <div className="insight-trend-axis" aria-hidden="true">
+        {scale.map((tick) => (
+          <span key={tick.ratio}>{compactCurrency(tick.value, currency)}</span>
+        ))}
+      </div>
+      <div className="insight-trend-chart">
+        <div className="insight-trend-grid" aria-hidden="true">
+          {scale.map((tick) => (
+            <span key={tick.ratio} />
+          ))}
         </div>
-      ))}
+        <div className="insight-trend">
+          {visible.map((point) => (
+            <div className="insight-trend-point" key={point.label}>
+              <span
+                style={{
+                  height: `${Math.max(8, (Number(point.revenue || 0) / max) * 100)}%`,
+                }}
+                title={`${point.label}: ${money(point.revenue, currency)}`}
+              />
+              <em>{formatTrendLabel(point.label)}</em>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -343,6 +394,7 @@ function FilterBar({ filters, setFilters, options, loading, onRefresh }) {
       ...(options.categories || []),
     ]),
   );
+  const isAllTime = filters.preset === "all";
 
   function updatePreset(value) {
     if (value === "custom") {
@@ -394,6 +446,7 @@ function FilterBar({ filters, setFilters, options, loading, onRefresh }) {
           <input
             type="date"
             value={filters.from}
+            disabled={isAllTime}
             onChange={(e) =>
               setFilters((current) => ({
                 ...current,
@@ -408,6 +461,7 @@ function FilterBar({ filters, setFilters, options, loading, onRefresh }) {
           <input
             type="date"
             value={filters.to}
+            disabled={isAllTime}
             onChange={(e) =>
               setFilters((current) => ({
                 ...current,
@@ -985,12 +1039,15 @@ export default function AdminInsightsPage() {
 
   const queryParams = useMemo(() => {
     const params = {
-      from: filters.from,
-      to: filters.to,
+      range: filters.preset,
       status: filters.status,
       routing: filters.routing,
       dealerState: filters.dealerState,
     };
+    if (filters.preset !== "all") {
+      params.from = filters.from;
+      params.to = filters.to;
+    }
     if (filters.dispatcherId) params.dispatcherId = filters.dispatcherId;
     if (filters.dealerId) params.dealerId = filters.dealerId;
     if (filters.category !== "ALL") params.category = filters.category;
@@ -1123,10 +1180,15 @@ export default function AdminInsightsPage() {
         .insight-bar-top strong{ flex:0 0 auto; color:rgba(15,23,42,.62); font-size:11px; }
         .insight-bar-track{ height:7px; border-radius:999px; background:rgba(15,23,42,.06); overflow:hidden; }
         .insight-bar-track span{ display:block; height:100%; border-radius:999px; background:#b42318; }
-        .insight-trend{ height:220px; display:flex; align-items:end; gap:6px; padding:18px 16px 14px; }
-        .insight-trend-point{ flex:1; min-width:12px; height:100%; display:grid; grid-template-rows:1fr auto; gap:7px; align-items:end; justify-items:center; }
+        .insight-trend-wrap{ height:240px; display:grid; grid-template-columns:72px minmax(0,1fr); gap:10px; padding:18px 16px 12px; }
+        .insight-trend-axis{ display:flex; flex-direction:column; justify-content:space-between; align-items:flex-end; padding:0 0 25px; font-size:10px; line-height:1; font-weight:900; color:rgba(15,23,42,.48); font-variant-numeric:tabular-nums; }
+        .insight-trend-chart{ position:relative; min-width:0; overflow:hidden; }
+        .insight-trend-grid{ position:absolute; inset:0 0 25px; display:flex; flex-direction:column; justify-content:space-between; pointer-events:none; }
+        .insight-trend-grid span{ display:block; border-top:1px solid rgba(15,23,42,.075); }
+        .insight-trend{ position:relative; z-index:1; height:100%; display:flex; align-items:end; gap:6px; padding:0 0 0; }
+        .insight-trend-point{ flex:1; min-width:28px; height:100%; display:grid; grid-template-rows:1fr 21px; gap:4px; align-items:end; justify-items:center; }
         .insight-trend-point span{ width:100%; border-radius:8px 8px 2px 2px; background:linear-gradient(180deg,#b42318,#ef4444); }
-        .insight-trend-point em{ font-style:normal; font-size:10px; font-weight:800; color:rgba(15,23,42,.46); writing-mode:vertical-rl; transform:rotate(180deg); }
+        .insight-trend-point em{ width:100%; min-width:0; font-style:normal; font-size:10px; line-height:1.15; font-weight:850; color:rgba(15,23,42,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center; }
         .insight-signals{ display:grid; gap:10px; padding:15px 16px; }
         .insight-signal{ border-left:3px solid rgba(15,23,42,.2); background:#f8fafc; border-radius:0 12px 12px 0; padding:11px 12px; display:grid; gap:4px; }
         .insight-signal.positive{ border-left-color:#047857; background:rgba(4,120,87,.06); }
@@ -1175,8 +1237,10 @@ export default function AdminInsightsPage() {
           .report-card-grid,
           .report-card-grid.compact{ grid-template-columns:1fr; }
           .insights-filter-grid button{ width:100%; }
-          .insight-trend{ height:180px; overflow-x:auto; }
-          .insight-trend-point{ min-width:24px; }
+          .insight-trend-wrap{ height:210px; grid-template-columns:62px minmax(0,1fr); padding:14px 12px 10px; }
+          .insight-trend-chart{ overflow-x:auto; }
+          .insight-trend{ min-width:520px; }
+          .insight-trend-point{ min-width:28px; }
         }
       `}</style>
     </div>

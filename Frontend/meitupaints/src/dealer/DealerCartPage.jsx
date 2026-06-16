@@ -700,6 +700,7 @@ export default function DealerCartPage() {
     <>
       <NavBar />
       <div
+        className="dealer-cart-page"
         style={{
           minHeight: "100vh",
           paddingTop: 90,
@@ -711,6 +712,7 @@ export default function DealerCartPage() {
         <div className="container" style={{ maxWidth: 1520 }}>
           <GlassPanel style={{ padding: 26, marginBottom: 22 }}>
             <div
+              className="dealer-cart-hero-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, .8fr)",
@@ -795,6 +797,7 @@ export default function DealerCartPage() {
               </div>
 
               <div
+                className="dealer-cart-metrics-grid"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
@@ -846,6 +849,7 @@ export default function DealerCartPage() {
             </GlassPanel>
           ) : (
             <div
+              className="dealer-cart-layout-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1fr) 390px",
@@ -1269,6 +1273,59 @@ export default function DealerCartPage() {
           )}
         </div>
       </div>
+
+      <style>{`
+        .dealer-cart-page,
+        .dealer-cart-page *{
+          box-sizing:border-box;
+          min-width:0;
+        }
+
+        @media (max-width:1040px){
+          .dealer-cart-hero-grid,
+          .dealer-cart-layout-grid{
+            grid-template-columns:1fr!important;
+          }
+        }
+
+        @media (max-width:720px){
+          .dealer-cart-page{
+            padding-top:84px!important;
+            padding-bottom:36px!important;
+          }
+
+          .dealer-cart-page .container{
+            padding-left:14px;
+            padding-right:14px;
+          }
+
+          .dealer-cart-metrics-grid{
+            grid-template-columns:repeat(2,minmax(0,1fr))!important;
+          }
+
+          .dealer-cart-page [style*="grid-template-columns: 96px"],
+          .dealer-cart-page [style*="minmax(0, 1fr) 390px"],
+          .dealer-cart-page [style*="1fr 1fr"]{
+            grid-template-columns:1fr!important;
+          }
+
+          .dealer-cart-page [style*="font-size: 48px"]{
+            font-size:34px!important;
+            letter-spacing:-.04em!important;
+          }
+        }
+
+        @media (max-width:480px){
+          .dealer-cart-metrics-grid{
+            grid-template-columns:1fr!important;
+          }
+
+          .dealer-cart-page a,
+          .dealer-cart-page button{
+            max-width:100%;
+          }
+        }
+      `}</style>
     </>
   );
 }

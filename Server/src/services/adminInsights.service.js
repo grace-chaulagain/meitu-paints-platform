@@ -46,10 +46,25 @@ function parseDateBoundary(value, endOfDay = false) {
   return date;
 }
 
-function resolveDateRange({ from, to } = {}) {
+function resolveDateRange(filters = {}) {
+  const { from, to } = filters;
+  const requestedRange = normalizeUpper(filters.range || filters.preset);
   const now = new Date();
   const fallbackTo = new Date(now);
   fallbackTo.setHours(23, 59, 59, 999);
+
+  if (requestedRange === "ALL") {
+    const start = new Date(0);
+    const end = fallbackTo;
+    return {
+      start,
+      end,
+      previousStart: null,
+      previousEnd: null,
+      isAllTime: true,
+    };
+  }
+
   const fallbackFrom = new Date(fallbackTo.getTime() - 29 * DAY_MS);
   fallbackFrom.setHours(0, 0, 0, 0);
 
@@ -238,8 +253,11 @@ function pushSignal(signals, title, body, tone = "neutral") {
 function buildOrderQuery({ filters, range, dealerScopeIds }) {
   const q = {
     isDeleted: { $ne: true },
-    createdAt: { $gte: range.start, $lte: range.end },
   };
+
+  if (!range?.isAllTime) {
+    q.createdAt = { $gte: range.start, $lte: range.end };
+  }
 
   const status = normalizeUpper(filters.status);
   if (status === "APPROVED" || status === "VERIFIED") q.status = APPROVED_STATUS;
@@ -859,10 +877,12 @@ export async function getAdminInsights(filters = {}) {
   }
 
   const currentQuery = buildOrderQuery({ filters, range, dealerScopeIds });
-  const previousQuery = {
-    ...currentQuery,
-    createdAt: { $gte: range.previousStart, $lte: range.previousEnd },
-  };
+  const previousQuery = range.isAllTime
+    ? null
+    : {
+        ...currentQuery,
+        createdAt: { $gte: range.previousStart, $lte: range.previousEnd },
+      };
 
   const [orders, previousOrders] = await Promise.all([
     Order.find(currentQuery)
@@ -880,11 +900,13 @@ export async function getAdminInsights(filters = {}) {
         select: "name companyName email phone status isActive",
       })
       .lean(),
-    Order.find(previousQuery)
-      .sort({ createdAt: -1 })
-      .populate({ path: "dealerId", select: "companyName contactName email phone status fulfillmentMode dispatcherId" })
-      .populate({ path: "dispatcherId", select: "name companyName email phone status isActive" })
-      .lean(),
+    previousQuery
+      ? Order.find(previousQuery)
+          .sort({ createdAt: -1 })
+          .populate({ path: "dealerId", select: "companyName contactName email phone status fulfillmentMode dispatcherId" })
+          .populate({ path: "dispatcherId", select: "name companyName email phone status isActive" })
+          .lean()
+      : Promise.resolve([]),
   ]);
 
   const dealerMap = new Map(dealers.map((dealer) => [idOf(dealer), dealer]));
@@ -974,7 +996,9 @@ export async function getAdminInsights(filters = {}) {
   pushSignal(
     signals,
     "Revenue movement",
-    `${growth(approvedRevenue, previousApprovedRevenue).toFixed(1)}% versus the previous comparable period.`,
+    range.isAllTime
+      ? "All verified history is included in the current insight view."
+      : `${growth(approvedRevenue, previousApprovedRevenue).toFixed(1)}% versus the previous comparable period.`,
     growth(approvedRevenue, previousApprovedRevenue) >= 0 ? "positive" : "risk",
   );
   pushSignal(
@@ -1008,8 +1032,9 @@ export async function getAdminInsights(filters = {}) {
 
   return {
     filters: {
-      from: range.start.toISOString(),
-      to: range.end.toISOString(),
+      range: range.isAllTime ? "all" : filters.range || filters.preset || "custom",
+      from: range.isAllTime ? "" : range.start.toISOString(),
+      to: range.isAllTime ? "" : range.end.toISOString(),
       status: filters.status || "APPROVED",
       routing: filters.routing || "ALL",
       dispatcherId: filters.dispatcherId || "",

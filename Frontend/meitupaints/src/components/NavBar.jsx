@@ -334,7 +334,7 @@ function NavBar() {
               role="menuitem"
               onClick={() => setProfileMenuOpen(false)}
             >
-              Catalog
+              Order
             </Link>
 
             <Link
@@ -343,7 +343,7 @@ function NavBar() {
               role="menuitem"
               onClick={() => setProfileMenuOpen(false)}
             >
-              Orders
+              History
             </Link>
           </>
         ) : null}
@@ -712,13 +712,13 @@ function NavBar() {
                   to={dealerCatalogHref}
                   onClick={() => setMobileOpen(false)}
                 >
-                  Catalog
+                  Order
                 </Link>
                 <Link
                   to={dealerOrdersHref}
                   onClick={() => setMobileOpen(false)}
                 >
-                  Orders
+                  History
                 </Link>
               </>
             ) : null}

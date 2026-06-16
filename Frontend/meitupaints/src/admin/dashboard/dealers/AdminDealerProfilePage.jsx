@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../../api/client.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
@@ -7,6 +8,41 @@ const ROUTING_MODES = [
   { value: "FACTORY", label: "Factory" },
   { value: "DISPATCHER", label: "Dispatcher" },
 ];
+
+const HEALTH_SCORE_INFO = {
+  title: "Dealer health score",
+  summary:
+    "A 0-100 operational health reading that helps admin judge whether a dealer is active, reliable, and growing.",
+  sections: [
+    {
+      title: "What affects it",
+      items: [
+        "Approved order count raises the score as the dealer builds a verified order record.",
+        "Recent ordering improves the score; long inactivity reduces it.",
+        "Strong 30-day revenue growth improves it, while a sharp drop reduces it.",
+        "High approval rate improves it; frequent rejection reduces it.",
+        "Heavy dependence on one product slightly reduces it because the account is less balanced.",
+      ],
+    },
+    {
+      title: "Dealer tier",
+      items: [
+        "Platinum: NPR 1,000,000+ approved sales or 20+ approved orders.",
+        "Gold: NPR 500,000+ approved sales or 12+ approved orders.",
+        "Silver: NPR 150,000+ approved sales or 5+ approved orders.",
+        "Developing: has approved orders but is below Silver volume.",
+        "Unproven: no approved orders yet.",
+      ],
+    },
+    {
+      title: "How to use it",
+      items: [
+        "High score with Developing tier means the dealer is healthy but still growing in total volume.",
+        "Low score means admin should review recent inactivity, rejections, or product concentration.",
+      ],
+    },
+  ],
+};
 
 function GlassCard({ children, style = {}, ...rest }) {
   return (
@@ -67,10 +103,76 @@ function SectionHeader({ title, subtitle, action = null }) {
   );
 }
 
-function MetricCard({ label, value, helper = "", accent = false }) {
+function MetricCard({ label, value, helper = "", accent = false, info = null }) {
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState(null);
+  const infoButtonRef = useRef(null);
+  const popoverRef = useRef(null);
+
+  const updatePopoverPosition = useCallback(() => {
+    const rect = infoButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const viewportPadding = 16;
+    const width = Math.min(360, window.innerWidth - viewportPadding * 2);
+    const rightSideLeft = rect.right + 12;
+    const left =
+      rightSideLeft + width <= window.innerWidth - viewportPadding
+        ? rightSideLeft
+        : Math.max(viewportPadding, rect.left - width - 12);
+    const estimatedHeight = Math.min(460, window.innerHeight - viewportPadding * 2);
+    const top = Math.max(
+      viewportPadding,
+      Math.min(rect.top - 8, window.innerHeight - viewportPadding - estimatedHeight),
+    );
+    const maxHeight = Math.max(
+      180,
+      Math.min(460, window.innerHeight - top - viewportPadding),
+    );
+
+    setPopoverPosition({ left, top, width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!infoOpen) return undefined;
+
+    function handlePointerDown(event) {
+      const target = event.target;
+      if (
+        popoverRef.current?.contains(target) ||
+        infoButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setInfoOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+    };
+  }, [infoOpen, updatePopoverPosition]);
+
+  useEffect(() => {
+    if (!infoOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setInfoOpen(false);
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [infoOpen]);
+
   return (
     <div
       style={{
+        position: "relative",
         borderRadius: 20,
         padding: "16px 18px",
         background: accent ? "rgba(180,35,24,.06)" : "rgba(248,250,252,.95)",
@@ -81,14 +183,57 @@ function MetricCard({ label, value, helper = "", accent = false }) {
     >
       <div
         style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.46)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
         }}
       >
-        {label}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: ".08em",
+            textTransform: "uppercase",
+            color: "rgba(15,23,42,.46)",
+          }}
+        >
+          {label}
+        </div>
+        {info ? (
+          <button
+            ref={infoButtonRef}
+            type="button"
+            aria-label={`About ${label}`}
+            aria-expanded={infoOpen}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setInfoOpen((current) => {
+                const next = !current;
+                if (next) requestAnimationFrame(updatePopoverPosition);
+                return next;
+              });
+            }}
+            style={{
+              width: 25,
+              height: 25,
+              borderRadius: 999,
+              border: "1px solid rgba(15,23,42,.12)",
+              background: "#fff",
+              color: accent ? "#b42318" : "#475569",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 13,
+              fontWeight: 950,
+              cursor: "pointer",
+              boxShadow: "0 1px 2px rgba(15,23,42,.05)",
+            }}
+          >
+            i
+          </button>
+        ) : null}
       </div>
       <div
         style={{
@@ -113,6 +258,112 @@ function MetricCard({ label, value, helper = "", accent = false }) {
           {helper}
         </div>
       ) : null}
+      {info && infoOpen && popoverPosition && typeof document !== "undefined"
+        ? createPortal(
+              <div
+                ref={popoverRef}
+                role="dialog"
+                aria-label={`${label} details`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: "fixed",
+                  top: popoverPosition.top,
+                  left: popoverPosition.left,
+                  zIndex: 9999,
+                  width: popoverPosition.width,
+                  maxHeight: popoverPosition.maxHeight,
+                  overflow: "auto",
+                  overscrollBehavior: "contain",
+                  padding: 14,
+                  borderRadius: 16,
+                  border: "1px solid rgba(15,23,42,.12)",
+                  background: "#fff",
+                  boxShadow: "0 22px 60px rgba(15,23,42,.22)",
+                  color: "#0f172a",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 950 }}>
+                      {info.title}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 5,
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        fontWeight: 750,
+                        color: "rgba(15,23,42,.62)",
+                      }}
+                    >
+                      {info.summary}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close health score details"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setInfoOpen(false);
+                    }}
+                    style={{
+                      border: 0,
+                      background: "transparent",
+                      color: "rgba(15,23,42,.48)",
+                      fontSize: 18,
+                      lineHeight: 1,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                  {(info.sections || []).map((section) => (
+                    <div key={section.title}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 950,
+                          letterSpacing: ".06em",
+                          textTransform: "uppercase",
+                          color: "rgba(15,23,42,.48)",
+                        }}
+                      >
+                        {section.title}
+                      </div>
+                      <ul
+                        style={{
+                          margin: "7px 0 0",
+                          paddingLeft: 16,
+                          display: "grid",
+                          gap: 5,
+                          fontSize: 12,
+                          lineHeight: 1.42,
+                          fontWeight: 750,
+                          color: "rgba(15,23,42,.68)",
+                        }}
+                      >
+                        {section.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -786,7 +1037,7 @@ export default function AdminDealerProfilePage() {
         </div>
       )}
 
-      <GlassCard style={{ padding: 22 }}>
+      <GlassCard style={{ padding: 22, overflow: "visible" }}>
         <SectionHeader
           title="Dealer Intelligence"
           subtitle="Approved-order performance and product behavior for this dealer."
@@ -839,6 +1090,7 @@ export default function AdminDealerProfilePage() {
               metrics.routing
             }
             accent={commercial.businessHealthScore >= 70}
+            info={HEALTH_SCORE_INFO}
           />
         </div>
       </GlassCard>

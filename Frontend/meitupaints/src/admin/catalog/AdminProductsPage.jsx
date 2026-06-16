@@ -1248,7 +1248,7 @@ function CatalogWorkspaceStyles() {
         flex-direction:column;
         border-right:1px solid rgba(15,23,42,.09);
         background:linear-gradient(180deg,rgba(255,255,255,.95),rgba(248,250,252,.96));
-        padding:12px 16px 16px 22px;
+        padding:0 16px 16px 22px;
       }
 
       .catalog-rail-head{

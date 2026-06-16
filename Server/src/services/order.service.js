@@ -16,6 +16,7 @@ import {
   notifyAssignedDealerOrderSubmitted,
   notifyFactoryOrderSubmitted,
 } from "./adminNotification.service.js";
+import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { buildOrderSummaryPdfAttachment } from "./orderPdf.service.js";
 
 function getFactorySettingsModel() {
@@ -811,6 +812,15 @@ export async function amendOrder({
   });
 
   await order.save();
+
+  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
+    console.error("[google-sheets-archive] Failed to archive verified order", {
+      orderId: String(order._id),
+      orderNumber: order.orderNumber,
+      message: error?.message,
+    });
+  });
+
   return order;
 }
 
@@ -864,6 +874,15 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
   }
 
   await order.save();
+
+  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
+    console.error("[google-sheets-archive] Failed to archive verified order", {
+      orderId: String(order._id),
+      orderNumber: order.orderNumber,
+      message: error?.message,
+    });
+  });
+
   return order;
 }
 

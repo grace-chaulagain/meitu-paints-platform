@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../../api/client.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
 
@@ -1375,6 +1375,7 @@ function DispatcherOrderModal({
 
 export default function DispatcherOrdersPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
@@ -1392,6 +1393,30 @@ export default function DispatcherOrdersPage() {
   const queryOrderId = useMemo(() => {
     return new URLSearchParams(location.search || "").get("orderId") || "";
   }, [location.search]);
+
+  const clearOrderQuery = useCallback(() => {
+    if (!queryOrderId) return;
+    navigate(
+      {
+        pathname: location.pathname,
+      },
+      { replace: true },
+    );
+  }, [location.pathname, navigate, queryOrderId]);
+
+  const openOrderPreview = useCallback(
+    (order) => {
+      setSelectedOrder(order);
+      clearOrderQuery();
+    },
+    [clearOrderQuery],
+  );
+
+  const closeOrderPreview = useCallback(() => {
+    if (busyAction) return;
+    setSelectedOrder(null);
+    clearOrderQuery();
+  }, [busyAction, clearOrderQuery]);
 
   const loadPageData = useCallback(async (
     nextView = viewMode,
@@ -1507,6 +1532,7 @@ export default function DispatcherOrdersPage() {
 
     if (success) {
       setSelectedOrder(null);
+      clearOrderQuery();
     }
   }
 
@@ -1519,6 +1545,7 @@ export default function DispatcherOrdersPage() {
 
     if (success) {
       setSelectedOrder(null);
+      clearOrderQuery();
     }
   }
 
@@ -1545,6 +1572,7 @@ export default function DispatcherOrdersPage() {
     if (success) {
       setAmendOrder(null);
       setSelectedOrder(null);
+      clearOrderQuery();
     }
   }
 
@@ -1641,7 +1669,7 @@ export default function DispatcherOrdersPage() {
               key={item._id}
               item={item}
               selected={selectedOrder?._id === item._id}
-              onSelect={(next) => setSelectedOrder(next)}
+              onSelect={openOrderPreview}
             />
           ))}
         </div>
@@ -1652,13 +1680,12 @@ export default function DispatcherOrdersPage() {
         open={Boolean(selectedOrder)}
         order={selectedOrder}
         busyAction={busyAction}
-        onClose={() => {
-          if (!busyAction) setSelectedOrder(null);
-        }}
+        onClose={closeOrderPreview}
         onVerify={handleVerify}
         onReject={handleReject}
         onAmend={(order) => {
           setSelectedOrder(null);
+          clearOrderQuery();
           setAmendOrder(order);
         }}
         onDownloadPdf={handleDownloadPdf}

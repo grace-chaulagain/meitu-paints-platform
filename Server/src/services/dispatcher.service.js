@@ -2,6 +2,7 @@ import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Dealer from "../models/DealerProfile.model.js";
 import Order from "../models/Order.model.js";
 import { notifyDispatcherApplicationSubmitted } from "./adminNotification.service.js";
+import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 
 function normalizeEmail(email = "") {
   return String(email || "")
@@ -411,6 +412,15 @@ export async function verifyAssignedOrder({
   }
 
   await order.save();
+
+  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
+    console.error("[google-sheets-archive] Failed to archive verified order", {
+      orderId: String(order._id),
+      orderNumber: order.orderNumber,
+      message: error?.message,
+    });
+  });
+
   return order;
 }
 

@@ -263,6 +263,8 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
           background:transparent;
         }
         .mn-shell{ max-width:1040px; margin:0 auto; display:grid; gap:18px; }
+        .mn-shell,
+        .mn-shell *{ box-sizing:border-box; min-width:0; }
         .mn-page-embedded .mn-shell{ max-width:none; margin:0; padding-top:0; align-content:start; }
         .mn-header{ display:flex; justify-content:space-between; align-items:flex-end; gap:18px; flex-wrap:wrap; }
         .mn-kicker{ font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:rgba(15,23,42,.46); }
@@ -295,6 +297,22 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
           .mn-actions{ width:100%; }
           .mn-button{ flex:1 1 auto; }
           .mn-item-top{ align-items:flex-start; flex-direction:column; gap:4px; }
+        }
+        @media (max-width:520px){
+          .mn-page{ padding:92px 12px 34px; }
+          .mn-page-embedded{ padding:0; }
+          .mn-header h1{ font-size:26px; }
+          .mn-actions{ display:grid; grid-template-columns:1fr; }
+          .mn-summary,
+          .mn-button{ width:100%; justify-content:center; }
+          .mn-date-head{ padding:14px; }
+          .mn-item{
+            grid-template-columns:1fr;
+            gap:8px;
+            padding:14px;
+          }
+          .mn-dot{ display:none; }
+          .mn-item-desc{ overflow-wrap:anywhere; }
         }
       `}</style>
     </>

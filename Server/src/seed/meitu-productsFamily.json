@@ -182,31 +182,108 @@
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {
-    "code": "ENAMEL-G1",
-    "name": "Meitu Glossy Enamel G1",
+    "code": "ENAMEL-G1-WHITE",
+    "name": "Meitu Glossy Enamel G1 - White",
     "category": "ENAMEL",
-    "description": "Glossy enamel finish from shade group G1, designed for decorative and durable surface coating.",
+    "description": "Glossy enamel finish from shade group G1 in White, designed for decorative color expression and durable coating performance.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {
-    "code": "ENAMEL-G2",
-    "name": "Meitu Glossy Enamel G2",
+    "code": "ENAMEL-G1-CHOCOLATE",
+    "name": "Meitu Glossy Enamel G1 - Chocolate",
     "category": "ENAMEL",
-    "description": "Glossy enamel finish from shade group G2, offering vibrant decorative color and durable coating performance.",
+    "description": "Glossy enamel finish from shade group G1 in Chocolate, designed for decorative color expression and durable coating performance.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {
-    "code": "ENAMEL-G3",
-    "name": "Meitu Glossy Enamel G3",
+    "code": "ENAMEL-G1-BLACK",
+    "name": "Meitu Glossy Enamel G1 - Black",
     "category": "ENAMEL",
-    "description": "Glossy enamel finish from shade group G3, created for smooth appearance and dependable finish quality.",
+    "description": "Glossy enamel finish from shade group G1 in Black, designed for decorative color expression and durable coating performance.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {
-    "code": "ENAMEL-G4",
-    "name": "Meitu Glossy Enamel G4",
+    "code": "ENAMEL-G2-PO-RED",
+    "name": "Meitu Glossy Enamel G2 - Po Red",
     "category": "ENAMEL",
-    "description": "Glossy enamel finish from shade group G4, designed for attractive color expression and lasting protection.",
+    "description": "Glossy enamel finish from shade group G2 in Po Red, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G2-LEAF-BROWN",
+    "name": "Meitu Glossy Enamel G2 - Leaf Brown",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G2 in Leaf Brown, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G2-PHIROZA",
+    "name": "Meitu Glossy Enamel G2 - Phiroza",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G2 in Phiroza, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G2-SMOKE-GRAY",
+    "name": "Meitu Glossy Enamel G2 - Smoke Gray",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G2 in Smoke Gray, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G3-BUS-GREEN",
+    "name": "Meitu Glossy Enamel G3 - Bus Green",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G3 in Bus Green, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G3-GOLDEN-BROWN",
+    "name": "Meitu Glossy Enamel G3 - Golden Brown",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G3 in Golden Brown, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G3-GOLDEN-YELLOW",
+    "name": "Meitu Glossy Enamel G3 - Golden Yellow",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G3 in Golden Yellow, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G4-SKY-BLUE",
+    "name": "Meitu Glossy Enamel G4 - Sky Blue",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G4 in Sky Blue, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G4-OLIVE-GREEN",
+    "name": "Meitu Glossy Enamel G4 - Olive Green",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G4 in Olive Green, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G4-MINT-GREEN",
+    "name": "Meitu Glossy Enamel G4 - Mint Green",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G4 in Mint Green, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G4-OXFORD-BLUE",
+    "name": "Meitu Glossy Enamel G4 - Oxford Blue",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G4 in Oxford Blue, designed for decorative color expression and durable coating performance.",
+    "copyrightText": "Product visuals and descriptions © Meitu Paints."
+  },
+  {
+    "code": "ENAMEL-G4-DEEP-ORANGE",
+    "name": "Meitu Glossy Enamel G4 - Deep Orange",
+    "category": "ENAMEL",
+    "description": "Glossy enamel finish from shade group G4 in Deep Orange, designed for decorative color expression and durable coating performance.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {

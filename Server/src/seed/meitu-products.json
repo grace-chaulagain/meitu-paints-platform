@@ -1240,152 +1240,1245 @@
     },
     {
       "datasetKey": "bhadra2082_enamel_colors",
-      "code": "ENAMEL-G1",
-      "name": "Meitu Glossy Enamel G1",
+      "code": "ENAMEL-G1-WHITE",
+      "name": "Meitu Glossy Enamel G1 - White",
       "category": "ENAMEL",
       "description": "",
-      "attributes": { "shadeGroup": "G1", "shades": ["White", "Chocolate", "Black"] },
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "attributes": {
+        "shadeGroup": "G1",
+        "shade": "White"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
-          "sku": "ENAMEL-G1-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "sku": "ENAMEL-G1-WHITE-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 2490 },
-            { "min": 21, "max": null, "pricePerPack": 2365 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2490
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2365
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G1-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "sku": "ENAMEL-G1-WHITE-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 630 },
-            { "min": 21, "max": null, "pricePerPack": 600 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 630
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 600
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G1-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "sku": "ENAMEL-G1-WHITE-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 330 },
-            { "min": 21, "max": null, "pricePerPack": 315 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 330
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 315
+            }
           ]
         }
       ]
     },
     {
       "datasetKey": "bhadra2082_enamel_colors",
-      "code": "ENAMEL-G2",
-      "name": "Meitu Glossy Enamel G2",
+      "code": "ENAMEL-G1-CHOCOLATE",
+      "name": "Meitu Glossy Enamel G1 - Chocolate",
       "category": "ENAMEL",
       "description": "",
-      "attributes": { "shadeGroup": "G2", "shades": ["Po Red", "Leaf Brown", "Phiroza", "Smoke Gray"] },
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "attributes": {
+        "shadeGroup": "G1",
+        "shade": "Chocolate"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
-          "sku": "ENAMEL-G2-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "sku": "ENAMEL-G1-CHOCOLATE-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 2275 },
-            { "min": 21, "max": null, "pricePerPack": 2161 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2490
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2365
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G2-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "sku": "ENAMEL-G1-CHOCOLATE-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 579 },
-            { "min": 21, "max": null, "pricePerPack": 550 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 630
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 600
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G2-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "sku": "ENAMEL-G1-CHOCOLATE-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 320 },
-            { "min": 21, "max": null, "pricePerPack": 304 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 330
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 315
+            }
           ]
         }
       ]
     },
     {
       "datasetKey": "bhadra2082_enamel_colors",
-      "code": "ENAMEL-G3",
-      "name": "Meitu Glossy Enamel G3",
+      "code": "ENAMEL-G1-BLACK",
+      "name": "Meitu Glossy Enamel G1 - Black",
       "category": "ENAMEL",
       "description": "",
-      "attributes": { "shadeGroup": "G3", "shades": ["Bus Green", "Golden Brown", "Golden Yellow"] },
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "attributes": {
+        "shadeGroup": "G1",
+        "shade": "Black"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
-          "sku": "ENAMEL-G3-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "sku": "ENAMEL-G1-BLACK-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 2070 },
-            { "min": 21, "max": null, "pricePerPack": 1965 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2490
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2365
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G3-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "sku": "ENAMEL-G1-BLACK-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 532 },
-            { "min": 21, "max": null, "pricePerPack": 505 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 630
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 600
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G3-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "sku": "ENAMEL-G1-BLACK-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 280 },
-            { "min": 21, "max": null, "pricePerPack": 266 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 330
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 315
+            }
           ]
         }
       ]
     },
     {
       "datasetKey": "bhadra2082_enamel_colors",
-      "code": "ENAMEL-G4",
-      "name": "Meitu Glossy Enamel G4",
+      "code": "ENAMEL-G2-PO-RED",
+      "name": "Meitu Glossy Enamel G2 - Po Red",
       "category": "ENAMEL",
       "description": "",
-      "attributes": { "shadeGroup": "G4", "shades": ["Sky Blue", "Olive Green", "Mint Green", "Oxford Blue", "Deep orange"] },
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "attributes": {
+        "shadeGroup": "G2",
+        "shade": "Po Red"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
-          "sku": "ENAMEL-G4-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "sku": "ENAMEL-G2-PO-RED-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 1780 },
-            { "min": 21, "max": null, "pricePerPack": 1690 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2275
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2161
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G4-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "sku": "ENAMEL-G2-PO-RED-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 460 },
-            { "min": 21, "max": null, "pricePerPack": 437 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 579
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 550
+            }
           ]
         },
         {
-          "sku": "ENAMEL-G4-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "sku": "ENAMEL-G2-PO-RED-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 240 },
-            { "min": 21, "max": null, "pricePerPack": 225 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 320
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 304
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G2-LEAF-BROWN",
+      "name": "Meitu Glossy Enamel G2 - Leaf Brown",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G2",
+        "shade": "Leaf Brown"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G2-LEAF-BROWN-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2275
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2161
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-LEAF-BROWN-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 579
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 550
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-LEAF-BROWN-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 320
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 304
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G2-PHIROZA",
+      "name": "Meitu Glossy Enamel G2 - Phiroza",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G2",
+        "shade": "Phiroza"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G2-PHIROZA-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2275
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2161
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-PHIROZA-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 579
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 550
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-PHIROZA-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 320
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 304
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G2-SMOKE-GRAY",
+      "name": "Meitu Glossy Enamel G2 - Smoke Gray",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G2",
+        "shade": "Smoke Gray"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G2-SMOKE-GRAY-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2275
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 2161
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-SMOKE-GRAY-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 579
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 550
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G2-SMOKE-GRAY-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 320
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 304
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G3-BUS-GREEN",
+      "name": "Meitu Glossy Enamel G3 - Bus Green",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G3",
+        "shade": "Bus Green"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G3-BUS-GREEN-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2070
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1965
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-BUS-GREEN-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 532
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 505
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-BUS-GREEN-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 280
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 266
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G3-GOLDEN-BROWN",
+      "name": "Meitu Glossy Enamel G3 - Golden Brown",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G3",
+        "shade": "Golden Brown"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G3-GOLDEN-BROWN-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2070
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1965
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-GOLDEN-BROWN-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 532
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 505
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-GOLDEN-BROWN-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 280
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 266
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G3-GOLDEN-YELLOW",
+      "name": "Meitu Glossy Enamel G3 - Golden Yellow",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G3",
+        "shade": "Golden Yellow"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G3-GOLDEN-YELLOW-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 2070
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1965
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-GOLDEN-YELLOW-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 532
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 505
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G3-GOLDEN-YELLOW-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 280
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 266
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G4-SKY-BLUE",
+      "name": "Meitu Glossy Enamel G4 - Sky Blue",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G4",
+        "shade": "Sky Blue"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G4-SKY-BLUE-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1780
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1690
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-SKY-BLUE-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 460
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 437
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-SKY-BLUE-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 240
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 225
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G4-OLIVE-GREEN",
+      "name": "Meitu Glossy Enamel G4 - Olive Green",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G4",
+        "shade": "Olive Green"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G4-OLIVE-GREEN-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1780
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1690
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-OLIVE-GREEN-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 460
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 437
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-OLIVE-GREEN-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 240
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 225
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G4-MINT-GREEN",
+      "name": "Meitu Glossy Enamel G4 - Mint Green",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G4",
+        "shade": "Mint Green"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G4-MINT-GREEN-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1780
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1690
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-MINT-GREEN-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 460
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 437
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-MINT-GREEN-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 240
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 225
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G4-OXFORD-BLUE",
+      "name": "Meitu Glossy Enamel G4 - Oxford Blue",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G4",
+        "shade": "Oxford Blue"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G4-OXFORD-BLUE-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1780
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1690
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-OXFORD-BLUE-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 460
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 437
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-OXFORD-BLUE-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 240
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 225
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_enamel_colors",
+      "code": "ENAMEL-G4-DEEP-ORANGE",
+      "name": "Meitu Glossy Enamel G4 - Deep Orange",
+      "category": "ENAMEL",
+      "description": "",
+      "attributes": {
+        "shadeGroup": "G4",
+        "shade": "Deep Orange"
+      },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
+      "variants": [
+        {
+          "sku": "ENAMEL-G4-DEEP-ORANGE-4L",
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1780
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1690
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-DEEP-ORANGE-1L",
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 460
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 437
+            }
+          ]
+        },
+        {
+          "sku": "ENAMEL-G4-DEEP-ORANGE-500ML",
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
+          "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
+          "prices": [
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 240
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 225
+            }
           ]
         }
       ]

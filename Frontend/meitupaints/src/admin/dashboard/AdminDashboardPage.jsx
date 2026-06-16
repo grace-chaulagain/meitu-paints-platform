@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../api/client.js";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
+import DraftOrderUtilityPage from "../../components/dashboard/DraftOrderUtilityPage.jsx";
 import {
   NOTIFICATION_CATEGORIES,
   useNotifications,
@@ -25,6 +26,7 @@ import AdminDealerOrdersPage from "./dealers/AdminDealerOrdersPage.jsx";
 
 const SECTIONS = {
   OVERVIEW: "overview",
+  DRAFT_ORDER: "draftOrder",
   APPLICATIONS: "applications",
   DEALERS: "dealers",
   DISPATCHERS: "dispatchers",
@@ -36,6 +38,7 @@ const SECTIONS = {
 
 const SECTION_ROUTE_MAP = {
   [SECTIONS.OVERVIEW]: "/admin/dashboard",
+  [SECTIONS.DRAFT_ORDER]: "/admin/dashboard/draft-order",
   [SECTIONS.APPLICATIONS]: "/admin/dashboard/applications",
   [SECTIONS.DEALERS]: "/admin/dashboard/dealers",
   [SECTIONS.DISPATCHERS]: "/admin/dashboard/dispatchers",
@@ -455,6 +458,9 @@ export default function AdminDashboard() {
     if (path === "/admin/dashboard" || path === "/admin/dashboard/") {
       return SECTIONS.OVERVIEW;
     }
+    if (path.startsWith("/admin/dashboard/draft-order")) {
+      return SECTIONS.DRAFT_ORDER;
+    }
     if (path.startsWith("/admin/dashboard/applications")) {
       return SECTIONS.APPLICATIONS;
     }
@@ -506,6 +512,12 @@ export default function AdminDashboard() {
         title: "Overview",
         subtitle: "Operations summary",
         badge: "Home",
+      },
+      {
+        key: SECTIONS.DRAFT_ORDER,
+        title: "Draft Order",
+        subtitle: "Price calculator",
+        badge: "Tool",
       },
       {
         key: SECTIONS.APPLICATIONS,
@@ -580,7 +592,7 @@ export default function AdminDashboard() {
         items: navigationItems.filter((item) =>
           [SECTIONS.OVERVIEW, SECTIONS.APPLICATIONS, SECTIONS.ORDERS].includes(
             item.key,
-          ),
+          ) || item.key === SECTIONS.DRAFT_ORDER,
         ),
       },
       {
@@ -642,6 +654,15 @@ export default function AdminDashboard() {
             onNavigate={handleNavigate}
             notificationCategories={notificationCategories}
             totalUnread={notifications?.totalUnread}
+          />
+        );
+
+      case SECTIONS.DRAFT_ORDER:
+        return (
+          <DraftOrderUtilityPage
+            roleLabel="Admin Utility"
+            title="Draft Order"
+            subtitle="Calculate product totals for internal quoting and order preparation. This page does not submit dealer orders."
           />
         );
 

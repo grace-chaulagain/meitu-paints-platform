@@ -43,6 +43,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Footer from "./components/Footer.jsx";
+import DraftOrderUtilityPage from "./components/dashboard/DraftOrderUtilityPage.jsx";
 
 import { AuthProvider } from "./auth/AuthProvider.jsx";
 import { useAuth } from "./auth/AuthProvider.jsx";
@@ -363,6 +364,16 @@ const router = createBrowserRouter([
           {
             index: true,
             element: <DispatcherOverviewPage />,
+          },
+          {
+            path: "draft-order",
+            element: (
+              <DraftOrderUtilityPage
+                roleLabel="Dispatcher Utility"
+                title="Draft Order"
+                subtitle="Calculate product totals for assigned dealer discussions. This page is only a pricing utility and does not submit an order."
+              />
+            ),
           },
           {
             path: "orders",

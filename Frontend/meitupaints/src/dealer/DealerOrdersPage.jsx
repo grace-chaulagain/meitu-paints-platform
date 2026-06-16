@@ -354,6 +354,7 @@ function OrderRow({ order, onOpen }) {
   return (
     <button
       type="button"
+      className="dealer-order-row"
       onClick={() => onOpen(order)}
       style={{
         width: "100%",
@@ -366,6 +367,7 @@ function OrderRow({ order, onOpen }) {
       }}
     >
       <div
+        className="dealer-order-row-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0,1fr) auto",
@@ -422,6 +424,7 @@ function OrderRow({ order, onOpen }) {
         </div>
 
         <div
+          className="dealer-order-count"
           style={{
             justifySelf: "end",
             textAlign: "right",
@@ -518,8 +521,9 @@ function OrderItemsTable({ items = [] }) {
         overflow: "hidden",
       }}
     >
-      <div style={{ overflowX: "auto" }}>
+      <div className="dealer-order-table-wrap" style={{ overflowX: "auto" }}>
         <table
+          className="dealer-order-items-table"
           style={{
             width: "100%",
             borderCollapse: "collapse",
@@ -701,6 +705,7 @@ function ModalShell({ open, onClose, children, maxWidth = 1080 }) {
 
   return (
     <div
+      className="dealer-order-modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -736,7 +741,7 @@ function OrderDetailModal({ open, order, onClose }) {
 
   return (
     <ModalShell open={open} onClose={onClose} maxWidth={1120}>
-      <div style={{ padding: 24 }}>
+      <div className="dealer-order-modal-body" style={{ padding: 24 }}>
         <SectionHeader
           title={order.orderNumber || "Order Detail"}
           subtitle="Complete record of your submitted order"
@@ -789,6 +794,7 @@ function OrderDetailModal({ open, order, onClose }) {
         />
 
         <div
+          className="dealer-order-detail-grid"
           style={{
             marginTop: 18,
             display: "flex",
@@ -848,11 +854,6 @@ function OrderDetailModal({ open, order, onClose }) {
                   label="Payment Method"
                   value={order?.payment?.method}
                 />
-                <DetailItem
-                  label="Payment Reference"
-                  value={order?.payment?.reference}
-                />
-                <DetailItem label="Payment Note" value={order?.payment?.note} />
                 <DetailItem label="Dealer Note" value={order?.dealerNote} />
                 <DetailItem label="Internal Note" value={order?.internalNote} />
                 <DetailItem
@@ -1018,6 +1019,7 @@ export default function DealerOrdersPage() {
       <NavBar />
 
       <div
+        className="dealer-orders-page"
         style={{
           minHeight: "100vh",
           paddingTop: 96,
@@ -1074,6 +1076,7 @@ export default function DealerOrdersPage() {
               />
 
               <div
+                className="dealer-orders-filter-grid"
                 style={{
                   marginTop: 18,
                   display: "grid",
@@ -1089,7 +1092,10 @@ export default function DealerOrdersPage() {
                   onSubmit={submitSearch}
                   onClear={clearSearch}
                 />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div
+                  className="dealer-orders-filter-pills"
+                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                >
                   {ORDER_FILTERS.map((filter) => (
                     <FilterPill
                       key={filter.key}
@@ -1152,6 +1158,143 @@ export default function DealerOrdersPage() {
         order={activeOrder}
         onClose={() => setActiveOrder(null)}
       />
+
+      <style>{`
+        .dealer-orders-page,
+        .dealer-orders-page *{
+          box-sizing:border-box;
+          min-width:0;
+        }
+
+        .dealer-order-table-wrap{
+          -webkit-overflow-scrolling:touch;
+        }
+
+        @media (max-width:900px){
+          .dealer-order-detail-grid{
+            grid-template-columns:1fr!important;
+          }
+        }
+
+        @media (max-width:720px){
+          .dealer-orders-page{
+            padding-top:84px!important;
+            padding-bottom:36px!important;
+          }
+
+          .dealer-orders-page .container{
+            padding-left:14px;
+            padding-right:14px;
+          }
+
+          .dealer-orders-filter-grid{
+            grid-template-columns:1fr!important;
+          }
+
+          .dealer-orders-filter-pills{
+            overflow-x:auto;
+            flex-wrap:nowrap!important;
+            padding-bottom:4px;
+            -webkit-overflow-scrolling:touch;
+          }
+
+          .dealer-orders-filter-pills button{
+            flex:0 0 auto;
+          }
+
+          .dealer-order-row{
+            border-radius:18px!important;
+            padding:15px!important;
+          }
+
+          .dealer-order-row-grid{
+            grid-template-columns:1fr!important;
+          }
+
+          .dealer-order-count{
+            justify-self:start!important;
+            text-align:left!important;
+          }
+
+          .dealer-order-items-table{
+            min-width:0;
+          }
+
+          .dealer-order-items-table,
+          .dealer-order-items-table tbody,
+          .dealer-order-items-table tr,
+          .dealer-order-items-table td{
+            display:block;
+            width:100%!important;
+          }
+
+          .dealer-order-items-table thead{
+            display:none;
+          }
+
+          .dealer-order-items-table tr{
+            padding:12px;
+            border-top:1px solid rgba(15,23,42,.08)!important;
+          }
+
+          .dealer-order-items-table tr:first-child{
+            border-top:0!important;
+          }
+
+          .dealer-order-items-table td{
+            padding:8px 0!important;
+            text-align:left!important;
+            white-space:normal!important;
+          }
+
+          .dealer-order-items-table td::before{
+            display:block;
+            margin-bottom:4px;
+            font-size:10px;
+            font-weight:950;
+            letter-spacing:.08em;
+            text-transform:uppercase;
+            color:rgba(15,23,42,.44);
+          }
+
+          .dealer-order-items-table td:nth-child(1)::before{ content:"Item"; }
+          .dealer-order-items-table td:nth-child(2)::before{ content:"Pack"; }
+          .dealer-order-items-table td:nth-child(3)::before{ content:"Qty"; }
+          .dealer-order-items-table td:nth-child(4)::before{ content:"Rate"; }
+          .dealer-order-items-table td:nth-child(5)::before{ content:"Amount"; }
+
+          .dealer-order-table-wrap{
+            overflow-x:hidden!important;
+          }
+
+          .dealer-order-modal-overlay{
+            padding:12px!important;
+            align-items:stretch!important;
+            place-items:stretch!important;
+          }
+
+          .dealer-order-modal-overlay > div{
+            width:100%!important;
+            max-height:calc(100dvh - 24px)!important;
+            border-radius:20px!important;
+          }
+
+          .dealer-order-modal-body{
+            padding:16px!important;
+          }
+        }
+
+        @media (max-width:520px){
+          .dealer-orders-page h1,
+          .dealer-orders-page [style*="font-size: 28px"]{
+            font-size:24px!important;
+          }
+
+          .dealer-order-modal-body{
+            padding:14px!important;
+          }
+        }
+      `}</style>
     </>
   );
 }

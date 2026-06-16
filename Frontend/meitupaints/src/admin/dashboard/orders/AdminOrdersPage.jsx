@@ -1430,6 +1430,30 @@ export default function AdminOrdersPage() {
     return new URLSearchParams(location.search || "").get("orderId") || "";
   }, [location.search]);
 
+  const clearOrderQuery = useCallback(() => {
+    if (!queryOrderId) return;
+    navigate(
+      {
+        pathname: location.pathname,
+      },
+      { replace: true },
+    );
+  }, [location.pathname, navigate, queryOrderId]);
+
+  const openOrderPreview = useCallback(
+    (order) => {
+      setActiveOrder(order);
+      clearOrderQuery();
+    },
+    [clearOrderQuery],
+  );
+
+  const closeOrderPreview = useCallback(() => {
+    if (busyAction) return;
+    setActiveOrder(null);
+    clearOrderQuery();
+  }, [busyAction, clearOrderQuery]);
+
   useEffect(() => {
     let alive = true;
 
@@ -1570,6 +1594,7 @@ export default function AdminOrdersPage() {
     );
     if (success) {
       setActiveOrder(null);
+      clearOrderQuery();
     }
   };
 
@@ -1584,6 +1609,7 @@ export default function AdminOrdersPage() {
     );
     if (success) {
       setActiveOrder(null);
+      clearOrderQuery();
     }
   };
 
@@ -1617,6 +1643,7 @@ export default function AdminOrdersPage() {
     if (success) {
       setAmendOrder(null);
       setActiveOrder(null);
+      clearOrderQuery();
     }
   };
 
@@ -1636,6 +1663,7 @@ export default function AdminOrdersPage() {
       setDeleteOrder(null);
       setDeleteConfirmation("");
       setActiveOrder(null);
+      clearOrderQuery();
     }
   };
 
@@ -1735,7 +1763,7 @@ export default function AdminOrdersPage() {
               <OrdersRow
                 key={item._id}
                 item={item}
-                onOpen={(next) => setActiveOrder(next)}
+                onOpen={openOrderPreview}
               />
             ))}
           </div>
@@ -1746,11 +1774,10 @@ export default function AdminOrdersPage() {
         open={Boolean(activeOrder)}
         order={activeOrder}
         busyAction={busyAction}
-        onClose={() => {
-          if (!busyAction) setActiveOrder(null);
-        }}
+        onClose={closeOrderPreview}
         onAmend={(order) => {
           setActiveOrder(null);
+          clearOrderQuery();
           setAmendOrder(order);
         }}
         onVerify={handleVerify}
