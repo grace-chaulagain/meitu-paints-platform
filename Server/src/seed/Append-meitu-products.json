@@ -1,0 +1,369 @@
+{
+  "meta": {
+    "currency": "NPR",
+    "datasets": [
+      {
+        "datasetKey": "bhadra2082_regular_primer_distemper_ceiling",
+        "source": "Meitu Construction Materials Pvt. Ltd rate list (Bhadra 2082)",
+        "notes": null
+      },
+      {
+        "datasetKey": "bhadra2082_other_buckets",
+        "source": "Meitu Construction Materials Pvt. Ltd rate list (Bhadra 2082) – other buckets (copy 2)",
+        "notes": null
+      },
+      {
+        "datasetKey": "bhadra2082_enamel_colors",
+        "source": "Meitu Construction Materials Pvt.Ltd enamel colors price list (Bhadra 2082) – copy 3",
+        "notes": null
+      },
+      {
+        "datasetKey": "bhadra2082_tools_accessories",
+        "source": "Meitu Color tools & accessories price list (Bhadra 2082) - copy 4",
+        "notes": "Some rows have two prices; interpreted as priceExclTax and priceInclTax. Page 2 note says other products are not included all tax."
+      },
+      {
+        "datasetKey": "meitu_accessories_colorants",
+        "source": "MeiTu Accessories price List image (2026-05-28)",
+        "notes": "Colorant rows 1-16 only; prices use Dealer price column. Retail Price and rows after Rose red are excluded."
+      }
+    ]
+  },
+  "pricingModels": [
+    {
+      "key": "VOL_L_1_80_81_250_251_PLUS",
+      "basis": "volume",
+      "tierUnit": "L",
+      "tiers": [
+        { "min": 1, "max": 80, "label": "1-80" },
+        { "min": 81, "max": 250, "label": "81-250" },
+        { "min": 251, "max": null, "label": "251 & above" }
+      ]
+    },
+    {
+      "key": "TOTALVOL_L_1_20_21_PLUS",
+      "basis": "totalVolume",
+      "tierUnit": "L",
+      "tiers": [
+        { "min": 1, "max": 20, "label": "1-20L" },
+        { "min": 21, "max": null, "label": "21L and above" }
+      ]
+    },
+    {
+      "key": "BKT_1_5_6_10_11_PLUS",
+      "basis": "bucketCount",
+      "tierUnit": "BKT",
+      "tiers": [
+        { "min": 1, "max": 5, "label": "1-5 bkt" },
+        { "min": 6, "max": 10, "label": "6-10 bkt" },
+        { "min": 11, "max": null, "label": "10 bkt above" }
+      ]
+    },
+    {
+      "key": "UNIT_1_20_21_PLUS",
+      "basis": "unitCount",
+      "tierUnit": "UNIT",
+      "tiers": [
+        { "min": 1, "max": 20, "label": "1-20" },
+        { "min": 21, "max": null, "label": "21 & above" }
+      ]
+    },
+    {
+      "key": "FLAT",
+      "basis": "flat",
+      "tierUnit": null,
+      "tiers": []
+    }
+  ],
+  "products": [
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-CARBON-BLACK-NNZ",
+    "name": "Carbon Black (NNZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-CARBON-BLACK-NNZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 998 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-IRON-OXIDE-BLACK-NXZ",
+    "name": "Iron Oxide Black (NXZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-IRON-OXIDE-BLACK-NXZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1260 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-IRON-OXIDE-RED-RXZ",
+    "name": "Iron Oxide Red (RXZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-IRON-OXIDE-RED-RXZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1330 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-IRON-OXIDE-YELLOW-YXZ",
+    "name": "Iron Oxide Yellow (YXZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-IRON-OXIDE-YELLOW-YXZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1330 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-EVERLASTING-ORANGE-ALZ",
+    "name": "Everlasting Orange (ALZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-EVERLASTING-ORANGE-ALZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1663 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-PHTHALEIN-GREEN-GPZ",
+    "name": "Phthalein Green (GPZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-PHTHALEIN-GREEN-GPZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1829 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-PHTHALEIN-BLUE-BNZ",
+    "name": "Phthalein Blue (BNZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-PHTHALEIN-BLUE-BNZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1635 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-EVERLASTING-PURPLE-VLZ",
+    "name": "Everlasting Purple (VLZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-EVERLASTING-PURPLE-VLZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 2106 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-TITANIUM-WHITE-WXZ",
+    "name": "Titanium White (WXZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-TITANIUM-WHITE-WXZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1720 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-BRIGHT-RED-RLZ",
+    "name": "Bright Red (RLZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-BRIGHT-RED-RLZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 2217 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-MEDIUM-YELLOW-YRZ",
+    "name": "Medium Yellow (YRZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-MEDIUM-YELLOW-YRZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 2163 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-ORANGE-YELLOW-YMZ",
+    "name": "Orange Yellow (YMZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-ORANGE-YELLOW-YMZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 1913 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-YELLOWISH-BROWN-YQZ",
+    "name": "Yellowish Brown (YQZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-YELLOWISH-BROWN-YQZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 3548 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-DPP-RED-REZ",
+    "name": "DPP Red (REZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-DPP-RED-REZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 2772 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-DPP-ORANGE-ARZ",
+    "name": "DPP Orange (ARZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-DPP-ORANGE-ARZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 4900 }
+        ]
+      }
+    ]
+  },
+  {
+    "datasetKey": "meitu_accessories_colorants",
+    "code": "COLORANT-ROSE-RED-PNZ",
+    "name": "Rose Red (PNZ)",
+    "category": "COLORANT",
+    "description": "",
+    "uom": { "base": "ML", "allowed": ["ML"] },
+    "variants": [
+      {
+        "sku": "COLORANT-ROSE-RED-PNZ-1000ML",
+        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
+        "pricingModelKey": "FLAT",
+        "prices": [
+          { "min": null, "max": null, "pricePerPack": 3548 }
+        ]
+      }
+    ]
+  }
+]
+  
+}
