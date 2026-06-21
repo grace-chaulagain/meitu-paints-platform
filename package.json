@@ -8,7 +8,7 @@
   },
   "scripts": {
     "hostinger:install": "npm --prefix Server ci --omit=dev && npm --prefix Frontend/meitupaints ci --include=dev",
-    "hostinger:build": "npm run hostinger:install && npm --prefix Frontend/meitupaints run build",
+    "hostinger:build": "npm run hostinger:install && npm --prefix Frontend/meitupaints run build && node scripts/sync-hostinger-dist.mjs",
     "package:hostinger": "npm --prefix Frontend/meitupaints run build && node scripts/create-hostinger-zip.mjs",
     "build": "npm run hostinger:build",
     "start": "node server.js",
