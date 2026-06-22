@@ -678,6 +678,31 @@ export default function DealerCartPage() {
           : "Place Order"}
     </button>
   );
+  const paymentFieldRemoveButton = (label, onClick) => (
+    <button
+      type="button"
+      aria-label={`Remove ${label}`}
+      onClick={onClick}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 999,
+        border: "1px solid rgba(196,0,0,.14)",
+        background: "rgba(196,0,0,.06)",
+        color: "#b42318",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 950,
+        lineHeight: 1,
+        cursor: "pointer",
+        padding: 0,
+      }}
+    >
+      -
+    </button>
+  );
 
   return (
     <>
@@ -1198,19 +1223,32 @@ export default function DealerCartPage() {
 
                     {showPaymentReference ? (
                       <div>
-                        <label
+                        <div
                           style={{
-                            display: "block",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
                             marginBottom: 8,
-                            fontSize: 11,
-                            fontWeight: 900,
-                            color: "rgba(0,0,0,.5)",
-                            textTransform: "uppercase",
-                            letterSpacing: ".08em",
                           }}
                         >
-                          Payment Reference
-                        </label>
+                          <label
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              fontWeight: 900,
+                              color: "rgba(0,0,0,.5)",
+                              textTransform: "uppercase",
+                              letterSpacing: ".08em",
+                            }}
+                          >
+                            Payment Reference
+                          </label>
+                          {paymentFieldRemoveButton("payment reference", () => {
+                            setPaymentReference("");
+                            setShowPaymentReference(false);
+                          })}
+                        </div>
 
                         <input
                           type="text"
@@ -1234,19 +1272,32 @@ export default function DealerCartPage() {
 
                     {showPaymentNote ? (
                       <div>
-                        <label
+                        <div
                           style={{
-                            display: "block",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
                             marginBottom: 8,
-                            fontSize: 11,
-                            fontWeight: 900,
-                            color: "rgba(0,0,0,.5)",
-                            textTransform: "uppercase",
-                            letterSpacing: ".08em",
                           }}
                         >
-                          Payment Note
-                        </label>
+                          <label
+                            style={{
+                              display: "block",
+                              fontSize: 11,
+                              fontWeight: 900,
+                              color: "rgba(0,0,0,.5)",
+                              textTransform: "uppercase",
+                              letterSpacing: ".08em",
+                            }}
+                          >
+                            Payment Note
+                          </label>
+                          {paymentFieldRemoveButton("payment note", () => {
+                            setPaymentNote("");
+                            setShowPaymentNote(false);
+                          })}
+                        </div>
 
                         <textarea
                           rows={3}
