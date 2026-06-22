@@ -179,27 +179,40 @@ function HeroMetric({ label, value, accent = false }) {
 
 function SearchBox({ value, onChange }) {
   return (
-    <div
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onChange(String(value || "").trim());
+      }}
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 10,
+        gap: 12,
         height: 54,
         borderRadius: 999,
         border: "1px solid rgba(0,0,0,.08)",
         background: "rgba(255,255,255,.96)",
-        padding: "0 16px",
+        padding: "0 7px 0 16px",
       }}
     >
-      <span
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="22"
+        height="22"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         style={{
           color: "rgba(0,0,0,.46)",
-          fontSize: 14,
-          fontWeight: 900,
+          flex: "0 0 auto",
         }}
       >
-        ⌕
-      </span>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.8-3.8" />
+      </svg>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -214,7 +227,26 @@ function SearchBox({ value, onChange }) {
           fontSize: 14,
         }}
       />
-    </div>
+      <button
+        type="submit"
+        style={{
+          flex: "0 0 auto",
+          height: 40,
+          border: "none",
+          borderRadius: 999,
+          padding: "0 18px",
+          background: "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
+          color: "#fff",
+          fontSize: 13,
+          fontWeight: 950,
+          letterSpacing: ".01em",
+          cursor: "pointer",
+          boxShadow: "0 12px 22px rgba(196,0,0,.18)",
+        }}
+      >
+        Search
+      </button>
+    </form>
   );
 }
 
