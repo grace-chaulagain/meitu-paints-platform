@@ -213,20 +213,57 @@ function SearchBox({ value, onChange }) {
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.8-3.8" />
       </svg>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search by name, SKU, code, category..."
+      <div
         style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
           width: "100%",
-          border: "none",
-          outline: "none",
-          background: "transparent",
-          fontWeight: 900,
-          color: "#0f172a",
-          fontSize: 14,
+          minWidth: 0,
         }}
-      />
+      >
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Search by name, SKU, code, category..."
+          style={{
+            width: "100%",
+            minWidth: 0,
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            fontWeight: 900,
+            color: "#0f172a",
+            fontSize: 14,
+          }}
+        />
+        {String(value || "").trim() ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => onChange("")}
+            style={{
+              flex: "0 0 auto",
+              width: 28,
+              height: 28,
+              border: "none",
+              borderRadius: 999,
+              background: "rgba(15,23,42,.08)",
+              color: "rgba(15,23,42,.58)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 17,
+              fontWeight: 950,
+              lineHeight: 1,
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            X
+          </button>
+        ) : null}
+      </div>
       <button
         type="submit"
         style={{
