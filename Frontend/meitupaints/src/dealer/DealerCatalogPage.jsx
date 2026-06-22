@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import {
@@ -880,13 +880,57 @@ function SelectedProductsSummary({ cart, onQtyChange }) {
 function StickySummary({ draftMetrics, cart, onQtyChange, onReview }) {
   const totalQty = Number(draftMetrics.totalQty || 0);
   const lineCount = cart.length;
+  const railRef = useRef(null);
+  const [footerOffset, setFooterOffset] = useState(0);
+
+  useEffect(() => {
+    let frame = 0;
+
+    const updateRailOffset = () => {
+      frame = 0;
+      const rail = railRef.current;
+      const footer = document.querySelector(".meitu-footer");
+
+      if (!rail || !footer) {
+        setFooterOffset(0);
+        return;
+      }
+
+      const topOffset = 86;
+      const footerGap = 24;
+      const railBottom = topOffset + rail.offsetHeight + footerGap;
+      const footerTop = footer.getBoundingClientRect().top;
+      const nextOffset = Math.min(0, footerTop - railBottom);
+
+      setFooterOffset((current) =>
+        Math.abs(current - nextOffset) > 0.5 ? nextOffset : current,
+      );
+    };
+
+    const requestUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateRailOffset);
+    };
+
+    updateRailOffset();
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+    };
+  }, [lineCount, totalQty, draftMetrics.subtotal]);
 
   return (
     <div
+      ref={railRef}
       className="dealer-catalog-right-rail"
       style={{
         display: "grid",
         gap: 14,
+        transform: `translateY(${footerOffset}px)`,
       }}
     >
       <GlassPanel style={{ padding: 20 }}>
@@ -1477,12 +1521,13 @@ export default function DealerCatalogPage() {
         }
 
         .dealer-catalog-right-rail{
-          position:sticky;
+          position:fixed;
           top:86px;
-          width:100%;
+          right:max(24px, calc((100vw - 1520px) / 2 + 12px));
+          width:360px;
           max-height:calc(100vh - 110px);
           overflow:hidden;
-          z-index:2;
+          z-index:40;
         }
 
         .dealer-selected-summary-list{
