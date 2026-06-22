@@ -1476,13 +1476,12 @@ export default function DealerCatalogPage() {
         }
 
         .dealer-catalog-right-rail{
-          position:fixed;
+          position:sticky;
           top:86px;
-          right:max(24px, calc((100vw - 1520px) / 2 + 12px));
-          width:360px;
+          width:100%;
           max-height:calc(100vh - 110px);
           overflow:hidden;
-          z-index:90;
+          z-index:2;
         }
 
         .dealer-selected-summary-list{
