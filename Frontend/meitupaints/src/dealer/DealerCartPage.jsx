@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import NavBar from "../components/NavBar.jsx";
+import {
+  buildCart as buildPricedCart,
+  calculateCartTotals,
+  formatMoney,
+  formatPack,
+  getTierLabel,
+} from "./pricing.js";
 
 const DRAFT_KEY = "meitu_dealer_order_draft_v1";
 
@@ -28,12 +35,11 @@ function clearDraft() {
 }
 
 function money(value, currency = "NPR") {
-  return `${currency} ${Number(value || 0).toLocaleString()}`;
+  return formatMoney(value, currency);
 }
 
 function packLabel(pack) {
-  if (!pack) return "";
-  return pack.label || `${pack.size}${pack.unit}`;
+  return formatPack(pack);
 }
 
 function getPrimaryImage(images = []) {
@@ -53,88 +59,28 @@ function resolveCartItemImage(product, familyMap = {}) {
   );
 }
 
-function getMetricValue(product, quantity) {
-  const qty = Number(quantity || 0);
-  const basis = product?.pricing?.basis || "PER_PACK";
-
-  if (basis === "VOLUME_TOTAL") return Number(product?.pack?.size || 0) * qty;
-  return qty;
-}
-
-function getMatchingTier(product, quantity) {
-  const tiers = product?.pricing?.tiers || [];
-  const metricValue = getMetricValue(product, quantity);
-
-  return (
-    tiers.find((tier) => {
-      const minOk = metricValue >= Number(tier.min ?? 0);
-      const maxOk =
-        tier.max === null || tier.max === undefined
-          ? true
-          : metricValue <= Number(tier.max);
-      return minOk && maxOk;
-    }) || null
-  );
-}
-
-function tierLabel(product, tier) {
-  if (!tier) return "No tier";
-
-  const basis = product?.pricing?.basis || "PER_PACK";
-  const tierUnit = product?.pricing?.tierUnit || "";
-  const maxText =
-    tier.max === null || tier.max === undefined ? "+" : `–${tier.max}`;
-
-  if (basis === "VOLUME_TOTAL") return `${tier.min}${maxText}${tierUnit}`;
-  if (basis === "PACK_COUNT") return `${tier.min}${maxText} packs`;
-  if (basis === "UNIT_COUNT") return `${tier.min}${maxText} units`;
-  return "Flat";
-}
-
 function buildCart(productsMap, quantities, familyMap) {
-  return Object.entries(quantities)
-    .filter(([, qty]) => Number(qty) > 0)
-    .map(([sku, qty]) => {
-      const product = productsMap[sku];
-      if (!product) return null;
+  return buildPricedCart(productsMap, quantities).map((line) => {
+    const product = productsMap?.[line.sku] || {};
+    const primaryImage = resolveCartItemImage(product, familyMap);
 
-      const quantity = Number(qty || 0);
-      const tier = getMatchingTier(product, quantity);
-      const unitPrice =
-        tier?.pricePerPack ?? tier?.priceInclTax ?? tier?.priceExclTax ?? 0;
-
-      const primaryImage = resolveCartItemImage(product, familyMap);
-
-      return {
-        _id: product._id,
-        sku: product.sku,
-        code: product.code,
-        name: product.name,
-        category: product.category,
-        familyName: familyMap?.[product.code]?.name || product.name,
-        currency: product.currency || "NPR",
-        quantity,
-        pack: product.pack,
-        tier,
-        pricing: product.pricing,
-        unitPrice: Number(unitPrice || 0),
-        lineTotal: Number(unitPrice || 0) * quantity,
-        image: primaryImage || null,
-      };
-    })
-    .filter(Boolean);
+    return {
+      ...line,
+      _id: product._id,
+      familyName: familyMap?.[line.code]?.name || line.name,
+      image: primaryImage || null,
+    };
+  });
 }
 
 function summary(cart) {
-  return cart.reduce(
-    (acc, item) => {
-      acc.totalItems += Number(item.quantity || 0);
-      acc.subtotal += Number(item.lineTotal || 0);
-      acc.lines += 1;
-      return acc;
-    },
-    { totalItems: 0, subtotal: 0, lines: 0 },
-  );
+  const totals = calculateCartTotals(cart);
+
+  return {
+    totalItems: totals.totalQty,
+    subtotal: totals.subtotal,
+    lines: cart.length,
+  };
 }
 
 /* -----------------------------
@@ -408,7 +354,8 @@ function CartLine({ item, onQtyChange, onRemove }) {
             lineHeight: 1.5,
           }}
         >
-          {item.sku} · {packLabel(item.pack)} · {tierLabel(item, item.tier)}
+          {item.sku} · {packLabel(item.pack)} ·{" "}
+          {getTierLabel(item.tier, item.pricing)}
         </div>
 
         <div
@@ -644,7 +591,7 @@ export default function DealerCartPage() {
           code: item.code || "",
           name: item.name || "",
           category: item.category || "",
-          variantLabel: item.tier ? tierLabel(item, item.tier) : "",
+          variantLabel: item.tier ? getTierLabel(item.tier, item.pricing) : "",
           packLabel: packLabel(item.pack),
           quantity: Number(item.quantity || 0),
           unit: item?.pack?.unit || "",
