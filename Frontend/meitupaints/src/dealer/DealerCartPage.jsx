@@ -462,6 +462,8 @@ export default function DealerCartPage() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
+  const [showPaymentReference, setShowPaymentReference] = useState(false);
+  const [showPaymentNote, setShowPaymentNote] = useState(false);
   const [dealerNote, setDealerNote] = useState("");
   const [paymentPrompted, setPaymentPrompted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -558,6 +560,8 @@ export default function DealerCartPage() {
     setPaymentMethod("");
     setPaymentReference("");
     setPaymentNote("");
+    setShowPaymentReference(false);
+    setShowPaymentNote(false);
     setPaymentPrompted(false);
     setSuccess("");
     setError("");
@@ -625,6 +629,8 @@ export default function DealerCartPage() {
       setPaymentMethod("");
       setPaymentReference("");
       setPaymentNote("");
+      setShowPaymentReference(false);
+      setShowPaymentNote(false);
       setPaymentPrompted(false);
 
       setTimeout(() => {
@@ -642,6 +648,36 @@ export default function DealerCartPage() {
   const disabled = cart.length === 0 || submitting;
   const currency = cart[0]?.currency || "NPR";
   const paymentRequired = cart.length > 0 && !paymentMethod;
+  const placeOrderButton = (
+    <button
+      type="button"
+      onClick={handleSubmit}
+      disabled={disabled}
+      style={{
+        height: 56,
+        borderRadius: 18,
+        border: paymentRequired
+          ? "1px solid rgba(180,35,24,.22)"
+          : "1px solid rgba(196,0,0,.18)",
+        background: disabled
+          ? "rgba(0,0,0,.10)"
+          : paymentRequired
+            ? "linear-gradient(135deg, #7f1d1d 0%, #b42318 100%)"
+            : "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
+        color: "#fff",
+        fontWeight: 950,
+        fontSize: 15,
+        cursor: disabled ? "not-allowed" : "pointer",
+        boxShadow: disabled ? "none" : "0 18px 34px rgba(196,0,0,.24)",
+      }}
+    >
+      {submitting
+        ? "Placing Order..."
+        : paymentRequired
+          ? "Select Payment Method"
+          : "Place Order"}
+    </button>
+  );
 
   return (
     <>
@@ -650,7 +686,7 @@ export default function DealerCartPage() {
         className="dealer-cart-page"
         style={{
           minHeight: "100vh",
-          paddingTop: 90,
+          paddingTop: 18,
           paddingBottom: 60,
           background:
             "radial-gradient(900px 520px at 12% 0%, rgba(255,230,160,.46), transparent 52%), radial-gradient(900px 520px at 88% 10%, rgba(255,120,80,.18), transparent 45%), linear-gradient(180deg, #f5f6f8 0%, #edf1f5 100%)",
@@ -914,7 +950,7 @@ export default function DealerCartPage() {
               <div
                 style={{
                   position: "sticky",
-                  top: 90,
+                  top: 76,
                   display: "grid",
                   gap: 18,
                 }}
@@ -1063,73 +1099,174 @@ export default function DealerCartPage() {
                       ) : null}
                     </div>
 
-                    <div>
-                      <label
-                        style={{
-                          display: "block",
-                          marginBottom: 8,
-                          fontSize: 11,
-                          fontWeight: 900,
-                          color: "rgba(0,0,0,.5)",
-                          textTransform: "uppercase",
-                          letterSpacing: ".08em",
-                        }}
-                      >
-                        Payment Reference
-                      </label>
+                    {placeOrderButton}
 
-                      <input
-                        type="text"
-                        value={paymentReference}
-                        onChange={(e) => setPaymentReference(e.target.value)}
-                        placeholder="Cheque no, transaction ref, guarantee ref..."
-                        style={{
-                          width: "100%",
-                          height: 50,
-                          borderRadius: 18,
-                          border: "1px solid rgba(0,0,0,.08)",
-                          background: "rgba(255,255,255,.96)",
-                          padding: "0 14px",
-                          fontWeight: 700,
-                          outline: "none",
-                          color: "#0f172a",
-                        }}
-                      />
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 10,
+                      }}
+                    >
+                      {!showPaymentReference ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowPaymentReference(true)}
+                          style={{
+                            minHeight: 36,
+                            border: "none",
+                            background: "transparent",
+                            color: "#0f172a",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 9,
+                            fontSize: 12,
+                            fontWeight: 900,
+                            letterSpacing: ".04em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                            justifySelf: "start",
+                            padding: 0,
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 999,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "rgba(196,0,0,.08)",
+                              color: "#b42318",
+                              border: "1px solid rgba(196,0,0,.14)",
+                              fontSize: 16,
+                              fontWeight: 950,
+                              lineHeight: 1,
+                            }}
+                          >
+                            +
+                          </span>
+                          Add Payment Reference
+                        </button>
+                      ) : null}
+
+                      {!showPaymentNote ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowPaymentNote(true)}
+                          style={{
+                            minHeight: 36,
+                            border: "none",
+                            background: "transparent",
+                            color: "#0f172a",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 9,
+                            fontSize: 12,
+                            fontWeight: 900,
+                            letterSpacing: ".04em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                            justifySelf: "start",
+                            padding: 0,
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 999,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background: "rgba(196,0,0,.08)",
+                              color: "#b42318",
+                              border: "1px solid rgba(196,0,0,.14)",
+                              fontSize: 16,
+                              fontWeight: 950,
+                              lineHeight: 1,
+                            }}
+                          >
+                            +
+                          </span>
+                          Add Payment Note
+                        </button>
+                      ) : null}
                     </div>
 
-                    <div>
-                      <label
-                        style={{
-                          display: "block",
-                          marginBottom: 8,
-                          fontSize: 11,
-                          fontWeight: 900,
-                          color: "rgba(0,0,0,.5)",
-                          textTransform: "uppercase",
-                          letterSpacing: ".08em",
-                        }}
-                      >
-                        Payment Note
-                      </label>
+                    {showPaymentReference ? (
+                      <div>
+                        <label
+                          style={{
+                            display: "block",
+                            marginBottom: 8,
+                            fontSize: 11,
+                            fontWeight: 900,
+                            color: "rgba(0,0,0,.5)",
+                            textTransform: "uppercase",
+                            letterSpacing: ".08em",
+                          }}
+                        >
+                          Payment Reference
+                        </label>
 
-                      <textarea
-                        rows={3}
-                        value={paymentNote}
-                        onChange={(e) => setPaymentNote(e.target.value)}
-                        placeholder="Optional payment context..."
-                        style={{
-                          width: "100%",
-                          borderRadius: 18,
-                          border: "1px solid rgba(0,0,0,.08)",
-                          background: "rgba(255,255,255,.96)",
-                          padding: 14,
-                          resize: "vertical",
-                          fontWeight: 700,
-                          outline: "none",
-                          color: "#0f172a",
-                        }}
-                      />
-                    </div>
+                        <input
+                          type="text"
+                          value={paymentReference}
+                          onChange={(e) => setPaymentReference(e.target.value)}
+                          placeholder="Cheque no, transaction ref, guarantee ref..."
+                          style={{
+                            width: "100%",
+                            height: 50,
+                            borderRadius: 18,
+                            border: "1px solid rgba(0,0,0,.08)",
+                            background: "rgba(255,255,255,.96)",
+                            padding: "0 14px",
+                            fontWeight: 700,
+                            outline: "none",
+                            color: "#0f172a",
+                          }}
+                        />
+                      </div>
+                    ) : null}
+
+                    {showPaymentNote ? (
+                      <div>
+                        <label
+                          style={{
+                            display: "block",
+                            marginBottom: 8,
+                            fontSize: 11,
+                            fontWeight: 900,
+                            color: "rgba(0,0,0,.5)",
+                            textTransform: "uppercase",
+                            letterSpacing: ".08em",
+                          }}
+                        >
+                          Payment Note
+                        </label>
+
+                        <textarea
+                          rows={3}
+                          value={paymentNote}
+                          onChange={(e) => setPaymentNote(e.target.value)}
+                          placeholder="Optional payment context..."
+                          style={{
+                            width: "100%",
+                            borderRadius: 18,
+                            border: "1px solid rgba(0,0,0,.08)",
+                            background: "rgba(255,255,255,.96)",
+                            padding: 14,
+                            resize: "vertical",
+                            fontWeight: 700,
+                            outline: "none",
+                            color: "#0f172a",
+                          }}
+                        />
+                      </div>
+                    ) : null}
 
                     <div>
                       <label
@@ -1183,36 +1320,6 @@ export default function DealerCartPage() {
                       verified by their assigned dispatcher.
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={disabled}
-                      style={{
-                        height: 56,
-                        borderRadius: 18,
-                        border: paymentRequired
-                          ? "1px solid rgba(180,35,24,.22)"
-                          : "1px solid rgba(196,0,0,.18)",
-                        background: disabled
-                          ? "rgba(0,0,0,.10)"
-                          : paymentRequired
-                            ? "linear-gradient(135deg, #7f1d1d 0%, #b42318 100%)"
-                          : "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
-                        color: "#fff",
-                        fontWeight: 950,
-                        fontSize: 15,
-                        cursor: disabled ? "not-allowed" : "pointer",
-                        boxShadow: disabled
-                          ? "none"
-                          : "0 18px 34px rgba(196,0,0,.24)",
-                      }}
-                    >
-                      {submitting
-                        ? "Placing Order..."
-                        : paymentRequired
-                          ? "Select Payment Method"
-                          : "Place Order"}
-                    </button>
                   </div>
                 </GlassPanel>
               </div>
