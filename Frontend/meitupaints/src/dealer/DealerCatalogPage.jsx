@@ -655,12 +655,167 @@ function ProductCard({ family, quantities, cartBySku, onQtyChange }) {
   );
 }
 
-function StickySummary({ draftMetrics }) {
+function SelectedProductsSummary({ cart, onQtyChange }) {
+  return (
+    <GlassPanel style={{ padding: 18 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              color: "rgba(0,0,0,.45)",
+            }}
+          >
+            Selected Products
+          </div>
+          <div
+            style={{
+              marginTop: 4,
+              fontSize: 18,
+              fontWeight: 950,
+              letterSpacing: "-0.03em",
+              color: "#0f172a",
+            }}
+          >
+            {cart.length} active line{cart.length === 1 ? "" : "s"}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="dealer-selected-summary-list"
+        style={{
+          marginTop: 14,
+          display: "grid",
+          gap: 10,
+          maxHeight: "calc(100vh - 435px)",
+          overflowY: "auto",
+          paddingRight: 2,
+        }}
+      >
+        {cart.length === 0 ? (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 18,
+              background: "rgba(248,248,250,.92)",
+              border: "1px solid rgba(0,0,0,.05)",
+              color: "rgba(15,23,42,.58)",
+              fontWeight: 800,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            Products you add from the catalog will appear here for quick edits.
+          </div>
+        ) : (
+          cart.map((line) => (
+            <div
+              key={line.sku}
+              style={{
+                padding: 12,
+                borderRadius: 18,
+                background: "rgba(248,248,250,.92)",
+                border: "1px solid rgba(0,0,0,.05)",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    lineHeight: 1.25,
+                    fontWeight: 950,
+                    color: "#0f172a",
+                  }}
+                >
+                  {line.name}
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    display: "flex",
+                    gap: 7,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    color: "rgba(15,23,42,.52)",
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  <span>{formatPack(line.pack)}</span>
+                  <span>{getTierLabel(line.tier, line.pricing)}</span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                }}
+              >
+                <QtyStepper
+                  value={line.quantity}
+                  onChange={(next) => onQtyChange(line.sku, next)}
+                />
+
+                <div style={{ textAlign: "right" }}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 950,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {formatMoney(line.lineTotal, line.currency)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onQtyChange(line.sku, 0)}
+                    style={{
+                      marginTop: 4,
+                      border: "none",
+                      background: "transparent",
+                      color: "#b42318",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </GlassPanel>
+  );
+}
+
+function StickySummary({ draftMetrics, cart, onQtyChange, onReview }) {
+  const totalQty = Number(draftMetrics.totalQty || 0);
+  const lineCount = cart.length;
+
   return (
     <div
+      className="dealer-catalog-right-rail"
       style={{
-        position: "sticky",
-        top: 160,
         display: "grid",
         gap: 14,
       }}
@@ -687,8 +842,7 @@ function StickySummary({ draftMetrics }) {
             color: "#0f172a",
           }}
         >
-          {draftMetrics.totalUnits} pack
-          {draftMetrics.totalUnits === 1 ? "" : "s"}
+          {totalQty} pack{totalQty === 1 ? "" : "s"}
         </div>
 
         <div
@@ -700,8 +854,7 @@ function StickySummary({ draftMetrics }) {
             fontSize: 14,
           }}
         >
-          {draftMetrics.lineCount} active line
-          {draftMetrics.lineCount === 1 ? "" : "s"} in your draft.
+          {lineCount} active line{lineCount === 1 ? "" : "s"} in your draft.
         </div>
 
         <div
@@ -736,7 +889,31 @@ function StickySummary({ draftMetrics }) {
             {formatMoney(draftMetrics.subtotal)}
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={onReview}
+          disabled={totalQty <= 0}
+          style={{
+            width: "100%",
+            height: 48,
+            marginTop: 14,
+            borderRadius: 999,
+            border: "1px solid rgba(196,0,0,.18)",
+            background:
+              totalQty > 0
+                ? "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)"
+                : "rgba(15,23,42,.08)",
+            color: totalQty > 0 ? "#fff" : "rgba(15,23,42,.42)",
+            fontWeight: 950,
+            cursor: totalQty > 0 ? "pointer" : "not-allowed",
+          }}
+        >
+          Review Order
+        </button>
       </GlassPanel>
+
+      <SelectedProductsSummary cart={cart} onQtyChange={onQtyChange} />
     </div>
   );
 }
@@ -1023,7 +1200,7 @@ export default function DealerCatalogPage() {
       <div
         style={{
           minHeight: "100vh",
-          paddingTop: 90,
+          paddingTop: 76,
           paddingBottom: 86,
           background:
             "radial-gradient(900px 520px at 12% 0%, rgba(255,230,160,.46), transparent 52%), radial-gradient(900px 520px at 88% 10%, rgba(255,120,80,.18), transparent 45%), linear-gradient(180deg, #f5f6f8 0%, #edf1f5 100%)",
@@ -1037,8 +1214,8 @@ export default function DealerCatalogPage() {
               alignItems: "start",
             }}
           >
-            <div style={{ display: "grid", gap: 22 }}>
-              <GlassPanel style={{ padding: 20 }}>
+            <div style={{ display: "grid", gap: 18 }}>
+              <GlassPanel style={{ padding: 16 }}>
                 <div style={{ display: "grid", gap: 16 }}>
                   <div
                     className="dealer-catalog-controls"
@@ -1166,26 +1343,53 @@ export default function DealerCatalogPage() {
               )}
             </div>
 
-            <div className="d-none d-xl-block">
+            <div className="dealer-catalog-right-cell d-none d-xl-block">
               <StickySummary
                 draftMetrics={draftMetrics}
+                cart={cart}
+                onQtyChange={handleQtyChange}
+                onReview={handleReviewDraft}
               />
             </div>
           </div>
         </div>
 
         <FloatingDraftBar
-          itemCount={draftMetrics.totalUnits}
+          itemCount={draftMetrics.totalQty}
           subtotal={draftMetrics.subtotal}
-          disabled={draftMetrics.totalUnits <= 0}
+          disabled={draftMetrics.totalQty <= 0}
           onReview={handleReviewDraft}
         />
       </div>
 
       <style>{`
         .dealer-catalog-shell-grid{
-          grid-template-columns:minmax(0,1fr) 320px;
+          grid-template-columns:minmax(0,1fr) 360px;
           gap:22px;
+        }
+
+        .dealer-catalog-right-cell{
+          min-height:1px;
+        }
+
+        .dealer-catalog-right-rail{
+          position:fixed;
+          top:86px;
+          right:max(24px, calc((100vw - 1520px) / 2 + 12px));
+          width:360px;
+          max-height:calc(100vh - 110px);
+          overflow:hidden;
+          z-index:90;
+        }
+
+        .dealer-selected-summary-list{
+          scrollbar-width:thin;
+        }
+
+        @media (min-width:1181px){
+          .dealer-floating-draft{
+            display:none!important;
+          }
         }
 
         .dealer-catalog-controls{
@@ -1201,6 +1405,12 @@ export default function DealerCatalogPage() {
         @media (max-width:1180px){
           .dealer-catalog-shell-grid{
             grid-template-columns:1fr;
+          }
+
+          .dealer-catalog-right-rail{
+            position:static;
+            width:auto;
+            max-height:none;
           }
         }
 
