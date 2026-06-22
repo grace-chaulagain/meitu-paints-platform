@@ -333,6 +333,7 @@ function Products() {
                                 View details
                               </Link>
                               <ProductOrderLink
+                                product={p}
                                 productName={p.name}
                                 className="all-order-link"
                               />

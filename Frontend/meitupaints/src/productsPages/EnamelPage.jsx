@@ -212,6 +212,7 @@ export default function Enamel() {
 
                 <div className="action-row">
                   <ProductOrderLink
+                    product={product}
                     productName={product.name}
                     className="primary-action"
                   />

@@ -149,6 +149,7 @@ export default function ProductDetails({
 
                 <div className="action-row">
                   <ProductOrderLink
+                    product={product}
                     productName={product.name}
                     className="primary-action"
                   />
