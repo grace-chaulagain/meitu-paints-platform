@@ -1473,6 +1473,7 @@ export default function DealerCatalogPage() {
 
         .dealer-catalog-right-cell{
           min-height:1px;
+          align-self:stretch;
         }
 
         .dealer-catalog-right-rail{
