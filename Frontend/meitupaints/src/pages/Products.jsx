@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import NavBar from "../components/NavBar";
 import { Link, useLocation } from "react-router-dom";
+import ProductOrderLink from "../components/ProductOrderLink.jsx";
 import productCategories from "../ProductsList/productCategories.json";
 import productsConfig from "../ProductsList/productsConfig.json";
 
@@ -275,62 +276,73 @@ function Products() {
                   </div>
 
                   <div className="row g-4">
-                    {g.items.map((p) => (
-                      <div key={p.id} className="col-12 col-sm-6 col-lg-4">
-                        <Link
-                          to={buildProductLink(p, g.link)}
-                          className="text-decoration-none"
-                        >
+                    {g.items.map((p) => {
+                      const productLink = buildProductLink(p, g.link);
+
+                      return (
+                        <div key={p.id} className="col-12 col-sm-6 col-lg-4">
                           <div className="all-card">
-                            <div className="all-top">
-                              <div className="all-chips">
-                                <span className="all-chip">
-                                  {String(p.category || g.key)}
-                                </span>
-                                {Array.isArray(p.sizes) &&
-                                p.sizes.length > 0 ? (
-                                  <span className="all-chip soft">
-                                    {p.sizes.length} sizes
+                            <Link to={productLink} className="all-card-link">
+                              <div className="all-top">
+                                <div className="all-chips">
+                                  <span className="all-chip">
+                                    {String(p.category || g.key)}
                                   </span>
-                                ) : null}
-                              </div>
-                              <div className="all-arrow" aria-hidden="true">
-                                →
-                              </div>
-                            </div>
-
-                            <div className="all-imageWrap">
-                              <img
-                                src={p.src}
-                                alt={p.name}
-                                className="all-image"
-                                loading="lazy"
-                              />
-                            </div>
-
-                            <div className="all-body">
-                              <div className="all-name">{p.name}</div>
-                              {Array.isArray(p.sizes) && p.sizes.length > 0 && (
-                                <div className="all-sizes">
-                                  {p.sizes.slice(0, 4).map((s) => (
-                                    <span key={s} className="size-pill">
-                                      {s}
+                                  {Array.isArray(p.sizes) &&
+                                  p.sizes.length > 0 ? (
+                                    <span className="all-chip soft">
+                                      {p.sizes.length} sizes
                                     </span>
-                                  ))}
-                                  {p.sizes.length > 4 && (
-                                    <span className="size-pill more">
-                                      +{p.sizes.length - 4}
-                                    </span>
-                                  )}
+                                  ) : null}
                                 </div>
-                              )}
+                                <div className="all-arrow" aria-hidden="true">
+                                  →
+                                </div>
+                              </div>
+
+                              <div className="all-imageWrap">
+                                <img
+                                  src={p.src}
+                                  alt={p.name}
+                                  className="all-image"
+                                  loading="lazy"
+                                />
+                              </div>
+
+                              <div className="all-body">
+                                <div className="all-name">{p.name}</div>
+                                {Array.isArray(p.sizes) && p.sizes.length > 0 && (
+                                  <div className="all-sizes">
+                                    {p.sizes.slice(0, 4).map((s) => (
+                                      <span key={s} className="size-pill">
+                                        {s}
+                                      </span>
+                                    ))}
+                                    {p.sizes.length > 4 && (
+                                      <span className="size-pill more">
+                                        +{p.sizes.length - 4}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </Link>
+
+                            <div className="all-actions">
+                              <Link to={productLink} className="all-detail-link">
+                                View details
+                              </Link>
+                              <ProductOrderLink
+                                productName={p.name}
+                                className="all-order-link"
+                              />
                             </div>
 
                             <div className="all-accent" aria-hidden="true" />
                           </div>
-                        </Link>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               ))}
@@ -696,6 +708,8 @@ function Products() {
 
         .all-card{
           position:relative;
+          display:flex;
+          flex-direction:column;
           border-radius: 22px;
           overflow:hidden;
           border: 1px solid rgba(0,0,0,0.08);
@@ -706,6 +720,16 @@ function Products() {
           min-height: 290px;
           transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
           animation: fadeUp 420ms ease;
+        }
+
+        .all-card-link{
+          position:relative;
+          z-index:2;
+          display:flex;
+          flex:1;
+          flex-direction:column;
+          color:inherit;
+          text-decoration:none;
         }
 
         .all-card:hover{
@@ -827,6 +851,47 @@ function Products() {
           border-color: rgba(193,18,31,0.30);
           background: rgba(193,18,31,0.06);
           color: var(--brand-red);
+        }
+
+        .all-actions{
+          position:relative;
+          z-index:2;
+          display:grid;
+          grid-template-columns: 1fr;
+          gap:10px;
+          margin-top:16px;
+        }
+
+        .all-detail-link,
+        .all-order-link{
+          min-height:42px;
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:0 14px;
+          text-decoration:none;
+          font-size:13px;
+          font-weight:900;
+          transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+        }
+
+        .all-detail-link{
+          color: var(--brand-black);
+          border:1px solid rgba(0,0,0,.10);
+          background:rgba(255,255,255,.86);
+        }
+
+        .all-order-link{
+          color:#fff;
+          border:1px solid rgba(193,18,31,.18);
+          background:linear-gradient(135deg, var(--brand-red), #ff5b2e);
+          box-shadow:0 16px 28px rgba(193,18,31,.20);
+        }
+
+        .all-detail-link:hover,
+        .all-order-link:hover{
+          transform:translateY(-1px);
         }
 
         .all-accent{

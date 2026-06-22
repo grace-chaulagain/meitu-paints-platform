@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import NavBar from "../components/NavBar";
+import ProductOrderLink from "../components/ProductOrderLink.jsx";
 import paintsSpecialty from "../ProductsList/paintsSpecialty.json";
 
 export default function Enamel() {
@@ -210,9 +211,10 @@ export default function Enamel() {
                 <p className="lead-text">{leadText}</p>
 
                 <div className="action-row">
-                  <Link to="/inquiry" className="primary-action">
-                    Enquire about this product
-                  </Link>
+                  <ProductOrderLink
+                    productName={product.name}
+                    className="primary-action"
+                  />
                   <Link to={backLink} className="secondary-action">
                     Back to collection
                   </Link>

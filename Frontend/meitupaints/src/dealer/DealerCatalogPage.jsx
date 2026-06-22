@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client.js";
 import {
   buildCart,
@@ -1078,10 +1078,12 @@ function FloatingDraftBar({ itemCount, subtotal, onReview, disabled = false }) {
 ----------------------------- */
 export default function DealerCatalogPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const orderSearchParam = searchParams.get("search") || "";
 
   const [products, setProducts] = useState([]);
   const [quantities, setQuantities] = useState(loadDraft());
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(orderSearchParam);
   const [category, setCategory] = useState("ALL");
   const [sortBy, setSortBy] = useState("name-asc");
   const [loading, setLoading] = useState(true);
@@ -1090,6 +1092,11 @@ export default function DealerCatalogPage() {
   useEffect(() => {
     saveDraft(quantities);
   }, [quantities]);
+
+  useEffect(() => {
+    setSearch(orderSearchParam);
+    if (orderSearchParam) setCategory("ALL");
+  }, [orderSearchParam]);
 
   useEffect(() => {
     let alive = true;
@@ -1188,10 +1195,37 @@ export default function DealerCatalogPage() {
     navigate("/dealer/cart");
   };
 
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        const cleanValue = String(value || "").trim();
+
+        if (cleanValue) {
+          next.set("search", value);
+        } else {
+          next.delete("search");
+        }
+
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const clearFilters = () => {
     setSearch("");
     setCategory("ALL");
     setSortBy("name-asc");
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("search");
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   return (
@@ -1223,7 +1257,7 @@ export default function DealerCatalogPage() {
                       display: "grid",
                     }}
                   >
-                    <SearchBox value={search} onChange={setSearch} />
+                    <SearchBox value={search} onChange={handleSearchChange} />
 
                     <select
                       value={sortBy}

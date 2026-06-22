@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import ProductOrderLink from "../components/ProductOrderLink.jsx";
 
 export default function ProductDetails({
   product,
@@ -147,9 +148,10 @@ export default function ProductDetails({
                 <p className="lead-text">{leadText}</p>
 
                 <div className="action-row">
-                  <Link to="/inquiry" className="primary-action">
-                    Enquire about this product
-                  </Link>
+                  <ProductOrderLink
+                    productName={product.name}
+                    className="primary-action"
+                  />
                   <button
                     type="button"
                     className="secondary-action"
