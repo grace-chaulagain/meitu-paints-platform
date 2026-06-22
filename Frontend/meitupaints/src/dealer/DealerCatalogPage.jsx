@@ -1303,7 +1303,7 @@ export default function DealerCatalogPage() {
       <div
         style={{
           minHeight: "100vh",
-          paddingTop: 76,
+          paddingTop: 0,
           paddingBottom: 86,
           background:
             "radial-gradient(900px 520px at 12% 0%, rgba(255,230,160,.46), transparent 52%), radial-gradient(900px 520px at 88% 10%, rgba(255,120,80,.18), transparent 45%), linear-gradient(180deg, #f5f6f8 0%, #edf1f5 100%)",
