@@ -13,12 +13,22 @@ import {
   deleteProductService,
   restoreProductService,
 } from "../services/admin.catalog.service.js";
+import { listProductCategories } from "../services/product.service.js";
 
 function handleError(res, error, fallback = "Request failed") {
   return res.status(400).json({
     ok: false,
     message: error.message || fallback,
   });
+}
+
+export async function listCategories(req, res) {
+  try {
+    const items = await listProductCategories({ includeInactive: true });
+    return res.json({ ok: true, items });
+  } catch (error) {
+    return handleError(res, error, "Failed to fetch product categories");
+  }
 }
 
 /* -----------------------------

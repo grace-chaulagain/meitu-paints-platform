@@ -3,6 +3,7 @@ import { auth } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
 import { upload } from "../middlewares/upload.js";
 import {
+  listCategories,
   listFamilies,
   createFamily,
   updateFamily,
@@ -21,6 +22,8 @@ import {
 const router = Router();
 
 router.use(auth, requireRole("ADMIN"));
+
+router.get("/categories", listCategories);
 
 /* -----------------------------
    Product Families

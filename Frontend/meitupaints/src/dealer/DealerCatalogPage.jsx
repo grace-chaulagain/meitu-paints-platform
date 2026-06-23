@@ -15,6 +15,7 @@ import NavBar from "../components/NavBar.jsx";
    local draft storage helpers
 ----------------------------- */
 const DRAFT_KEY = "meitu_dealer_order_draft_v1";
+const ALL_CATEGORY_OPTION = { value: "ALL", label: "All Categories" };
 
 function sanitizeDraft(draft = {}) {
   return Object.fromEntries(
@@ -37,7 +38,49 @@ function saveDraft(draft) {
 function categoryLabel(value) {
   if (!value) return "";
   if (value === "ALL") return "All Categories";
-  return String(value).replaceAll("_", " ");
+  return String(value)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeCategoryOption(option) {
+  const value =
+    typeof option === "string"
+      ? option
+      : option?.value || option?.code || option?.category || "";
+  const cleanValue = String(value || "").trim();
+
+  if (!cleanValue || cleanValue === "ALL") return null;
+
+  return {
+    value: cleanValue,
+    label:
+      typeof option === "object" && option?.label
+        ? String(option.label)
+        : categoryLabel(cleanValue),
+  };
+}
+
+function buildCategoryOptions(categoryItems = [], products = []) {
+  const map = new Map();
+
+  for (const option of categoryItems) {
+    const normalized = normalizeCategoryOption(option);
+    if (normalized) map.set(normalized.value, normalized);
+  }
+
+  for (const product of products) {
+    const normalized = normalizeCategoryOption(product?.category);
+    if (normalized && !map.has(normalized.value)) {
+      map.set(normalized.value, normalized);
+    }
+  }
+
+  return [
+    ALL_CATEGORY_OPTION,
+    ...Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label)),
+  ];
 }
 
 function getFamilySelectionCount(family, quantities) {
@@ -71,25 +114,6 @@ function resolveFamilyDisplayImage(family) {
       displayImage?.alt || family?.name || firstItem?.name || "Meitu product",
   };
 }
-
-const CATEGORY_OPTIONS = [
-  "ALL",
-  "EXTERIOR_PAINT",
-  "INTERIOR_PAINT",
-  "PRIMER",
-  "DISTEMPER",
-  "INTERIOR_EXTERIOR_PAINT",
-  "CEILING_WHITE",
-  "SPECIALTY",
-  "ENAMEL",
-  "ENAMEL_PRIMER",
-  "LIQUID_GRANITE_GTONE_2D",
-  "LIQUID_GRANITE_GTONE_3D",
-  "REAL_STONE",
-  "WALL_PUTTY",
-  "GRANITE_FLOOR",
-  "TOOLS_ACCESSORIES",
-];
 
 const SORT_OPTIONS = [
   { value: "name-asc", label: "Name · A to Z" },
@@ -726,7 +750,15 @@ function ProductCard({ family, quantities, cartBySku, onQtyChange }) {
 
 function SelectedProductsSummary({ cart, onQtyChange }) {
   return (
-    <GlassPanel style={{ padding: 18 }}>
+    <GlassPanel
+      style={{
+        padding: 18,
+        minHeight: 0,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <div
         style={{
           display: "flex",
@@ -767,9 +799,10 @@ function SelectedProductsSummary({ cart, onQtyChange }) {
           marginTop: 14,
           display: "grid",
           gap: 10,
-          maxHeight: "calc(100vh - 435px)",
+          flex: "1 1 auto",
+          minHeight: 0,
           overflowY: "auto",
-          paddingRight: 2,
+          paddingRight: 6,
         }}
       >
         {cart.length === 0 ? (
@@ -930,6 +963,7 @@ function StickySummary({ draftMetrics, cart, onQtyChange, onReview }) {
       style={{
         display: "grid",
         gap: 14,
+        gridTemplateRows: "auto minmax(0, 1fr)",
         transform: `translateY(${footerOffset}px)`,
       }}
     >
@@ -1195,6 +1229,7 @@ export default function DealerCatalogPage() {
   const orderSearchParam = searchParams.get("search") || "";
 
   const [products, setProducts] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([ALL_CATEGORY_OPTION]);
   const [quantities, setQuantities] = useState(loadDraft());
   const [search, setSearch] = useState(orderSearchParam);
   const [category, setCategory] = useState("ALL");
@@ -1219,11 +1254,26 @@ export default function DealerCatalogPage() {
         setLoading(true);
         setError("");
 
-        const res = await api.get("/api/products");
-        const items = res?.data?.items || res?.data?.products || [];
+        const [productsRes, categoriesRes] = await Promise.allSettled([
+          api.get("/api/products"),
+          api.get("/api/products/categories"),
+        ]);
+
+        if (productsRes.status === "rejected") {
+          throw productsRes.reason;
+        }
+
+        const items =
+          productsRes.value?.data?.items || productsRes.value?.data?.products || [];
+        const activeItems = items.filter((item) => item?.isActive !== false);
+        const categoryItems =
+          categoriesRes.status === "fulfilled"
+            ? categoriesRes.value?.data?.items || []
+            : [];
 
         if (!alive) return;
-        setProducts(items.filter((item) => item?.isActive !== false));
+        setProducts(activeItems);
+        setCategoryOptions(buildCategoryOptions(categoryItems, activeItems));
       } catch (e) {
         if (!alive) return;
         setError(
@@ -1240,6 +1290,12 @@ export default function DealerCatalogPage() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!categoryOptions.some((option) => option.value === category)) {
+      setCategory("ALL");
+    }
+  }, [category, categoryOptions]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1417,13 +1473,13 @@ export default function DealerCatalogPage() {
                       paddingBottom: 4,
                     }}
                   >
-                    {CATEGORY_OPTIONS.map((option) => (
+                    {categoryOptions.map((option) => (
                       <CategoryPill
-                        key={option}
-                        active={category === option}
-                        onClick={() => setCategory(option)}
+                        key={option.value}
+                        active={category === option.value}
+                        onClick={() => setCategory(option.value)}
                       >
-                        {categoryLabel(option)}
+                        {option.label}
                       </CategoryPill>
                     ))}
                   </div>
@@ -1525,13 +1581,25 @@ export default function DealerCatalogPage() {
           top:86px;
           right:max(24px, calc((100vw - 1520px) / 2 + 12px));
           width:360px;
+          height:calc(100vh - 110px);
           max-height:calc(100vh - 110px);
           overflow:hidden;
           z-index:40;
         }
 
         .dealer-selected-summary-list{
+          min-height:0;
           scrollbar-width:thin;
+          overscroll-behavior:contain;
+        }
+
+        .dealer-selected-summary-list::-webkit-scrollbar{
+          width:6px;
+        }
+
+        .dealer-selected-summary-list::-webkit-scrollbar-thumb{
+          border-radius:999px;
+          background:rgba(15,23,42,.18);
         }
 
         @media (min-width:1181px){
@@ -1558,7 +1626,9 @@ export default function DealerCatalogPage() {
           .dealer-catalog-right-rail{
             position:static;
             width:auto;
+            height:auto;
             max-height:none;
+            overflow:visible;
           }
         }
 

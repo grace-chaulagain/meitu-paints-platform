@@ -2,7 +2,7 @@
   {
     "id": "oth-001",
     "category": "Specialty",
-    "name": "Meitu Damp Proof",
+    "name": "Meitu Damp-Proof",
     "file": "Meitu Damp Proof.webp",
     "src": "/Specialty/Meitu Damp Proof.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -18,7 +18,7 @@
   {
     "id": "oth-002",
     "category": "Specialty",
-    "name": "Meitu Enamel",
+    "name": "Meitu Glossy Enamel",
     "file": "Meitu Enamel.webp",
     "src": "/Specialty/Meitu Enamel.webp",
     "sizes": ["4L", "1L", "500mL"],
@@ -33,7 +33,7 @@
   {
     "id": "oth-003",
     "category": "Specialty",
-    "name": "Meitu Gold",
+    "name": "Gold Color",
     "file": "Meitu Gold.webp",
     "src": "/Specialty/Meitu Gold.webp",
     "sizes": ["500mL", "200mL", "100mL"],
@@ -50,7 +50,7 @@
   {
     "id": "oth-004",
     "category": "Specialty",
-    "name": "Meitu PU Silicon",
+    "name": "PU Silicon Exterior/Interior Paint",
     "file": "Meitu PU Silicon.webp",
     "src": "/Specialty/Meitu PU Silicon.webp",
     "sizes": ["4L", "1L", "500mL"],
@@ -69,7 +69,7 @@
   {
     "id": "oth-005",
     "category": "Specialty",
-    "name": "Meitu Eco-Friendly Dark Color Interior and Exterior Wall Paint Terracotta",
+    "name": "Terracotta",
     "file": "Meitu Eco-Friendly Dark Color Interior and Exterior Wall Paint Terracotta.webp",
     "src": "/Specialty/Meitu Eco-Friendly Dark Color Interior and Exterior Wall Paint Terracotta.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -86,7 +86,7 @@
   {
     "id": "aluminium-primer",
     "category": "primer",
-    "name": "Meitu Aluminium",
+    "name": "Aluminium Paints",
     "file": "Meitu Aluminium.webp",
     "src": "/Primer/Meitu Aluminium.webp",
     "sizes": ["1L", "500mL"],

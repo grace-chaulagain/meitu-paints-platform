@@ -1,4 +1,7 @@
-import { listActiveProducts } from "../services/product.service.js";
+import {
+  listActiveProducts,
+  listProductCategories,
+} from "../services/product.service.js";
 import streamifier from "streamifier";
 import cloudinary from "../utils/cloudinary.js";
 import Product from "../models/Product.model.js";
@@ -49,6 +52,19 @@ export async function listProductsController(req, res, next) {
     const { q, category } = req.query;
 
     const items = await listActiveProducts({ q, category });
+
+    res.status(200).json({
+      ok: true,
+      items,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listProductCategoriesController(req, res, next) {
+  try {
+    const items = await listProductCategories();
 
     res.status(200).json({
       ok: true,

@@ -1,35 +1,35 @@
 [
   {
     "id": "Utility-23",
-    "name": "Automatic Tinting Machine",
+    "name": "Automatic Machine",
     "category": "Utility",
     "file": "Automatic Tinting Machine.webp",
     "src": "/Utility/Automatic Tinting Machine.webp"
   },
   {
     "id": "Utility-24",
-    "name": "Manual Tinting Machine",
+    "name": "Manual Machine",
     "category": "Utility",
     "file": "Manual Tinting Machine.webp",
     "src": "/Utility/Manual Tinting Machine.webp"
   },
   {
     "id": "Utility-25",
-    "name": "Paint Shaker Machine",
+    "name": "Color Mixing Machine",
     "category": "Utility",
     "file": "Paint Shaker Machine.webp",
     "src": "/Utility/Paint Shaker Machine.webp"
   },
   {
     "id": "Utility-26",
-    "name": "Real Stone Spray Gun",
+    "name": "Real Stone Paint Gun",
     "category": "Utility",
     "file": "Real Stone Spray Gun.webp",
     "src": "/Utility/Real Stone Spray Gun.webp"
   },
   {
     "id": "Utility-22",
-    "name": "Wall Grinding Machine",
+    "name": "Wall Grinder Machine Set",
     "category": "Utility",
     "file": "Wall Grinding Machine.webp",
     "src": "/Utilities.webp"
@@ -43,7 +43,7 @@
   },
   {
     "id": "Utility-19",
-    "name": "Spray Gun Set",
+    "name": "Spray Gun With Set",
     "category": "Utility",
     "file": "Spray Gun Set.webp",
     "src": "/Utility/Spray Gun Set.webp"
@@ -78,7 +78,7 @@
   },
   {
     "id": "Utility-10",
-    "name": "Meitu Paints Regular Roller",
+    "name": "Roller",
     "category": "Utility",
     "file": "Meitu Paints Regular Roller.webp",
     "src": "/Utility/Meitu Paints Regular Roller.webp"
@@ -92,7 +92,7 @@
   },
   {
     "id": "Utility-12",
-    "name": "Tape Cover",
+    "name": "Paint Safe Plastic Cover",
     "category": "Utility",
     "file": "Tape Cover.webp",
     "src": "/Utility/Tape Cover.webp"
@@ -127,7 +127,7 @@
   },
   {
     "id": "Utility-17",
-    "name": "Putty Patta Handle",
+    "name": "Putting Pata With Handle",
     "category": "Utility",
     "file": "Putty Patta Handle.webp",
     "src": "/Utility/Putty Patta Handle.webp"
@@ -141,7 +141,7 @@
   },
   {
     "id": "Utility-21",
-    "name": "Khaksi Roll",
+    "name": "Roll Khaksi",
     "category": "Utility",
     "file": "Khaksi Roll.webp",
     "src": "/Utility/Khaksi Roll.webp"

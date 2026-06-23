@@ -16,6 +16,11 @@ function getPayload(res) {
    PRODUCT FAMILY APIs
 ========================================================= */
 
+export async function getProductCategories() {
+  const res = await api.get("/api/admin/catalog/categories");
+  return getItems(res);
+}
+
 export async function getProductFamilies() {
   const res = await api.get("/api/admin/catalog/product-families");
   return getItems(res);

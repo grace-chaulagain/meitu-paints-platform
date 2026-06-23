@@ -1,6 +1,20 @@
 import Product from "../models/Product.model.js";
 import ProductFamily from "../models/ProductFamily.model.js";
 
+function normalizeCategory(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function categoryLabel(value) {
+  const category = normalizeCategory(value);
+  if (!category) return "Uncategorized";
+
+  return category
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function getPrimaryImage(images = []) {
   if (!Array.isArray(images) || images.length === 0) return null;
   return images.find((img) => img?.isPrimary) || images[0] || null;
@@ -84,4 +98,32 @@ export async function listActiveProducts({ q, category }) {
         : null,
     };
   });
+}
+
+export async function listProductCategories({ includeInactive = false } = {}) {
+  const filter = includeInactive ? {} : { isActive: true };
+
+  const [productCategories, familyCategories] = await Promise.all([
+    Product.distinct("category", filter),
+    ProductFamily.distinct("category", filter),
+  ]);
+
+  const categoryMap = new Map();
+
+  for (const rawCategory of [...productCategories, ...familyCategories]) {
+    const value = normalizeCategory(rawCategory);
+    if (!value) continue;
+
+    const key = value.toUpperCase();
+    if (!categoryMap.has(key)) {
+      categoryMap.set(key, {
+        value,
+        label: categoryLabel(value),
+      });
+    }
+  }
+
+  return Array.from(categoryMap.values()).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
 }

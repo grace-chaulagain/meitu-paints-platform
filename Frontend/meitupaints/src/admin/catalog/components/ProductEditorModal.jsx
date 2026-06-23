@@ -39,24 +39,7 @@ const BASIS_OPTIONS = [
   { value: "FLAT", label: "Flat" },
 ];
 
-const PRODUCT_CATEGORY_OPTIONS = [
-  { value: "", label: "Select category" },
-  { value: "EXTERIOR_PAINT", label: "Exterior Paint" },
-  { value: "INTERIOR_PAINT", label: "Interior Paint" },
-  { value: "PRIMER", label: "Primer" },
-  { value: "DISTEMPER", label: "Distemper" },
-  { value: "INTERIOR_EXTERIOR_PAINT", label: "Interior Exterior Paint" },
-  { value: "CEILING_WHITE", label: "Ceiling White" },
-  { value: "SPECIALTY", label: "Specialty" },
-  { value: "ENAMEL", label: "Enamel" },
-  { value: "ENAMEL_PRIMER", label: "Enamel Primer" },
-  { value: "LIQUID_GRANITE_GTONE_2D", label: "Liquid Granite Gtone 2D" },
-  { value: "LIQUID_GRANITE_GTONE_3D", label: "Liquid Granite Gtone 3D" },
-  { value: "REAL_STONE", label: "Real Stone" },
-  { value: "WALL_PUTTY", label: "Wall Putty" },
-  { value: "GRANITE_FLOOR", label: "Granite Floor" },
-  { value: "TOOLS_ACCESSORIES", label: "Tools Accessories" },
-];
+const SELECT_CATEGORY_OPTION = { value: "", label: "Select category" };
 
 const PACK_UNIT_OPTIONS = [
   { value: "L", label: "Litre (L)" },
@@ -70,6 +53,51 @@ const PACK_UNIT_OPTIONS = [
   { value: "PAIR", label: "Pair" },
   { value: "M", label: "Meter (M)" },
 ];
+
+function categoryLabel(value) {
+  if (!value) return "Uncategorized";
+  return String(value)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeCategoryOption(option) {
+  const value =
+    typeof option === "string"
+      ? option
+      : option?.value || option?.code || option?.category || "";
+  const cleanValue = String(value || "").trim();
+
+  if (!cleanValue || cleanValue === "ALL") return null;
+
+  return {
+    value: cleanValue,
+    label:
+      typeof option === "object" && option?.label
+        ? String(option.label)
+        : categoryLabel(cleanValue),
+  };
+}
+
+function buildEditorCategoryOptions(categoryOptions = [], currentCategory = "") {
+  const map = new Map();
+
+  for (const option of categoryOptions) {
+    const normalized = normalizeCategoryOption(option);
+    if (normalized) map.set(normalized.value, normalized);
+  }
+
+  const current = normalizeCategoryOption(currentCategory);
+  if (current && !map.has(current.value)) {
+    map.set(current.value, current);
+  }
+
+  return [
+    SELECT_CATEGORY_OPTION,
+    ...Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label)),
+  ];
+}
 
 function createDefaultTiers() {
   return [
@@ -632,7 +660,12 @@ function ProductEditorStyles() {
 /* -----------------------------
    Modal
 ----------------------------- */
-export default function ProductEditorModal({ product, onClose, onSaved }) {
+export default function ProductEditorModal({
+  product,
+  categoryOptions = [],
+  onClose,
+  onSaved,
+}) {
   const isEdit = Boolean(product?._id);
 
   const [form, setForm] = useState(createInitialForm());
@@ -640,6 +673,11 @@ export default function ProductEditorModal({ product, onClose, onSaved }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+
+  const resolvedCategoryOptions = useMemo(
+    () => buildEditorCategoryOptions(categoryOptions, form.category),
+    [categoryOptions, form.category],
+  );
 
   useEffect(() => {
     if (!product) {
@@ -1037,7 +1075,7 @@ export default function ProductEditorModal({ product, onClose, onSaved }) {
                 value={form.category}
                 error={fieldErrors.category}
                 onChange={(e) => updateField("category", e.target.value)}
-                options={PRODUCT_CATEGORY_OPTIONS}
+                options={resolvedCategoryOptions}
               />
 
               <Input

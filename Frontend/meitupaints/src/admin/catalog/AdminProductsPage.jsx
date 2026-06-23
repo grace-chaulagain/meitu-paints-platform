@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteFamilyImage,
+  getProductCategories,
   getProductFamilies,
   getProducts,
   uploadFamilyImage,
@@ -9,71 +10,7 @@ import {
 import ProductEditorModal from "./components/ProductEditorModal";
 import NavBar from "../../components/NavBar";
 
-const CATEGORY_OPTIONS = [
-  "ALL",
-  "EXTERIOR_PAINT",
-  "INTERIOR_PAINT",
-  "PRIMER",
-  "DISTEMPER",
-  "INTERIOR_EXTERIOR_PAINT",
-  "CEILING_WHITE",
-  "SPECIALTY",
-  "ENAMEL",
-  "ENAMEL_PRIMER",
-  "LIQUID_GRANITE_GTONE_2D",
-  "LIQUID_GRANITE_GTONE_3D",
-  "REAL_STONE",
-  "WALL_PUTTY",
-  "GRANITE_FLOOR",
-  "TOOLS_ACCESSORIES",
-];
-
-const CATEGORY_DIVISIONS = [
-  {
-    key: "core",
-    label: "Core Paint Systems",
-    shortLabel: "Core",
-    description: "Interior, exterior, primer, distemper and ceiling systems.",
-    categories: [
-      "EXTERIOR_PAINT",
-      "INTERIOR_PAINT",
-      "PRIMER",
-      "DISTEMPER",
-      "INTERIOR_EXTERIOR_PAINT",
-      "CEILING_WHITE",
-    ],
-  },
-  {
-    key: "decorative",
-    label: "Decorative & Texture",
-    shortLabel: "Decorative",
-    description:
-      "Liquid granite, real stone, specialty finishes and floor systems.",
-    categories: [
-      "SPECIALTY",
-      "LIQUID_GRANITE_GTONE_2D",
-      "LIQUID_GRANITE_GTONE_3D",
-      "REAL_STONE",
-      "GRANITE_FLOOR",
-    ],
-  },
-  {
-    key: "protective",
-    label: "Enamel & Primers",
-    shortLabel: "Enamel",
-    description:
-      "Wood and metal primers, enamel shade groups and solvent-led products.",
-    categories: ["ENAMEL", "ENAMEL_PRIMER"],
-  },
-  {
-    key: "auxiliary",
-    label: "Putty, Tools & Accessories",
-    shortLabel: "Auxiliary",
-    description:
-      "Wall putty, machines, rollers, brushes, tapes and support tools.",
-    categories: ["WALL_PUTTY", "TOOLS_ACCESSORIES"],
-  },
-];
+const ALL_CATEGORY_OPTION = { value: "ALL", label: "All categories" };
 
 function categoryLabel(value) {
   if (!value) return "Uncategorized";
@@ -84,9 +21,66 @@ function categoryLabel(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function divisionForCategory(category) {
+function normalizeCategoryOption(option) {
+  const value =
+    typeof option === "string"
+      ? option
+      : option?.value || option?.code || option?.category || "";
+  const cleanValue = String(value || "").trim();
+
+  if (!cleanValue || cleanValue === "ALL") return null;
+
+  return {
+    value: cleanValue,
+    label:
+      typeof option === "object" && option?.label
+        ? String(option.label)
+        : categoryLabel(cleanValue),
+  };
+}
+
+function buildCategoryOptions(categoryItems = [], families = [], products = []) {
+  const map = new Map();
+
+  for (const option of categoryItems) {
+    const normalized = normalizeCategoryOption(option);
+    if (normalized) map.set(normalized.value, normalized);
+  }
+
+  for (const item of [...families, ...products]) {
+    const normalized = normalizeCategoryOption(item?.category);
+    if (normalized && !map.has(normalized.value)) {
+      map.set(normalized.value, normalized);
+    }
+  }
+
+  return [
+    ALL_CATEGORY_OPTION,
+    ...Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label)),
+  ];
+}
+
+function buildCategoryDivisions(categoryOptions = []) {
+  const categories = categoryOptions
+    .map((option) => option.value)
+    .filter((value) => value && value !== "ALL");
+
+  if (categories.length === 0) return [];
+
+  return [
+    {
+      key: "catalog",
+      label: "Catalog Categories",
+      shortLabel: "Catalog",
+      description: "Categories currently used by product families and variants.",
+      categories,
+    },
+  ];
+}
+
+function divisionForCategory(category, divisions = []) {
   return (
-    CATEGORY_DIVISIONS.find((division) =>
+    divisions.find((division) =>
       division.categories.includes(category || ""),
     ) || {
       key: "other",
@@ -224,8 +218,8 @@ function getPrimaryImage(images = []) {
   return images.find((img) => img?.isPrimary) || images[0] || null;
 }
 
-function getEntryMeta(entry) {
-  const division = divisionForCategory(entry.category);
+function getEntryMeta(entry, divisions = []) {
+  const division = divisionForCategory(entry.category, divisions);
   const variants = entry.variants || [];
   const inactiveCount = variants.filter(
     (item) => item?.isActive === false,
@@ -812,8 +806,8 @@ function CompactVariantRow({
   );
 }
 
-function MinimalCatalogCard({ entry, onOpen, onViewImage }) {
-  const meta = getEntryMeta(entry);
+function MinimalCatalogCard({ entry, divisions, onOpen, onViewImage }) {
+  const meta = getEntryMeta(entry, divisions);
   const familyPrimaryImage = getPrimaryImage(entry.familyImages || []);
   const productPrimaryImage = getPrimaryImage(
     entry.variants?.[0]?.images || [],
@@ -1020,6 +1014,7 @@ function MinimalCatalogCard({ entry, onOpen, onViewImage }) {
 function CatalogSidebar({
   divisions,
   divisionCounts,
+  categoryOptions,
   categoryCounts,
   divisionFilter,
   categoryFilter,
@@ -1090,21 +1085,21 @@ function CatalogSidebar({
             <span>All Categories</span>
             <strong>{totalFamilies}</strong>
           </button>
-          {CATEGORY_OPTIONS.filter((category) => category !== "ALL").map(
-            (category) => (
+          {categoryOptions
+            .filter((category) => category.value !== "ALL")
+            .map((category) => (
               <button
                 type="button"
-                key={category}
+                key={category.value}
                 className={`catalog-nav-item ${
-                  categoryFilter === category ? "active" : ""
+                  categoryFilter === category.value ? "active" : ""
                 }`}
-                onClick={() => onCategoryChange(category)}
+                onClick={() => onCategoryChange(category.value)}
               >
-                <span>{categoryLabel(category)}</span>
-                <strong>{categoryCounts.get(category) || 0}</strong>
+                <span>{category.label}</span>
+                <strong>{categoryCounts.get(category.value) || 0}</strong>
               </button>
-            ),
-          )}
+            ))}
         </div>
       </nav>
 
@@ -1168,6 +1163,7 @@ function CatalogControls({
   sortBy,
   onSortChange,
   categoryFilter,
+  categoryOptions,
   onCategoryChange,
   onReset,
 }) {
@@ -1182,7 +1178,7 @@ function CatalogControls({
         <SelectField
           value={categoryFilter}
           onChange={onCategoryChange}
-          options={CATEGORY_OPTIONS}
+          options={categoryOptions}
         />
         <SelectField
           value={statusFilter}
@@ -1223,7 +1219,6 @@ function CatalogWorkspaceStyles() {
         --catalog-nav-height:70px;
         --catalog-rail-width:310px;
         height:calc(100dvh - var(--catalog-nav-height));
-        margin-top:var(--catalog-nav-height);
         min-height:0;
         display:grid;
         grid-template-columns:var(--catalog-rail-width) minmax(0,1fr);
@@ -1252,7 +1247,7 @@ function CatalogWorkspaceStyles() {
       }
 
       .catalog-rail-head{
-        padding:0 10px 14px;
+        padding:0 10px 8px;
         border-bottom:1px solid rgba(15,23,42,.08);
       }
 
@@ -1265,7 +1260,7 @@ function CatalogWorkspaceStyles() {
       }
 
       .catalog-rail-title{
-        margin-top:8px;
+        margin-top:4px;
         font-size:22px;
         line-height:1.1;
         font-weight:950;
@@ -1274,9 +1269,9 @@ function CatalogWorkspaceStyles() {
 
       .catalog-rail-subtitle,
       .catalog-subtitle{
-        margin:8px 0 0;
+        margin:4px 0 0;
         font-size:13px;
-        line-height:1.65;
+        line-height:1.45;
         font-weight:700;
         color:rgba(15,23,42,.58);
       }
@@ -1284,7 +1279,7 @@ function CatalogWorkspaceStyles() {
       .catalog-rail-actions{
         display:grid;
         gap:8px;
-        padding:14px 10px;
+        padding:8px 10px 10px;
         border-bottom:1px solid rgba(15,23,42,.08);
       }
 
@@ -1400,7 +1395,7 @@ function CatalogWorkspaceStyles() {
         overflow-x:hidden;
         overscroll-behavior:contain;
         scrollbar-gutter:stable;
-        padding:24px 32px 48px;
+        padding:12px 32px 48px;
       }
 
       .catalog-content{
@@ -1551,6 +1546,7 @@ function CatalogWorkspaceStyles() {
 function CatalogDetailModal({
   open,
   entry,
+  divisions,
   onClose,
   onAddVariant,
   onEditProduct,
@@ -1591,7 +1587,7 @@ function CatalogDetailModal({
 
   if (!open || !entry) return null;
 
-  const meta = getEntryMeta(entry);
+  const meta = getEntryMeta(entry, divisions);
   const familyPrimaryImage = getPrimaryImage(entry.familyImages || []);
   const productPrimaryImage = getPrimaryImage(
     entry.variants?.[0]?.images || [],
@@ -2001,6 +1997,7 @@ function CatalogDetailModal({
 export default function AdminProductsPage() {
   const [families, setFamilies] = useState([]);
   const [products, setProducts] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([ALL_CATEGORY_OPTION]);
   const [loading, setLoading] = useState(true);
   const [editingProduct, setEditingProduct] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -2026,38 +2023,54 @@ export default function AdminProductsPage() {
     };
   }, [showModal]);
 
-  const applyCatalogData = useCallback((familyData, productData) => {
-    setFamilies(familyData);
-    setProducts(productData);
-
-    const nextEntries = buildCatalogEntries(
-      familyData,
-      groupProductsByCode(productData),
-    );
-
-    setActiveEntry((current) => {
-      if (!current) return current;
-      return (
-        nextEntries.find(
-          (entry) =>
-            entry._id === current._id ||
-            (entry.familyId &&
-              current.familyId &&
-              entry.familyId === current.familyId) ||
-            entry.code === current.code,
-        ) || null
+  const applyCatalogData = useCallback(
+    (familyData, productData, categoryData = []) => {
+      setFamilies(familyData);
+      setProducts(productData);
+      setCategoryOptions(
+        buildCategoryOptions(categoryData, familyData, productData),
       );
-    });
-  }, []);
+
+      const nextEntries = buildCatalogEntries(
+        familyData,
+        groupProductsByCode(productData),
+      );
+
+      setActiveEntry((current) => {
+        if (!current) return current;
+        return (
+          nextEntries.find(
+            (entry) =>
+              entry._id === current._id ||
+              (entry.familyId &&
+                current.familyId &&
+                entry.familyId === current.familyId) ||
+              entry.code === current.code,
+          ) || null
+        );
+      });
+    },
+    [],
+  );
 
   async function reloadData() {
     try {
       setLoading(true);
-      const [familyData, productData] = await Promise.all([
-        getProductFamilies(),
-        getProducts(),
-      ]);
-      applyCatalogData(familyData, productData);
+      const [familiesResult, productsResult, categoriesResult] =
+        await Promise.allSettled([
+          getProductFamilies(),
+          getProducts(),
+          getProductCategories(),
+        ]);
+
+      if (familiesResult.status === "rejected") throw familiesResult.reason;
+      if (productsResult.status === "rejected") throw productsResult.reason;
+
+      applyCatalogData(
+        familiesResult.value,
+        productsResult.value,
+        categoriesResult.status === "fulfilled" ? categoriesResult.value : [],
+      );
     } catch (error) {
       console.error("Admin catalog reload error:", error);
     } finally {
@@ -2071,13 +2084,22 @@ export default function AdminProductsPage() {
     (async () => {
       try {
         setLoading(true);
-        const [familyData, productData] = await Promise.all([
-          getProductFamilies(),
-          getProducts(),
-        ]);
+        const [familiesResult, productsResult, categoriesResult] =
+          await Promise.allSettled([
+            getProductFamilies(),
+            getProducts(),
+            getProductCategories(),
+          ]);
+
+        if (familiesResult.status === "rejected") throw familiesResult.reason;
+        if (productsResult.status === "rejected") throw productsResult.reason;
 
         if (!alive) return;
-        applyCatalogData(familyData, productData);
+        applyCatalogData(
+          familiesResult.value,
+          productsResult.value,
+          categoriesResult.status === "fulfilled" ? categoriesResult.value : [],
+        );
       } catch (error) {
         console.error("Admin catalog load error:", error);
       } finally {
@@ -2100,6 +2122,29 @@ export default function AdminProductsPage() {
     [families, groupedProducts],
   );
 
+  const categoryDivisions = useMemo(
+    () => buildCategoryDivisions(categoryOptions),
+    [categoryOptions],
+  );
+
+  useEffect(() => {
+    if (!categoryOptions.some((option) => option.value === categoryFilter)) {
+      setCategoryFilter("ALL");
+    }
+  }, [categoryFilter, categoryOptions]);
+
+  useEffect(() => {
+    const validDivisionKeys = new Set([
+      "ALL",
+      ...categoryDivisions.map((division) => division.key),
+      "other",
+    ]);
+
+    if (!validDivisionKeys.has(divisionFilter)) {
+      setDivisionFilter("ALL");
+    }
+  }, [categoryDivisions, divisionFilter]);
+
   useEffect(() => {
     if (!activeEntry?.code) return;
 
@@ -2121,12 +2166,12 @@ export default function AdminProductsPage() {
     const q = search.trim().toLowerCase();
 
     const scoped = catalogEntries.filter((entry) => {
-      const division = divisionForCategory(entry.category);
+      const division = divisionForCategory(entry.category, categoryDivisions);
       const categoryOk =
         categoryFilter === "ALL" ? true : entry.category === categoryFilter;
       const divisionOk =
         divisionFilter === "ALL" ? true : division.key === divisionFilter;
-      const meta = getEntryMeta(entry);
+      const meta = getEntryMeta(entry, categoryDivisions);
       const statusOk =
         statusFilter === "ALL"
           ? true
@@ -2187,8 +2232,12 @@ export default function AdminProductsPage() {
       }
 
       if (sortBy === "PRICE_ASC") {
-        const aPrice = getEntryMeta(a).lowestPrice ?? Number.POSITIVE_INFINITY;
-        const bPrice = getEntryMeta(b).lowestPrice ?? Number.POSITIVE_INFINITY;
+        const aPrice =
+          getEntryMeta(a, categoryDivisions).lowestPrice ??
+          Number.POSITIVE_INFINITY;
+        const bPrice =
+          getEntryMeta(b, categoryDivisions).lowestPrice ??
+          Number.POSITIVE_INFINITY;
         return aPrice - bPrice;
       }
 
@@ -2198,6 +2247,7 @@ export default function AdminProductsPage() {
     catalogEntries,
     search,
     categoryFilter,
+    categoryDivisions,
     divisionFilter,
     statusFilter,
     sortBy,
@@ -2205,21 +2255,21 @@ export default function AdminProductsPage() {
 
   const divisionCounts = useMemo(() => {
     const counts = new Map();
-    CATEGORY_DIVISIONS.forEach((division) => counts.set(division.key, 0));
+    categoryDivisions.forEach((division) => counts.set(division.key, 0));
     counts.set("other", 0);
 
     for (const entry of catalogEntries) {
-      const division = divisionForCategory(entry.category);
+      const division = divisionForCategory(entry.category, categoryDivisions);
       counts.set(division.key, (counts.get(division.key) || 0) + 1);
     }
 
     return counts;
-  }, [catalogEntries]);
+  }, [catalogEntries, categoryDivisions]);
 
   const categoryCounts = useMemo(() => {
     const counts = new Map();
-    CATEGORY_OPTIONS.forEach((category) => {
-      if (category !== "ALL") counts.set(category, 0);
+    categoryOptions.forEach((category) => {
+      if (category.value !== "ALL") counts.set(category.value, 0);
     });
 
     for (const entry of catalogEntries) {
@@ -2227,7 +2277,7 @@ export default function AdminProductsPage() {
     }
 
     return counts;
-  }, [catalogEntries]);
+  }, [catalogEntries, categoryOptions]);
 
   const totalVariants = products.length;
   const inactiveVariants = products.filter(
@@ -2359,7 +2409,7 @@ export default function AdminProductsPage() {
   const handleCategoryScopeChange = (nextCategory) => {
     setCategoryFilter(nextCategory);
     if (nextCategory !== "ALL") {
-      setDivisionFilter(divisionForCategory(nextCategory).key);
+      setDivisionFilter(divisionForCategory(nextCategory, categoryDivisions).key);
     }
   };
 
@@ -2368,8 +2418,9 @@ export default function AdminProductsPage() {
       <NavBar />
       <div className="catalog-shell">
         <CatalogSidebar
-          divisions={CATEGORY_DIVISIONS}
+          divisions={categoryDivisions}
           divisionCounts={divisionCounts}
+          categoryOptions={categoryOptions}
           categoryCounts={categoryCounts}
           divisionFilter={divisionFilter}
           categoryFilter={categoryFilter}
@@ -2388,7 +2439,7 @@ export default function AdminProductsPage() {
 
         <section className="catalog-main">
           <CatalogMobileNav
-            divisions={CATEGORY_DIVISIONS}
+            divisions={categoryDivisions}
             divisionCounts={divisionCounts}
             divisionFilter={divisionFilter}
             totalFamilies={catalogEntries.length}
@@ -2409,6 +2460,7 @@ export default function AdminProductsPage() {
                 sortBy={sortBy}
                 onSortChange={setSortBy}
                 categoryFilter={categoryFilter}
+                categoryOptions={categoryOptions}
                 onCategoryChange={handleCategoryScopeChange}
                 onReset={resetCatalogView}
               />
@@ -2447,6 +2499,7 @@ export default function AdminProductsPage() {
                     <MinimalCatalogCard
                       key={entry._id}
                       entry={entry}
+                      divisions={categoryDivisions}
                       onOpen={setActiveEntry}
                       onViewImage={handleViewImage}
                     />
@@ -2460,6 +2513,7 @@ export default function AdminProductsPage() {
         <CatalogDetailModal
           open={Boolean(activeEntry)}
           entry={activeEntry}
+          divisions={categoryDivisions}
           onClose={() => setActiveEntry(null)}
           onAddVariant={handleAddVariant}
           onEditProduct={handleEditProduct}
@@ -2484,6 +2538,7 @@ export default function AdminProductsPage() {
         {showModal ? (
           <ProductEditorModal
             product={editingProduct}
+            categoryOptions={categoryOptions}
             onClose={() => {
               setShowModal(false);
               setEditingProduct(null);

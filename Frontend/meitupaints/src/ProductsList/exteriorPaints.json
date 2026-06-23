@@ -21,7 +21,7 @@
   {
     "id": "ext-natural-high-glossy",
     "category": "exterior",
-    "name": "Meitu Eco-Friendly High Glossy Natural Exterior Wall Paints",
+    "name": "Meitu Eco-Friendly High Glossy Natural Exterior Wall Paint",
     "file": "Meitu Eco-Friendly High Glossy Natural Exterior Wall Paints.webp",
     "src": "/Regular/exterior/Meitu Eco-Friendly High Glossy Natural Exterior Wall Paints.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -40,7 +40,7 @@
   {
     "id": "ext-constant-color",
     "category": "exterior",
-    "name": "Meitu Environmentally Constant Color Exterior Paint",
+    "name": "Meitu Environmentally Friendly Constant Color Exterior Paint",
     "file": "Meitu Environmentally Constant Color Exterior Paint.webp",
     "src": "/Regular/exterior/Meitu Environmentally Constant Color Exterior Paint.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -78,7 +78,7 @@
   {
     "id": "ext-natural",
     "category": "exterior",
-    "name": "Meitu Environmentally Friendly Natural Exterior Wall Paint",
+    "name": "Meitu Environmentally Friendly Natural Exterior Paint",
     "file": "Meitu Environmentally Friendly Natural Exterior Wall Paint.webp",
     "src": "/Regular/exterior/Meitu Environmentally Friendly Natural Exterior Wall Paint.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -97,7 +97,7 @@
   {
     "id": "ext-ceiling",
     "category": "exterior",
-    "name": "Meitu Eco-Friendly High Glossy Exterior Wall Paint Ceiling White",
+    "name": "Meitu Eco-Friendly High Glossy Ceiling White",
     "file": "Meitu Eco-Friendly High Glossy Exterior Wall Paint Ceiling White.webp",
     "src": "/Regular/exterior/Meitu Eco-Friendly High Glossy Exterior Wall Paint Ceiling White.webp",
     "sizes": ["20L", "10L", "4L", "1L"],

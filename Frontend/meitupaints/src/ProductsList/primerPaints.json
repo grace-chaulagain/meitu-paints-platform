@@ -19,7 +19,7 @@
   {
     "id": "alkali-res",
     "category": "primer",
-    "name": "Meitu Environmentally Friendly Alkali-Resistant Interior Wall Paint",
+    "name": "Meitu Environmentally Friendly Alkali-Resistant Interior Wall Primer",
     "file": "Meitu Environmentally Friendly Alkali-Resistant Interior Wall Paint.webp",
     "src": "/Regular/interior/Meitu Environmentally Friendly Alkali-Resistant Interior Wall Paint.webp",
     "sizes": ["20L", "10L", "4L", "1L"],
@@ -36,7 +36,7 @@
   {
     "id": "eco-friendly-primer",
     "category": "primer",
-    "name": "Meitu Eco-Friendly Primer",
+    "name": "Meitu Eco-Friendly Interior Primer",
     "file": "Meitu Eco-Friendly Primer.webp",
     "src": "/Primer/Meitu Eco-Friendly Primer.webp",
     "sizes": ["1L", "4L", "10L", "20L"],
@@ -53,7 +53,7 @@
   {
     "id": "metal-primer",
     "category": "primer",
-    "name": "Meitu Metal-Primer",
+    "name": "Metal Primer",
     "file": "Meitu Metal-Primer.webp",
     "src": "/Primer/Meitu Metal-Primer.webp",
     "sizes": ["1L", "4L", "500mL"],
@@ -72,7 +72,7 @@
   {
     "id": "wood-primer",
     "category": "primer",
-    "name": "Meitu Wood-Primer",
+    "name": "Wood Primer",
     "file": "Meitu Wood-Primer.webp",
     "src": "/Primer/Meitu Wood-Primer.webp",
     "sizes": ["1L", "4L", "500mL"],
