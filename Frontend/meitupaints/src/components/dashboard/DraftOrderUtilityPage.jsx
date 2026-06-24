@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../../api/client.js";
+import { useMemo, useState } from "react";
+import { useGetProductsQuery } from "../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import {
   buildCart,
   calculateCartTotals,
@@ -204,40 +205,20 @@ export default function DraftOrderUtilityPage({
   title = "Draft Order",
   subtitle = "Select product quantities to calculate a draft total. This utility does not submit an order.",
 }) {
-  const [products, setProducts] = useState([]);
+  const productsQuery = useGetProductsQuery();
+  const products = useMemo(
+    () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
+    [productsQuery.data],
+  );
+  const loading = productsQuery.isLoading && products.length === 0;
+  const refreshing = !loading && productsQuery.isFetching;
+  const error = productsQuery.error
+    ? getQueryErrorMessage(productsQuery.error, "Failed to load product catalog.")
+    : "";
+
   const [quantities, setQuantities] = useState({});
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await api.get("/api/products");
-        const items = res?.data?.items || res?.data?.products || [];
-        if (!alive) return;
-        setProducts(items.filter((item) => item?.isActive !== false));
-      } catch (err) {
-        if (!alive) return;
-        setError(
-          err?.response?.data?.error ||
-            err?.message ||
-            "Failed to load product catalog.",
-        );
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const categories = useMemo(() => {
     return [
@@ -312,6 +293,7 @@ export default function DraftOrderUtilityPage({
             ))}
           </select>
         </div>
+        {refreshing ? <div className="draft-updating">Updating catalog data...</div> : null}
         {error ? <div className="draft-error">{error}</div> : null}
       </GlassCard>
 
@@ -448,6 +430,14 @@ export default function DraftOrderUtilityPage({
           font-weight:850;
           outline:0;
         }
+
+        .draft-updating{
+          margin-top:10px;
+          color:rgba(15,23,42,.52);
+          font-size:12px;
+          font-weight:900;
+        }
+
         .draft-error{
           margin-top:14px;
           padding:13px 15px;

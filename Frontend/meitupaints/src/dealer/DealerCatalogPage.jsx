@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../api/client.js";
+import {
+  useGetProductCategoriesQuery,
+  useGetProductsQuery,
+} from "../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../redux/api/selectors.js";
 import {
   buildCart,
   calculateCartTotals,
@@ -1228,80 +1232,54 @@ export default function DealerCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const orderSearchParam = searchParams.get("search") || "";
 
-  const [products, setProducts] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([ALL_CATEGORY_OPTION]);
+  const productsQuery = useGetProductsQuery();
+  const categoriesQuery = useGetProductCategoriesQuery();
+
+  const products = useMemo(
+    () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
+    [productsQuery.data],
+  );
+
+  const categoryOptions = useMemo(
+    () => buildCategoryOptions(categoriesQuery.data || [], products),
+    [categoriesQuery.data, products],
+  );
+
+  const hasCachedProducts = products.length > 0;
+  const loading = productsQuery.isLoading && !hasCachedProducts;
+  const refreshing =
+    !loading && (productsQuery.isFetching || categoriesQuery.isFetching);
+  const error = productsQuery.error
+    ? getQueryErrorMessage(productsQuery.error, "Failed to load product catalog.")
+    : "";
+
   const [quantities, setQuantities] = useState(loadDraft());
   const [search, setSearch] = useState(orderSearchParam);
   const [category, setCategory] = useState("ALL");
   const [sortBy, setSortBy] = useState("name-asc");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     saveDraft(quantities);
   }, [quantities]);
 
+  // This effect intentionally synchronizes route query state into the visible controls.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setSearch(orderSearchParam);
     if (orderSearchParam) setCategory("ALL");
   }, [orderSearchParam]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const [productsRes, categoriesRes] = await Promise.allSettled([
-          api.get("/api/products"),
-          api.get("/api/products/categories"),
-        ]);
-
-        if (productsRes.status === "rejected") {
-          throw productsRes.reason;
-        }
-
-        const items =
-          productsRes.value?.data?.items || productsRes.value?.data?.products || [];
-        const activeItems = items.filter((item) => item?.isActive !== false);
-        const categoryItems =
-          categoriesRes.status === "fulfilled"
-            ? categoriesRes.value?.data?.items || []
-            : [];
-
-        if (!alive) return;
-        setProducts(activeItems);
-        setCategoryOptions(buildCategoryOptions(categoryItems, activeItems));
-      } catch (e) {
-        if (!alive) return;
-        setError(
-          e?.response?.data?.error ||
-            e?.message ||
-            "Failed to load product catalog.",
-        );
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!categoryOptions.some((option) => option.value === category)) {
-      setCategory("ALL");
-    }
-  }, [category, categoryOptions]);
+  const activeCategory = categoryOptions.some((option) => option.value === category)
+    ? category
+    : "ALL";
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return products.filter((item) => {
-      const categoryOk = category === "ALL" ? true : item.category === category;
+      const categoryOk =
+        activeCategory === "ALL" ? true : item.category === activeCategory;
 
       const queryOk = q
         ? [item.name, item.code, item.sku, item.category, item.pack?.label]
@@ -1311,7 +1289,7 @@ export default function DealerCatalogPage() {
 
       return categoryOk && queryOk;
     });
-  }, [products, category, search]);
+  }, [products, activeCategory, search]);
 
   const productsMap = useMemo(() => {
     return products.reduce((acc, product) => {
@@ -1449,6 +1427,20 @@ export default function DealerCatalogPage() {
                       ))}
                     </select>
 
+
+                  {refreshing ? (
+                    <span
+                      style={{
+                        alignSelf: "center",
+                        color: "rgba(15,23,42,.52)",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      Updating...
+                    </span>
+                  ) : null}
+
                     <button
                       type="button"
                       onClick={clearFilters}
@@ -1476,7 +1468,7 @@ export default function DealerCatalogPage() {
                     {categoryOptions.map((option) => (
                       <CategoryPill
                         key={option.value}
-                        active={category === option.value}
+                        active={activeCategory === option.value}
                         onClick={() => setCategory(option.value)}
                       >
                         {option.label}
@@ -1505,7 +1497,7 @@ export default function DealerCatalogPage() {
                     <span>{error}</span>
                     <button
                       type="button"
-                      onClick={() => window.location.reload()}
+                      onClick={() => productsQuery.refetch()}
                       style={{
                         height: 40,
                         padding: "0 14px",

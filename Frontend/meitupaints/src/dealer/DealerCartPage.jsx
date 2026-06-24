@@ -3,6 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client.js";
 import NavBar from "../components/NavBar.jsx";
 import {
+  useGetProductFamiliesQuery,
+  useGetProductsQuery,
+} from "../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../redux/api/selectors.js";
+import {
   buildCart as buildPricedCart,
   calculateCartTotals,
   formatMoney,
@@ -456,8 +461,30 @@ function SummaryRow({ label, value, strong = false }) {
 
 export default function DealerCartPage() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState([]);
-  const [families, setFamilies] = useState([]);
+  const productsQuery = useGetProductsQuery();
+  const familiesQuery = useGetProductFamiliesQuery();
+
+  const products = useMemo(
+    () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
+    [productsQuery.data],
+  );
+  const families = useMemo(
+    () => (familiesQuery.data || []).filter((item) => item?.isActive !== false),
+    [familiesQuery.data],
+  );
+
+  const loading =
+    (productsQuery.isLoading && products.length === 0) ||
+    (familiesQuery.isLoading && families.length === 0);
+  const refreshing =
+    !loading && (productsQuery.isFetching || familiesQuery.isFetching);
+  const catalogError = productsQuery.error || familiesQuery.error
+    ? getQueryErrorMessage(
+        productsQuery.error || familiesQuery.error,
+        "Failed to load order draft products.",
+      )
+    : "";
+
   const [quantities, setQuantities] = useState(loadDraft());
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
@@ -466,51 +493,15 @@ export default function DealerCartPage() {
   const [showPaymentNote, setShowPaymentNote] = useState(false);
   const [dealerNote, setDealerNote] = useState("");
   const [paymentPrompted, setPaymentPrompted] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const visibleError = error || catalogError;
+
   useEffect(() => {
     saveDraft(quantities);
   }, [quantities]);
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const [productsRes, familiesRes] = await Promise.all([
-          api.get("/api/products"),
-          api.get("/api/product-families"),
-        ]);
-
-        const items =
-          productsRes?.data?.items || productsRes?.data?.products || [];
-        const familyItems = familiesRes?.data?.items || [];
-
-        if (!alive) return;
-        setProducts(items.filter((item) => item?.isActive !== false));
-        setFamilies(familyItems.filter((item) => item?.isActive !== false));
-      } catch (e) {
-        if (!alive) return;
-        setError(
-          e?.response?.data?.error ||
-            e?.message ||
-            "Failed to load order draft products.",
-        );
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const productsMap = useMemo(() => {
     const map = {};
@@ -828,23 +819,37 @@ export default function DealerCartPage() {
               </div>
             </div>
 
-            {(error || success) && (
+
+            {refreshing ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  color: "rgba(15,23,42,.52)",
+                  fontSize: 12,
+                  fontWeight: 900,
+                }}
+              >
+                Updating catalog data...
+              </div>
+            ) : null}
+
+            {(visibleError || success) && (
               <div
                 style={{
                   marginTop: 18,
                   padding: "14px 16px",
                   borderRadius: 16,
                   fontWeight: 800,
-                  background: error
+                  background: visibleError
                     ? "rgba(180,35,24,.08)"
                     : "rgba(18,183,106,.10)",
-                  color: error ? "#b42318" : "#067647",
-                  border: error
+                  color: visibleError ? "#b42318" : "#067647",
+                  border: visibleError
                     ? "1px solid rgba(180,35,24,.16)"
                     : "1px solid rgba(18,183,106,.16)",
                 }}
               >
-                {error || success}
+                {visibleError || success}
               </div>
             )}
           </GlassPanel>

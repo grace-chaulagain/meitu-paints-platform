@@ -1,12 +1,14 @@
 import { configureStore } from "@reduxjs/toolkit";
 import userReducer from "./userSlice";
-// (later) import dealerOrderReducer
+import { meituApi } from "./api/meituApi.js";
 
 export const store = configureStore({
   reducer: {
     user: userReducer,
-    // dealerOrder: dealerOrderReducer (we’ll plug this next)
+    [meituApi.reducerPath]: meituApi.reducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware().concat(meituApi.middleware),
 });
 
 export default store;

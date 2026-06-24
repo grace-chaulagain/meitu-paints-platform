@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  deleteFamilyImage,
-  getProductCategories,
-  getProductFamilies,
-  getProducts,
-  uploadFamilyImage,
-  uploadProductImage,
-} from "../api/adminCatalogApi";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProductEditorModal from "./components/ProductEditorModal";
 import NavBar from "../../components/NavBar";
+import {
+  useDeleteAdminFamilyImageMutation,
+  useGetAdminProductCategoriesQuery,
+  useGetAdminProductFamiliesQuery,
+  useGetAdminProductsQuery,
+  useUploadAdminFamilyImageMutation,
+  useUploadAdminProductImageMutation,
+} from "../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 
 const ALL_CATEGORY_OPTION = { value: "ALL", label: "All categories" };
 
@@ -1995,10 +1996,34 @@ function CatalogDetailModal({
 }
 
 export default function AdminProductsPage() {
-  const [families, setFamilies] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([ALL_CATEGORY_OPTION]);
-  const [loading, setLoading] = useState(true);
+  const familiesQuery = useGetAdminProductFamiliesQuery();
+  const productsQuery = useGetAdminProductsQuery();
+  const categoriesQuery = useGetAdminProductCategoriesQuery();
+  const [uploadFamilyImage] = useUploadAdminFamilyImageMutation();
+  const [uploadProductImage] = useUploadAdminProductImageMutation();
+  const [deleteFamilyImage] = useDeleteAdminFamilyImageMutation();
+
+  const families = useMemo(() => familiesQuery.data || [], [familiesQuery.data]);
+  const products = useMemo(() => productsQuery.data || [], [productsQuery.data]);
+  const categoryOptions = useMemo(
+    () => buildCategoryOptions(categoriesQuery.data || [], families, products),
+    [categoriesQuery.data, families, products],
+  );
+  const hasCatalogData = families.length > 0 || products.length > 0;
+  const loading =
+    !hasCatalogData && (familiesQuery.isLoading || productsQuery.isLoading);
+  const refreshing =
+    !loading &&
+    (familiesQuery.isFetching ||
+      productsQuery.isFetching ||
+      categoriesQuery.isFetching);
+  const catalogError = familiesQuery.error || productsQuery.error
+    ? getQueryErrorMessage(
+        familiesQuery.error || productsQuery.error,
+        "Failed to load admin product catalog.",
+      )
+    : "";
+
   const [editingProduct, setEditingProduct] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -2022,95 +2047,6 @@ export default function AdminProductsPage() {
       document.body.classList.remove("meitu-catalog-editor-open");
     };
   }, [showModal]);
-
-  const applyCatalogData = useCallback(
-    (familyData, productData, categoryData = []) => {
-      setFamilies(familyData);
-      setProducts(productData);
-      setCategoryOptions(
-        buildCategoryOptions(categoryData, familyData, productData),
-      );
-
-      const nextEntries = buildCatalogEntries(
-        familyData,
-        groupProductsByCode(productData),
-      );
-
-      setActiveEntry((current) => {
-        if (!current) return current;
-        return (
-          nextEntries.find(
-            (entry) =>
-              entry._id === current._id ||
-              (entry.familyId &&
-                current.familyId &&
-                entry.familyId === current.familyId) ||
-              entry.code === current.code,
-          ) || null
-        );
-      });
-    },
-    [],
-  );
-
-  async function reloadData() {
-    try {
-      setLoading(true);
-      const [familiesResult, productsResult, categoriesResult] =
-        await Promise.allSettled([
-          getProductFamilies(),
-          getProducts(),
-          getProductCategories(),
-        ]);
-
-      if (familiesResult.status === "rejected") throw familiesResult.reason;
-      if (productsResult.status === "rejected") throw productsResult.reason;
-
-      applyCatalogData(
-        familiesResult.value,
-        productsResult.value,
-        categoriesResult.status === "fulfilled" ? categoriesResult.value : [],
-      );
-    } catch (error) {
-      console.error("Admin catalog reload error:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        const [familiesResult, productsResult, categoriesResult] =
-          await Promise.allSettled([
-            getProductFamilies(),
-            getProducts(),
-            getProductCategories(),
-          ]);
-
-        if (familiesResult.status === "rejected") throw familiesResult.reason;
-        if (productsResult.status === "rejected") throw productsResult.reason;
-
-        if (!alive) return;
-        applyCatalogData(
-          familiesResult.value,
-          productsResult.value,
-          categoriesResult.status === "fulfilled" ? categoriesResult.value : [],
-        );
-      } catch (error) {
-        console.error("Admin catalog load error:", error);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [applyCatalogData]);
 
   const groupedProducts = useMemo(
     () => groupProductsByCode(products),
@@ -2333,8 +2269,7 @@ export default function AdminProductsPage() {
 
       try {
         setUploadingFamilyCode(entry.code);
-        await uploadFamilyImage(entry.familyId, file);
-        await reloadData();
+        await uploadFamilyImage({ familyId: entry.familyId, file }).unwrap();
       } catch (error) {
         console.error("Family image upload failed:", error);
         alert(error?.message || "Failed to upload family image");
@@ -2356,13 +2291,15 @@ export default function AdminProductsPage() {
 
     try {
       setRemovingFamilyCode(entry.code);
-      await deleteFamilyImage(entry.familyId, primaryImage.publicId);
+      await deleteFamilyImage({
+        familyId: entry.familyId,
+        publicId: primaryImage.publicId,
+      }).unwrap();
       setViewerState((current) =>
         current.image?.publicId === primaryImage.publicId
           ? { open: false, image: null, title: "" }
           : current,
       );
-      await reloadData();
     } catch (error) {
       console.error("Family image removal failed:", error);
       alert(error?.message || "Failed to remove family image");
@@ -2383,8 +2320,7 @@ export default function AdminProductsPage() {
 
       try {
         setUploadingVariantId(variant._id);
-        await uploadProductImage(variant._id, file);
-        await reloadData();
+        await uploadProductImage({ productId: variant._id, file }).unwrap();
       } catch (error) {
         console.error("Variant image upload failed:", error);
         alert(error?.message || "Failed to upload variant image");
@@ -2465,6 +2401,28 @@ export default function AdminProductsPage() {
                 onReset={resetCatalogView}
               />
 
+              {refreshing ? (
+                <Surface style={{ padding: "10px 14px", boxShadow: "none" }}>
+                  <div
+                    style={{
+                      color: "rgba(15,23,42,.52)",
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }}
+                  >
+                    Updating catalog data...
+                  </div>
+                </Surface>
+              ) : null}
+
+              {catalogError ? (
+                <Surface style={{ padding: "12px 14px", boxShadow: "none" }}>
+                  <div style={{ color: "#b42318", fontSize: 13, fontWeight: 900 }}>
+                    {catalogError}
+                  </div>
+                </Surface>
+              ) : null}
+
               {loading ? (
                 <LoadingGrid />
               ) : filteredEntries.length === 0 ? (
@@ -2543,7 +2501,7 @@ export default function AdminProductsPage() {
               setShowModal(false);
               setEditingProduct(null);
             }}
-            onSaved={reloadData}
+            onSaved={async () => {}}
           />
         ) : null}
       </div>

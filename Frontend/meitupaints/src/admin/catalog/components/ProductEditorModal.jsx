@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  createProduct,
-  updateProduct,
-  deleteProduct,
-  restoreProduct,
-} from "../../api/adminCatalogApi";
+  useCreateAdminProductMutation,
+  useDeleteAdminProductMutation,
+  useRestoreAdminProductMutation,
+  useUpdateAdminProductMutation,
+} from "../../../redux/api/meituApi.js";
 
 /* -----------------------------
    constants
@@ -664,9 +664,13 @@ export default function ProductEditorModal({
   product,
   categoryOptions = [],
   onClose,
-  onSaved,
+  onSaved = async () => {},
 }) {
   const isEdit = Boolean(product?._id);
+  const [createProduct] = useCreateAdminProductMutation();
+  const [updateProduct] = useUpdateAdminProductMutation();
+  const [deleteProduct] = useDeleteAdminProductMutation();
+  const [restoreProduct] = useRestoreAdminProductMutation();
 
   const [form, setForm] = useState(createInitialForm());
   const [loading, setLoading] = useState(false);
@@ -894,9 +898,9 @@ export default function ProductEditorModal({
       };
 
       if (isEdit) {
-        await updateProduct(product._id, payload);
+        await updateProduct({ productId: product._id, payload }).unwrap();
       } else {
-        await createProduct(payload);
+        await createProduct(payload).unwrap();
       }
 
       await onSaved();
@@ -917,7 +921,7 @@ export default function ProductEditorModal({
     try {
       setActionLoading(true);
       setFormError("");
-      await deleteProduct(product._id);
+      await deleteProduct(product._id).unwrap();
       await onSaved();
       onClose();
     } catch (err) {
@@ -934,7 +938,7 @@ export default function ProductEditorModal({
     try {
       setActionLoading(true);
       setFormError("");
-      await restoreProduct(product._id);
+      await restoreProduct(product._id).unwrap();
       await onSaved();
       onClose();
     } catch (err) {
