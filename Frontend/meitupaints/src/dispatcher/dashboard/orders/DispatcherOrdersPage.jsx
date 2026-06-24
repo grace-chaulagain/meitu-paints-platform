@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
+import {
+  useAmendDispatcherOrderMutation,
+  useGetDispatcherOrderQuery,
+  useGetDispatcherOrdersQuery,
+  useRejectDispatcherOrderMutation,
+  useVerifyDispatcherOrderMutation,
+} from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 
 const VIEW_FILTERS = [
   { key: "PENDING", label: "Pending" },
@@ -1376,19 +1383,13 @@ function DispatcherOrderModal({
 export default function DispatcherOrdersPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [viewMode, setViewMode] = useState("PENDING");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [amendOrder, setAmendOrder] = useState(null);
-  const searchRef = useRef(search);
-
-  useEffect(() => {
-    searchRef.current = search;
-  }, [search]);
 
   const queryOrderId = useMemo(() => {
     return new URLSearchParams(location.search || "").get("orderId") || "";
@@ -1418,62 +1419,54 @@ export default function DispatcherOrdersPage() {
     clearOrderQuery();
   }, [busyAction, clearOrderQuery]);
 
-  const loadPageData = useCallback(async (
-    nextView = viewMode,
-    nextSearch = searchRef.current,
-  ) => {
-    try {
-      setLoading(true);
-      setError("");
+  const orderParams = useMemo(() => {
+    const params = {};
+    if (committedSearch.trim()) params.q = committedSearch.trim();
 
-      const params = {};
-      if (nextSearch.trim()) params.q = nextSearch.trim();
-
-      if (nextView === "ARCHIVE") {
-        params.archive = true;
-      } else if (nextView === "VERIFIED" || nextView === "REJECTED") {
-        params.status = nextView;
-      } else {
-        params.status = "SUBMITTED";
-      }
-
-      const res = await api.get("/api/dispatchers/me/orders", { params });
-      const items = res?.data?.items || [];
-
-      setOrders(items);
-      if (queryOrderId) {
-        try {
-          const orderRes = await api.get(`/api/dispatchers/me/orders/${queryOrderId}`);
-          setSelectedOrder(orderRes?.data?.item || null);
-        } catch {
-          setSelectedOrder(
-            items.find((item) => item._id === queryOrderId) || null,
-          );
-        }
-        return;
-      }
-
-      setSelectedOrder((current) => {
-        if (current?._id) {
-          return items.find((item) => item._id === current._id) || null;
-        }
-        return null;
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load assigned orders.",
-      );
-    } finally {
-      setLoading(false);
+    if (viewMode === "ARCHIVE") {
+      params.archive = true;
+    } else if (viewMode === "VERIFIED" || viewMode === "REJECTED") {
+      params.status = viewMode;
+    } else {
+      params.status = "SUBMITTED";
     }
-  }, [queryOrderId, viewMode]);
 
-  useEffect(() => {
-    loadPageData(viewMode);
-  }, [viewMode, loadPageData]);
+    return params;
+  }, [committedSearch, viewMode]);
+
+  const ordersQuery = useGetDispatcherOrdersQuery(orderParams);
+  const orderDetailQuery = useGetDispatcherOrderQuery(queryOrderId, {
+    skip: !queryOrderId,
+  });
+  const [verifyDispatcherOrder] = useVerifyDispatcherOrderMutation();
+  const [rejectDispatcherOrder] = useRejectDispatcherOrderMutation();
+  const [amendDispatcherOrder] = useAmendDispatcherOrderMutation();
+
+  const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
+  const loading = ordersQuery.isLoading && orders.length === 0;
+  const isRefreshing =
+    !loading && (ordersQuery.isFetching || orderDetailQuery.isFetching);
+  const queryError = ordersQuery.error || orderDetailQuery.error;
+  const error =
+    actionError ||
+    (queryError
+      ? getQueryErrorMessage(queryError, "Failed to load assigned orders.")
+      : "");
+
+  const selectedOrderView = useMemo(() => {
+    if (queryOrderId) {
+      return (
+        orderDetailQuery.data?.item ||
+        orders.find((item) => item._id === queryOrderId) ||
+        null
+      );
+    }
+
+    if (!selectedOrder?._id) return null;
+    return (
+      orders.find((item) => item._id === selectedOrder._id) || selectedOrder
+    );
+  }, [orderDetailQuery.data, orders, queryOrderId, selectedOrder]);
 
   const countsByFilter = useMemo(() => {
     return {
@@ -1503,20 +1496,29 @@ export default function DispatcherOrdersPage() {
     };
   }, [orders, viewMode]);
 
+  function refetchOrders() {
+    ordersQuery.refetch();
+    if (queryOrderId) orderDetailQuery.refetch();
+  }
+
+  function applySearch() {
+    setCommittedSearch(search);
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setCommittedSearch("");
+    setViewMode("PENDING");
+  }
+
   async function runAction(actionKey, request) {
     try {
       setBusyAction(actionKey);
-      setError("");
+      setActionError("");
       await request();
-      await loadPageData(viewMode, search);
       return true;
     } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Action failed.",
-      );
+      setActionError(getQueryErrorMessage(err, "Action failed."));
       return false;
     } finally {
       setBusyAction("");
@@ -1525,9 +1527,10 @@ export default function DispatcherOrdersPage() {
 
   async function handleVerify(order, reviewNote) {
     const success = await runAction(`verify-${order._id}`, () =>
-      api.patch(`/api/dispatchers/me/orders/${order._id}/verify`, {
-        reviewNote: String(reviewNote || "").trim(),
-      }),
+      verifyDispatcherOrder({
+        orderId: order._id,
+        payload: { reviewNote: String(reviewNote || "").trim() },
+      }).unwrap(),
     );
 
     if (success) {
@@ -1538,9 +1541,10 @@ export default function DispatcherOrdersPage() {
 
   async function handleReject(order, reviewNote) {
     const success = await runAction(`reject-${order._id}`, () =>
-      api.patch(`/api/dispatchers/me/orders/${order._id}/reject`, {
-        reviewNote: String(reviewNote || "").trim(),
-      }),
+      rejectDispatcherOrder({
+        orderId: order._id,
+        payload: { reviewNote: String(reviewNote || "").trim() },
+      }).unwrap(),
     );
 
     if (success) {
@@ -1553,20 +1557,23 @@ export default function DispatcherOrdersPage() {
     if (!amendOrder?._id) return;
 
     const success = await runAction(`amend-${amendOrder._id}`, () =>
-      api.patch(`/api/dispatchers/me/orders/${amendOrder._id}/amend`, {
-        items: payload.items,
-        totals: {
-          subtotal: payload.subtotal,
-          discount: 0,
-          taxableAmount: payload.subtotal,
-          tax: 0,
-          total: payload.subtotal,
-          currency: amendOrder?.totals?.currency || "NPR",
+      amendDispatcherOrder({
+        orderId: amendOrder._id,
+        payload: {
+          items: payload.items,
+          totals: {
+            subtotal: payload.subtotal,
+            discount: 0,
+            taxableAmount: payload.subtotal,
+            tax: 0,
+            total: payload.subtotal,
+            currency: amendOrder?.totals?.currency || "NPR",
+          },
+          dealerNote: payload.dealerNote,
+          internalNote: payload.internalNote,
+          reviewNote: payload.reviewNote,
         },
-        dealerNote: payload.dealerNote,
-        internalNote: payload.internalNote,
-        reviewNote: payload.reviewNote,
-      }),
+      }).unwrap(),
     );
 
     if (success) {
@@ -1597,7 +1604,7 @@ export default function DispatcherOrdersPage() {
           title="Dispatcher Orders"
           subtitle="Review, amend, process, and download summaries for the dealer orders assigned to your dispatcher account."
           action={
-            <ActionButton subtle onClick={() => loadPageData(viewMode, search)}>
+            <ActionButton subtle onClick={refetchOrders}>
               Refresh
             </ActionButton>
           }
@@ -1629,7 +1636,7 @@ export default function DispatcherOrdersPage() {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <ActionButton subtle onClick={() => loadPageData(viewMode, search)}>
+          <ActionButton subtle onClick={applySearch}>
             Apply Search
           </ActionButton>
         </div>
@@ -1649,6 +1656,19 @@ export default function DispatcherOrdersPage() {
             {error}
           </div>
         ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating orders...
+          </div>
+        ) : null}
       </GlassCard>
 
       {loading ? (
@@ -1656,11 +1676,7 @@ export default function DispatcherOrdersPage() {
       ) : orders.length === 0 ? (
         <EmptyState
           archiveMode={viewMode === "ARCHIVE"}
-          onReset={() => {
-            setSearch("");
-            setViewMode("PENDING");
-            loadPageData("PENDING", "");
-          }}
+          onReset={resetFilters}
         />
       ) : (
         <div style={{ display: "grid", gap: 14 }}>
@@ -1668,7 +1684,7 @@ export default function DispatcherOrdersPage() {
             <OrdersRow
               key={item._id}
               item={item}
-              selected={selectedOrder?._id === item._id}
+              selected={selectedOrderView?._id === item._id}
               onSelect={openOrderPreview}
             />
           ))}
@@ -1676,9 +1692,9 @@ export default function DispatcherOrdersPage() {
       )}
 
       <DispatcherOrderModal
-        key={selectedOrder?._id || "closed"}
-        open={Boolean(selectedOrder)}
-        order={selectedOrder}
+        key={selectedOrderView?._id || "closed"}
+        open={Boolean(selectedOrderView)}
+        order={selectedOrderView}
         busyAction={busyAction}
         onClose={closeOrderPreview}
         onVerify={handleVerify}

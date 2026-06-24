@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  getDispatchers,
-  verifyDispatcher,
-  rejectDispatcher,
-  setDispatcherActive,
-  deleteDispatcher,
-  undoDispatcherDeletion,
-  updateDispatcher,
-} from "../../api/adminDispatcherApi.js";
+  useApproveDispatcherMutation,
+  useDeleteAdminDispatcherMutation,
+  useGetAdminDispatchersQuery,
+  useRejectDispatcherMutation,
+  useSetAdminDispatcherActiveMutation,
+  useUndoAdminDispatcherDeletionMutation,
+  useUpdateAdminDispatcherMutation,
+} from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 import AdminEntityCard, {
   AdminEntityCardStyles,
@@ -595,37 +596,44 @@ function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
 
 export default function AdminDispatchersPage() {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState("ALL");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [editingDispatcher, setEditingDispatcher] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [pendingDecision, setPendingDecision] = useState(null);
   const [confirmationText, setConfirmationText] = useState("");
 
-  const loadDispatchers = useCallback(async (nextStatus = statusTab) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const params = {};
-      if (nextStatus !== "ALL") params.status = nextStatus;
-
-      const data = await getDispatchers(params);
-      setItems(data?.items || []);
-    } catch (err) {
-      setError(err?.message || "Failed to load dispatchers.");
-    } finally {
-      setLoading(false);
-    }
+  const dispatcherParams = useMemo(() => {
+    const params = {};
+    if (statusTab !== "ALL") params.status = statusTab;
+    return params;
   }, [statusTab]);
 
-  useEffect(() => {
-    loadDispatchers(statusTab);
-  }, [loadDispatchers, statusTab]);
+  const dispatchersQuery = useGetAdminDispatchersQuery(dispatcherParams);
+  const [approveDispatcher] = useApproveDispatcherMutation();
+  const [rejectDispatcher] = useRejectDispatcherMutation();
+  const [setDispatcherActive] = useSetAdminDispatcherActiveMutation();
+  const [deleteDispatcher] = useDeleteAdminDispatcherMutation();
+  const [undoDispatcherDeletion] = useUndoAdminDispatcherDeletionMutation();
+  const [updateDispatcher] = useUpdateAdminDispatcherMutation();
+
+  const items = useMemo(
+    () => dispatchersQuery.data?.items || [],
+    [dispatchersQuery.data],
+  );
+  const loading = dispatchersQuery.isLoading && items.length === 0;
+  const isRefreshing = !loading && dispatchersQuery.isFetching;
+  const error =
+    actionError ||
+    (dispatchersQuery.error
+      ? getQueryErrorMessage(dispatchersQuery.error, "Failed to load dispatchers.")
+      : "");
+
+  function refetchDispatchers() {
+    dispatchersQuery.refetch();
+  }
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -656,12 +664,11 @@ export default function AdminDispatchersPage() {
   async function runAction(actionKey, request) {
     try {
       setBusyAction(actionKey);
-      setError("");
+      setActionError("");
       await request();
-      await loadDispatchers();
       return true;
     } catch (err) {
-      setError(err?.message || "Action could not be completed.");
+      setActionError(getQueryErrorMessage(err, "Action could not be completed."));
       return false;
     } finally {
       setBusyAction("");
@@ -670,35 +677,43 @@ export default function AdminDispatchersPage() {
 
   const handleApprove = (dispatcher) =>
     runAction(`approve-${dispatcher._id}`, () =>
-      verifyDispatcher(dispatcher._id, {
-        notes: dispatcher.notes || "",
-      }),
+      approveDispatcher({
+        dispatcherId: dispatcher._id,
+        payload: { notes: dispatcher.notes || "" },
+      }).unwrap(),
     );
 
   const handleReject = (dispatcher) =>
     runAction(`reject-${dispatcher._id}`, () =>
-      rejectDispatcher(dispatcher._id, {
-        notes: dispatcher.notes || "",
-      }),
+      rejectDispatcher({
+        dispatcherId: dispatcher._id,
+        payload: { notes: dispatcher.notes || "" },
+      }).unwrap(),
     );
 
   const handleToggleActive = (dispatcher) =>
     runAction(`active-${dispatcher._id}`, () =>
-      setDispatcherActive(dispatcher._id, !dispatcher.isActive),
+      setDispatcherActive({
+        dispatcherId: dispatcher._id,
+        isActive: !dispatcher.isActive,
+      }).unwrap(),
     );
 
   const handleDelete = (dispatcher) => {
     return runAction(`delete-${dispatcher._id}`, () =>
-      deleteDispatcher(dispatcher._id, {
-        confirmation: confirmationText,
-        reason: "Admin scheduled dispatcher deletion",
-      }),
+      deleteDispatcher({
+        dispatcherId: dispatcher._id,
+        payload: {
+          confirmation: confirmationText,
+          reason: "Admin scheduled dispatcher deletion",
+        },
+      }).unwrap(),
     );
   };
 
   const handleUndoDelete = (dispatcher) => {
     return runAction(`undo-delete-${dispatcher._id}`, () =>
-      undoDispatcherDeletion(dispatcher._id),
+      undoDispatcherDeletion(dispatcher._id).unwrap(),
     );
   };
 
@@ -707,12 +722,14 @@ export default function AdminDispatchersPage() {
 
     try {
       setSavingEdit(true);
-      setError("");
-      await updateDispatcher(editingDispatcher._id, payload);
+      setActionError("");
+      await updateDispatcher({
+        dispatcherId: editingDispatcher._id,
+        payload,
+      }).unwrap();
       setEditingDispatcher(null);
-      await loadDispatchers();
     } catch (err) {
-      setError(err?.message || "Failed to update dispatcher.");
+      setActionError(getQueryErrorMessage(err, "Failed to update dispatcher."));
     } finally {
       setSavingEdit(false);
     }
@@ -726,7 +743,7 @@ export default function AdminDispatchersPage() {
           title="Dispatcher Register"
           subtitle="Filter, review, and manage dispatcher applications and approved dispatch partners."
           action={
-            <ActionButton subtle onClick={() => loadDispatchers()}>
+            <ActionButton subtle onClick={refetchDispatchers}>
               Refresh
             </ActionButton>
           }
@@ -779,6 +796,19 @@ export default function AdminDispatchersPage() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating dispatchers...
           </div>
         ) : null}
       </GlassCard>

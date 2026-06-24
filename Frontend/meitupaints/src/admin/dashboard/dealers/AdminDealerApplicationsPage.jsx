@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../../../api/client.js";
+import { useMemo, useState } from "react";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
+import {
+  useApproveDealerApplicationMutation,
+  useDeleteDealerApplicationMutation,
+  useGetAdminDealerApplicationsQuery,
+  useGetVerifiedDispatchersQuery,
+  useRejectDealerApplicationMutation,
+} from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 
 const STATUS_FILTERS = [
   { key: "ALL", label: "All" },
@@ -809,11 +816,8 @@ function ApproveModal({
 }
 
 export default function AdminDealerApplicationsPage() {
-  const [applications, setApplications] = useState([]);
-  const [dispatchers, setDispatchers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [approvingApplication, setApprovingApplication] = useState(null);
@@ -822,40 +826,41 @@ export default function AdminDealerApplicationsPage() {
   const [deletingApplication, setDeletingApplication] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
-  const loadPageData = useCallback(
-    async (nextStatus = statusFilter) => {
-      try {
-        setLoading(true);
-        setError("");
+  const applicationParams = useMemo(() => {
+    const params = {};
+    if (statusFilter !== "ALL") params.status = statusFilter;
+    return params;
+  }, [statusFilter]);
 
-        const appParams = {};
-        if (nextStatus !== "ALL") appParams.status = nextStatus;
+  const applicationsQuery = useGetAdminDealerApplicationsQuery(applicationParams);
+  const dispatchersQuery = useGetVerifiedDispatchersQuery();
+  const [approveDealerApplication] = useApproveDealerApplicationMutation();
+  const [rejectDealerApplication] = useRejectDealerApplicationMutation();
+  const [deleteDealerApplication] = useDeleteDealerApplicationMutation();
 
-        const [appsRes, dispatchersRes] = await Promise.all([
-          api.get("/api/admin/dealer-applications", { params: appParams }),
-          api.get("/api/admin/dispatchers/verified"),
-        ]);
-
-        const nextDispatchers = dispatchersRes?.data?.items || [];
-
-        setApplications(appsRes?.data?.items || []);
-        setDispatchers(nextDispatchers);
-      } catch (err) {
-        setError(
-          err?.response?.data?.error ||
-            err?.message ||
-            "Failed to load dealer applications.",
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [statusFilter],
+  const applications = useMemo(
+    () => applicationsQuery.data?.items || [],
+    [applicationsQuery.data],
+  );
+  const dispatchers = useMemo(
+    () => dispatchersQuery.data?.items || [],
+    [dispatchersQuery.data],
   );
 
-  useEffect(() => {
-    loadPageData(statusFilter);
-  }, [loadPageData, statusFilter]);
+  const loading = applicationsQuery.isLoading && applications.length === 0;
+  const isRefreshing =
+    !loading && (applicationsQuery.isFetching || dispatchersQuery.isFetching);
+  const queryError = applicationsQuery.error || dispatchersQuery.error;
+  const error =
+    actionError ||
+    (queryError
+      ? getQueryErrorMessage(queryError, "Failed to load dealer applications.")
+      : "");
+
+  function refetchPageData() {
+    applicationsQuery.refetch();
+    dispatchersQuery.refetch();
+  }
 
   const filteredApplications = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -887,12 +892,11 @@ export default function AdminDealerApplicationsPage() {
   async function runAction(actionKey, request) {
     try {
       setBusyAction(actionKey);
-      setError("");
+      setActionError("");
       await request();
-      await loadPageData();
       return true;
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || "Action failed.");
+      setActionError(getQueryErrorMessage(err, "Action failed."));
       return false;
     } finally {
       setBusyAction("");
@@ -903,15 +907,10 @@ export default function AdminDealerApplicationsPage() {
     if (!approvingApplication?._id) return;
 
     const success = await runAction(`approve-${approvingApplication._id}`, () =>
-      api.post(
-        `/api/admin/dealer-applications/${approvingApplication._id}/verify`,
+      approveDealerApplication({
+        applicationId: approvingApplication._id,
         payload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      ),
+      }).unwrap(),
     );
 
     if (success) {
@@ -921,20 +920,22 @@ export default function AdminDealerApplicationsPage() {
 
   const handleReject = (application, reviewNote) => {
     return runAction(`reject-${application._id}`, () =>
-      api.post(`/api/admin/dealer-applications/${application._id}/reject`, {
-        reviewNote: reviewNote.trim(),
-      }),
+      rejectDealerApplication({
+        applicationId: application._id,
+        payload: { reviewNote: reviewNote.trim() },
+      }).unwrap(),
     );
   };
 
   const handleDelete = (application) => {
     return runAction(`delete-${application._id}`, () =>
-      api.delete(`/api/admin/dealer-applications/${application._id}`, {
-        data: {
+      deleteDealerApplication({
+        applicationId: application._id,
+        payload: {
           confirmation: deleteConfirmation,
           reason: "Admin moved dealer application to trash",
         },
-      }),
+      }).unwrap(),
     );
   };
 
@@ -945,7 +946,7 @@ export default function AdminDealerApplicationsPage() {
           title="Application Register"
           subtitle="Search, inspect, and process dealer applications."
           action={
-            <ActionButton subtle onClick={() => loadPageData()}>
+            <ActionButton subtle onClick={refetchPageData}>
               Refresh
             </ActionButton>
           }
@@ -988,6 +989,19 @@ export default function AdminDealerApplicationsPage() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating applications...
           </div>
         ) : null}
       </GlassCard>

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client.js";
 import NavBar from "../components/NavBar.jsx";
+import { useGetDealerOrdersQuery } from "../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../redux/api/selectors.js";
 import { downloadOrderSummaryPdf } from "../utils/downloadOrderSummaryPdf.js";
 
 const ORDER_FILTERS = [
@@ -334,21 +335,6 @@ function canDownloadOrderPdf(order) {
   return normalizeStatus(order?.status) === "VERIFIED";
 }
 
-async function fetchDealerOrders(params = {}) {
-  const candidates = ["/api/dealer/orders", "/api/orders"];
-  let lastError = null;
-
-  for (const path of candidates) {
-    try {
-      const res = await api.get(path, { params });
-      return res;
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError;
-}
 
 function OrderRow({ order, onOpen }) {
   return (
@@ -874,104 +860,64 @@ function OrderDetailModal({ open, order, onClose }) {
 }
 
 export default function DealerOrdersPage() {
-  const [allOrders, setAllOrders] = useState([]);
-  const [visibleOrders, setVisibleOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [activeOrder, setActiveOrder] = useState(null);
   const resultsRef = useRef(null);
 
-  async function loadCountsData() {
-    const res = await fetchDealerOrders();
-    const items = res?.data?.items || [];
-    return items.map((item) => ({
-      ...item,
-      status: normalizeStatus(item?.status),
-    }));
-  }
-
-  async function loadVisibleData(
-    nextStatus = statusFilter,
-    nextSearch = search,
-  ) {
+  const visibleParams = useMemo(() => {
     const params = {};
 
-    if (nextStatus !== "ALL") {
-      params.status = nextStatus === "ARCHIVED" ? "ARCHIVE" : nextStatus;
+    if (statusFilter !== "ALL") {
+      params.status = statusFilter === "ARCHIVED" ? "ARCHIVE" : statusFilter;
     }
 
-    if (nextSearch.trim()) {
-      params.q = nextSearch.trim();
+    if (committedSearch.trim()) {
+      params.q = committedSearch.trim();
     }
 
-    const res = await fetchDealerOrders(params);
-    const items = res?.data?.items || [];
+    return params;
+  }, [committedSearch, statusFilter]);
 
-    return items.map((item) => ({
+  const countsQuery = useGetDealerOrdersQuery({});
+  const ordersQuery = useGetDealerOrdersQuery(visibleParams);
+
+  const allOrders = useMemo(() => {
+    return (countsQuery.data?.items || []).map((item) => ({
       ...item,
       status: normalizeStatus(item?.status),
     }));
-  }
+  }, [countsQuery.data]);
 
-  async function loadPageData(nextStatus = statusFilter, nextSearch = search) {
-    try {
-      setLoading(true);
-      setError("");
+  const visibleOrders = useMemo(() => {
+    return (ordersQuery.data?.items || []).map((item) => ({
+      ...item,
+      status: normalizeStatus(item?.status),
+    }));
+  }, [ordersQuery.data]);
 
-      const [allItems, visibleItems] = await Promise.all([
-        loadCountsData(),
-        loadVisibleData(nextStatus, nextSearch),
-      ]);
+  const loading =
+    (countsQuery.isLoading && allOrders.length === 0) ||
+    (ordersQuery.isLoading && visibleOrders.length === 0);
+  const isRefreshing =
+    !loading && (countsQuery.isFetching || ordersQuery.isFetching);
+  const queryError = ordersQuery.error || countsQuery.error;
+  const error = queryError
+    ? getQueryErrorMessage(queryError, "Failed to load your order history.")
+    : "";
 
-      setAllOrders(allItems);
-      setVisibleOrders(visibleItems);
+  const activeOrderView = useMemo(() => {
+    if (!activeOrder?._id) return null;
+    return (
+      visibleOrders.find((item) => item._id === activeOrder._id) ||
+      allOrders.find((item) => item._id === activeOrder._id) ||
+      activeOrder
+    );
+  }, [activeOrder, allOrders, visibleOrders]);
 
-      setActiveOrder((current) => {
-        if (!current?._id) return null;
-        return (
-          visibleItems.find((item) => item._id === current._id) ||
-          allItems.find((item) => item._id === current._id) ||
-          current
-        );
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to load your order history.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function applySearch() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const visibleItems = await loadVisibleData(statusFilter, search);
-      setVisibleOrders(visibleItems);
-
-      setActiveOrder((current) => {
-        if (!current?._id) return null;
-        return visibleItems.find((item) => item._id === current._id) || null;
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to search your orders.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submitSearch() {
-    await applySearch();
+  function submitSearch() {
+    setCommittedSearch(search);
     window.requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -982,19 +928,14 @@ export default function DealerOrdersPage() {
 
   function clearSearch() {
     setSearch("");
-    loadPageData(statusFilter, "");
+    setCommittedSearch("");
   }
 
-  useEffect(() => {
-    loadPageData(statusFilter, search);
-    // Search is applied on Enter; status changes reuse the current committed text.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
-
-  useEffect(() => {
-    loadPageData("ALL", "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function resetFilters() {
+    setSearch("");
+    setCommittedSearch("");
+    setStatusFilter("ALL");
+  }
 
   const countsByFilter = useMemo(() => {
     return {
@@ -1124,6 +1065,19 @@ export default function DealerOrdersPage() {
                   {error}
                 </div>
               ) : null}
+
+              {isRefreshing ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    fontSize: 12,
+                    fontWeight: 900,
+                    color: "rgba(15,23,42,.46)",
+                  }}
+                >
+                  Updating orders...
+                </div>
+              ) : null}
             </GlassCard>
 
             <div ref={resultsRef} style={{ scrollMarginTop: 24 }}>
@@ -1131,11 +1085,7 @@ export default function DealerOrdersPage() {
                 <LoadingState />
               ) : visibleOrders.length === 0 ? (
                 <EmptyState
-                  onReset={() => {
-                    setSearch("");
-                    setStatusFilter("ALL");
-                    loadPageData("ALL", "");
-                  }}
+                  onReset={resetFilters}
                 />
               ) : (
                 <div style={{ display: "grid", gap: 14 }}>
@@ -1154,8 +1104,8 @@ export default function DealerOrdersPage() {
       </div>
 
       <OrderDetailModal
-        open={Boolean(activeOrder)}
-        order={activeOrder}
+        open={Boolean(activeOrderView)}
+        order={activeOrderView}
         onClose={() => setActiveOrder(null)}
       />
 

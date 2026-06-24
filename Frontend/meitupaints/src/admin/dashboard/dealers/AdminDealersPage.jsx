@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
+import {
+  useAssignDispatcherToDealerMutation,
+  useDeleteAdminDealerMutation,
+  useGetAdminDealersQuery,
+  useGetVerifiedDispatchersQuery,
+  useUndoDeleteAdminDealerMutation,
+  useUnassignDispatcherFromDealerMutation,
+  useUpdateAdminDealerRoutingMutation,
+  useUpdateAdminDealerStatusMutation,
+} from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import AdminEntityCard, {
   AdminEntityCardStyles,
 } from "../components/AdminEntityCard.jsx";
@@ -603,11 +613,8 @@ function DealersCard({
 
 export default function AdminDealersPage() {
   const navigate = useNavigate();
-  const [dealers, setDealers] = useState([]);
-  const [dispatchers, setDispatchers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [routingFilter, setRoutingFilter] = useState("ALL");
@@ -618,33 +625,39 @@ export default function AdminDealersPage() {
   const [deleteDealer, setDeleteDealer] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
-  const loadPageData = useCallback(async (nextStatus = statusFilter) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const dealerParams = {};
-      if (nextStatus !== "ALL") dealerParams.status = nextStatus;
-
-      const [dealersRes, dispatchersRes] = await Promise.all([
-        api.get("/api/admin/dealers", { params: dealerParams }),
-        api.get("/api/admin/dispatchers/verified"),
-      ]);
-
-      setDealers(dealersRes?.data?.items || []);
-      setDispatchers(dispatchersRes?.data?.items || []);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error || err?.message || "Failed to load dealers.",
-      );
-    } finally {
-      setLoading(false);
-    }
+  const dealerParams = useMemo(() => {
+    const params = {};
+    if (statusFilter !== "ALL") params.status = statusFilter;
+    return params;
   }, [statusFilter]);
 
-  useEffect(() => {
-    loadPageData(statusFilter);
-  }, [statusFilter, loadPageData]);
+  const dealersQuery = useGetAdminDealersQuery(dealerParams);
+  const dispatchersQuery = useGetVerifiedDispatchersQuery();
+  const [updateDealerStatus] = useUpdateAdminDealerStatusMutation();
+  const [deleteAdminDealer] = useDeleteAdminDealerMutation();
+  const [undoDeleteAdminDealer] = useUndoDeleteAdminDealerMutation();
+  const [updateDealerRouting] = useUpdateAdminDealerRoutingMutation();
+  const [assignDispatcherToDealer] = useAssignDispatcherToDealerMutation();
+  const [unassignDispatcherFromDealer] = useUnassignDispatcherFromDealerMutation();
+
+  const dealers = useMemo(() => dealersQuery.data?.items || [], [dealersQuery.data]);
+  const dispatchers = useMemo(
+    () => dispatchersQuery.data?.items || [],
+    [dispatchersQuery.data],
+  );
+
+  const loading = dealersQuery.isLoading && dealers.length === 0;
+  const isRefreshing =
+    !loading && (dealersQuery.isFetching || dispatchersQuery.isFetching);
+  const queryError = dealersQuery.error || dispatchersQuery.error;
+  const error =
+    actionError ||
+    (queryError ? getQueryErrorMessage(queryError, "Failed to load dealers.") : "");
+
+  function refetchPageData() {
+    dealersQuery.refetch();
+    dispatchersQuery.refetch();
+  }
 
   const routingFilterOptions = useMemo(() => {
     const dispatcherOptions = dispatchers.map((dispatcher) => ({
@@ -751,12 +764,11 @@ export default function AdminDealersPage() {
   async function runAction(actionKey, request) {
     try {
       setBusyAction(actionKey);
-      setError("");
+      setActionError("");
       await request();
-      await loadPageData();
       return true;
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || "Action failed.");
+      setActionError(getQueryErrorMessage(err, "Action failed."));
       return false;
     } finally {
       setBusyAction("");
@@ -767,25 +779,24 @@ export default function AdminDealersPage() {
     const nextStatus =
       dealer.status === "VERIFIED" ? "SUSPENDED" : "VERIFIED";
     return runAction(`status-${dealer._id}`, () =>
-      api.patch(`/api/admin/dealers/${dealer._id}/status`, {
-        status: nextStatus,
-      }),
+      updateDealerStatus({ dealerId: dealer._id, status: nextStatus }).unwrap(),
     );
   };
 
   const handleDeleteDealer = (dealer) =>
     runAction(`delete-${dealer._id}`, () =>
-      api.delete(`/api/admin/dealers/${dealer._id}`, {
-        data: {
+      deleteAdminDealer({
+        dealerId: dealer._id,
+        payload: {
           confirmation: deleteConfirmation,
           reason: "Admin scheduled dealer deletion",
         },
-      }),
+      }).unwrap(),
     );
 
   const handleUndoDeleteDealer = (dealer) =>
     runAction(`undo-delete-${dealer._id}`, () =>
-      api.post(`/api/admin/dealers/${dealer._id}/undo-delete`),
+      undoDeleteAdminDealer(dealer._id).unwrap(),
     );
 
   const handleSaveRouting = async ({ fulfillmentMode, dispatcherId }) => {
@@ -795,23 +806,20 @@ export default function AdminDealersPage() {
 
     const success = await runAction(actionKey, async () => {
       try {
-        await api.patch(`/api/admin/dealers/${routingDealer._id}/routing`, {
-          fulfillmentMode,
-          dispatcherId,
-        });
+        await updateDealerRouting({
+          dealerId: routingDealer._id,
+          payload: { fulfillmentMode, dispatcherId },
+        }).unwrap();
       } catch {
         if (fulfillmentMode === "DISPATCHER") {
-          await api.post(
-            `/api/admin/dealers/${routingDealer._id}/assign-dispatcher`,
-            {
-              dispatcherId,
-            },
-          );
-        } else {
-          await api.post(
-            `/api/admin/dealers/${routingDealer._id}/unassign-dispatcher`,
-          );
+          await assignDispatcherToDealer({
+            dealerId: routingDealer._id,
+            dispatcherId,
+          }).unwrap();
+          return;
         }
+
+        await unassignDispatcherFromDealer(routingDealer._id).unwrap();
       }
     });
 
@@ -834,7 +842,7 @@ export default function AdminDealersPage() {
           title="Dealer Register"
           subtitle="Search, review, and manage dealer accounts with routing and operational visibility."
           action={
-            <ActionButton subtle onClick={() => loadPageData()}>
+            <ActionButton subtle onClick={refetchPageData}>
               Refresh
             </ActionButton>
           }
@@ -951,6 +959,19 @@ export default function AdminDealersPage() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating dealers...
           </div>
         ) : null}
       </GlassCard>

@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
+import {
+  useAmendAdminOrderMutation,
+  useDeleteAdminOrderMutation,
+  useGetAdminOrderQuery,
+  useGetAdminOrdersQuery,
+  useGetVerifiedDispatchersQuery,
+  useRejectAdminOrderMutation,
+  useVerifyAdminOrderMutation,
+} from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 
 const STATUS_FILTERS = [
@@ -1407,12 +1416,10 @@ function AmendModal({ open, order, saving, onClose, onSave }) {
 export default function AdminOrdersPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
-  const [dispatchers, setDispatchers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [filterMode, setFilterMode] = useState("PENDING");
   const [routeMode, setRouteMode] = useState("FACTORY");
   const [activeOrder, setActiveOrder] = useState(null);
@@ -1420,11 +1427,6 @@ export default function AdminOrdersPage() {
   const [deleteOrder, setDeleteOrder] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const resultsRef = useRef(null);
-  const searchRef = useRef(search);
-
-  useEffect(() => {
-    searchRef.current = search;
-  }, [search]);
 
   const queryOrderId = useMemo(() => {
     return new URLSearchParams(location.search || "").get("orderId") || "";
@@ -1454,24 +1456,71 @@ export default function AdminOrdersPage() {
     clearOrderQuery();
   }, [busyAction, clearOrderQuery]);
 
-  useEffect(() => {
-    let alive = true;
+  const orderParams = useMemo(() => {
+    const params = {};
 
-    api
-      .get("/api/admin/dispatchers/verified")
-      .then((dispatcherRes) => {
-        if (!alive) return;
-        setDispatchers(dispatcherRes?.data?.items || []);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setDispatchers([]);
-      });
+    if (filterMode === "ARCHIVE") {
+      params.archive = true;
+    } else {
+      params.status = "SUBMITTED";
+    }
 
-    return () => {
-      alive = false;
-    };
-  }, []);
+    if (routeMode === "DISPATCHER_ALL") {
+      params.fulfillmentMode = "DISPATCHER";
+    } else if (String(routeMode).startsWith("DISPATCHER:")) {
+      params.fulfillmentMode = "DISPATCHER";
+      params.dispatcherId = String(routeMode).split(":")[1] || "";
+    } else if (routeMode !== "ALL") {
+      params.fulfillmentMode = routeMode;
+    }
+
+    if (committedSearch.trim()) {
+      params.q = committedSearch.trim();
+    }
+
+    return params;
+  }, [committedSearch, filterMode, routeMode]);
+
+  const ordersQuery = useGetAdminOrdersQuery(orderParams);
+  const dispatchersQuery = useGetVerifiedDispatchersQuery();
+  const orderDetailQuery = useGetAdminOrderQuery(queryOrderId, {
+    skip: !queryOrderId,
+  });
+  const [verifyAdminOrder] = useVerifyAdminOrderMutation();
+  const [rejectAdminOrder] = useRejectAdminOrderMutation();
+  const [amendAdminOrder] = useAmendAdminOrderMutation();
+  const [deleteAdminOrder] = useDeleteAdminOrderMutation();
+
+  const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
+  const dispatchers = useMemo(
+    () => dispatchersQuery.data?.items || [],
+    [dispatchersQuery.data],
+  );
+
+  const loading = ordersQuery.isLoading && orders.length === 0;
+  const isRefreshing =
+    !loading &&
+    (ordersQuery.isFetching ||
+      dispatchersQuery.isFetching ||
+      orderDetailQuery.isFetching);
+  const queryError =
+    ordersQuery.error || dispatchersQuery.error || orderDetailQuery.error;
+  const error =
+    actionError ||
+    (queryError ? getQueryErrorMessage(queryError, "Failed to load orders.") : "");
+
+  const activeOrderView = useMemo(() => {
+    if (queryOrderId) {
+      return (
+        orderDetailQuery.data?.item ||
+        orders.find((item) => item._id === queryOrderId) ||
+        null
+      );
+    }
+
+    if (!activeOrder?._id) return null;
+    return orders.find((item) => item._id === activeOrder._id) || activeOrder;
+  }, [activeOrder, orderDetailQuery.data, orders, queryOrderId]);
 
   const routingFilters = useMemo(
     () => [
@@ -1486,67 +1535,6 @@ export default function AdminOrdersPage() {
     [dispatchers],
   );
 
-  const loadPageData = useCallback(async (
-    nextFilter = filterMode,
-    nextRoute = routeMode,
-    nextSearch = searchRef.current,
-  ) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const params = {};
-
-      if (nextFilter === "ARCHIVE") {
-        params.archive = true;
-      } else {
-        params.status = "SUBMITTED";
-      }
-
-      if (nextRoute === "DISPATCHER_ALL") {
-        params.fulfillmentMode = "DISPATCHER";
-      } else if (String(nextRoute).startsWith("DISPATCHER:")) {
-        params.fulfillmentMode = "DISPATCHER";
-        params.dispatcherId = String(nextRoute).split(":")[1] || "";
-      } else if (nextRoute !== "ALL") {
-        params.fulfillmentMode = nextRoute;
-      }
-
-      if (nextSearch.trim()) {
-        params.q = nextSearch.trim();
-      }
-
-      const res = await api.get("/api/orders", { params });
-      const items = res?.data?.items || [];
-      setOrders(items);
-
-      if (queryOrderId) {
-        try {
-          const orderRes = await api.get(`/api/orders/${queryOrderId}`);
-          setActiveOrder(orderRes?.data?.item || null);
-        } catch {
-          setActiveOrder(items.find((item) => item._id === queryOrderId) || null);
-        }
-        return;
-      }
-
-      setActiveOrder((current) => {
-        if (!current?._id) return current;
-        return items.find((item) => item._id === current._id) || null;
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error || err?.message || "Failed to load orders.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [filterMode, queryOrderId, routeMode]);
-
-  useEffect(() => {
-    loadPageData(filterMode, routeMode);
-  }, [filterMode, routeMode, loadPageData]);
-
   const countsByFilter = useMemo(
     () => ({
       PENDING: filterMode === "PENDING" ? orders.length : undefined,
@@ -1558,20 +1546,19 @@ export default function AdminOrdersPage() {
   async function runAction(actionKey, request) {
     try {
       setBusyAction(actionKey);
-      setError("");
+      setActionError("");
       await request();
-      await loadPageData();
       return true;
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || "Action failed.");
+      setActionError(getQueryErrorMessage(err, "Action failed."));
       return false;
     } finally {
       setBusyAction("");
     }
   }
 
-  const applySearch = async (nextSearch = search) => {
-    await loadPageData(filterMode, routeMode, nextSearch);
+  const applySearch = (nextSearch = search) => {
+    setCommittedSearch(nextSearch);
     window.requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -1582,15 +1569,23 @@ export default function AdminOrdersPage() {
 
   const clearSearch = () => {
     setSearch("");
-    loadPageData(filterMode, routeMode, "");
+    setCommittedSearch("");
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setCommittedSearch("");
+    setFilterMode("PENDING");
+    setRouteMode("FACTORY");
   };
 
   const handleVerify = async (order) => {
     const reviewNote = window.prompt("Optional verification note:", "") ?? "";
     const success = await runAction(`verify-${order._id}`, () =>
-      api.post(`/api/orders/${order._id}/verify`, {
-        reviewNote: reviewNote.trim(),
-      }),
+      verifyAdminOrder({
+        orderId: order._id,
+        payload: { reviewNote: reviewNote.trim() },
+      }).unwrap(),
     );
     if (success) {
       setActiveOrder(null);
@@ -1603,9 +1598,10 @@ export default function AdminOrdersPage() {
     if (reviewNote === null) return;
 
     const success = await runAction(`reject-${order._id}`, () =>
-      api.post(`/api/orders/${order._id}/reject`, {
-        reviewNote: reviewNote.trim(),
-      }),
+      rejectAdminOrder({
+        orderId: order._id,
+        payload: { reviewNote: reviewNote.trim() },
+      }).unwrap(),
     );
     if (success) {
       setActiveOrder(null);
@@ -1623,21 +1619,24 @@ export default function AdminOrdersPage() {
         0,
       );
 
-      await api.patch(`/api/orders/${amendOrder._id}/amend`, {
-        items,
-        totals: {
-          subtotal,
-          discount: 0,
-          taxableAmount: subtotal,
-          tax: 0,
-          total: subtotal,
-          currency: amendOrder?.totals?.currency || "NPR",
+      await amendAdminOrder({
+        orderId: amendOrder._id,
+        payload: {
+          items,
+          totals: {
+            subtotal,
+            discount: 0,
+            taxableAmount: subtotal,
+            tax: 0,
+            total: subtotal,
+            currency: amendOrder?.totals?.currency || "NPR",
+          },
+          dealerNote: payload.dealerNote,
+          internalNote: payload.internalNote,
+          reason: payload.reason,
+          note: payload.note,
         },
-        dealerNote: payload.dealerNote,
-        internalNote: payload.internalNote,
-        reason: payload.reason,
-        note: payload.note,
-      });
+      }).unwrap();
     });
 
     if (success) {
@@ -1651,12 +1650,13 @@ export default function AdminOrdersPage() {
     if (!order?._id) return;
 
     const success = await runAction(`delete-${order._id}`, () =>
-      api.delete(`/api/admin/orders/${order._id}`, {
-        data: {
+      deleteAdminOrder({
+        orderId: order._id,
+        payload: {
           confirmation: deleteConfirmation,
           reason: "Admin moved order to trash",
         },
-      }),
+      }).unwrap(),
     );
 
     if (success) {
@@ -1742,6 +1742,19 @@ export default function AdminOrdersPage() {
             {error}
           </div>
         ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating orders...
+          </div>
+        ) : null}
       </GlassCard>
 
       <div ref={resultsRef} style={{ scrollMarginTop: 24 }}>
@@ -1750,12 +1763,7 @@ export default function AdminOrdersPage() {
         ) : orders.length === 0 ? (
           <EmptyState
             archiveMode={filterMode === "ARCHIVE"}
-            onReset={() => {
-              setSearch("");
-              setFilterMode("PENDING");
-              setRouteMode("FACTORY");
-              loadPageData("PENDING", "FACTORY", "");
-            }}
+            onReset={resetFilters}
           />
         ) : (
           <div style={{ display: "grid", gap: 14 }}>
@@ -1771,8 +1779,8 @@ export default function AdminOrdersPage() {
       </div>
 
       <OrderViewModal
-        open={Boolean(activeOrder)}
-        order={activeOrder}
+        open={Boolean(activeOrderView)}
+        order={activeOrderView}
         busyAction={busyAction}
         onClose={closeOrderPreview}
         onAmend={(order) => {

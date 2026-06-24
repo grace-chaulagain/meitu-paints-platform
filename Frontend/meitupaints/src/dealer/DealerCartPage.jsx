@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client.js";
 import NavBar from "../components/NavBar.jsx";
 import {
+  useCreateDealerOrderMutation,
   useGetProductFamiliesQuery,
   useGetProductsQuery,
 } from "../redux/api/meituApi.js";
@@ -463,6 +463,7 @@ export default function DealerCartPage() {
   const navigate = useNavigate();
   const productsQuery = useGetProductsQuery();
   const familiesQuery = useGetProductFamiliesQuery();
+  const [createDealerOrder] = useCreateDealerOrderMutation();
 
   const products = useMemo(
     () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
@@ -611,9 +612,9 @@ export default function DealerCartPage() {
         internalNote: "",
       };
 
-      const res = await api.post("/api/orders", payload);
+      const res = await createDealerOrder(payload).unwrap();
 
-      setSuccess(res?.data?.message || "Order submitted successfully.");
+      setSuccess(res?.message || "Order submitted successfully.");
       setQuantities({});
       clearDraft();
       setDealerNote("");
@@ -628,9 +629,7 @@ export default function DealerCartPage() {
         navigate("/dealer/catalog");
       }, 1200);
     } catch (e) {
-      setError(
-        e?.response?.data?.error || e?.message || "Failed to place order.",
-      );
+      setError(getQueryErrorMessage(e, "Failed to place order."));
     } finally {
       setSubmitting(false);
     }

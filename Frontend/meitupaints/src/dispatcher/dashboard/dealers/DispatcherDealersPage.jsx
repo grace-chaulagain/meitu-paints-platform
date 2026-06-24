@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import { useGetDispatcherDealersQuery } from "../../../redux/api/meituApi.js";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 
 const STATUS_FILTERS = [
   { key: "ALL", label: "All" },
@@ -516,37 +517,26 @@ function DealersCard({ dealer, onViewProfile, onViewOrders }) {
 
 export default function DispatcherDealersPage() {
   const navigate = useNavigate();
-  const [dealers, setDealers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  const loadPageData = useCallback(async (nextStatus = statusFilter) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const params = {};
-      if (nextStatus !== "ALL") params.status = nextStatus;
-
-      const res = await api.get("/api/dispatchers/me/dealers", { params });
-      setDealers(res?.data?.items || []);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load assigned dealers.",
-      );
-    } finally {
-      setLoading(false);
-    }
+  const dealerParams = useMemo(() => {
+    const params = {};
+    if (statusFilter !== "ALL") params.status = statusFilter;
+    return params;
   }, [statusFilter]);
 
-  useEffect(() => {
-    loadPageData(statusFilter);
-  }, [loadPageData, statusFilter]);
+  const dealersQuery = useGetDispatcherDealersQuery(dealerParams);
+  const dealers = useMemo(() => dealersQuery.data?.items || [], [dealersQuery.data]);
+  const loading = dealersQuery.isLoading && dealers.length === 0;
+  const isRefreshing = !loading && dealersQuery.isFetching;
+  const error = dealersQuery.error
+    ? getQueryErrorMessage(dealersQuery.error, "Failed to load assigned dealers.")
+    : "";
+
+  function refetchDealers() {
+    dealersQuery.refetch();
+  }
 
   const filteredDealers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -593,7 +583,7 @@ export default function DispatcherDealersPage() {
           title="Assigned Dealers"
           subtitle="Review only the dealer accounts routed to your dispatcher workspace."
           action={
-            <ActionButton subtle onClick={() => loadPageData(statusFilter)}>
+            <ActionButton subtle onClick={refetchDealers}>
               Refresh
             </ActionButton>
           }
@@ -637,6 +627,19 @@ export default function DispatcherDealersPage() {
             }}
           >
             {error}
+          </div>
+        ) : null}
+
+        {isRefreshing ? (
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 12,
+              fontWeight: 900,
+              color: "rgba(15,23,42,.46)",
+            }}
+          >
+            Updating assigned dealers...
           </div>
         ) : null}
       </GlassCard>
