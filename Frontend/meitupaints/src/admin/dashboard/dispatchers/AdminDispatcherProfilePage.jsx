@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useGetAdminDispatcherQuery,
+  useResendDispatcherSetupEmailMutation,
+} from "../../../redux/api/meituApi.js";
 
 function GlassCard({ children, style = {} }) {
   return (
@@ -64,35 +67,20 @@ export default function AdminDispatcherProfilePage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
-  const [dispatcher, setDispatcher] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const {
+    data: dispatcher = null,
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useGetAdminDispatcherQuery(dispatcherId, { skip: !dispatcherId });
+  const [resendSetupEmail] = useResendDispatcherSetupEmailMutation();
 
-  const loadDispatcher = useCallback(async () => {
-    if (!dispatcherId) return;
-    try {
-      setLoading(true);
-      setError("");
-      setSuccess("");
-      const res = await api.get(`/api/admin/dispatchers/${dispatcherId}`);
-      setDispatcher(res?.data?.item || null);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load dispatcher profile.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dispatcherId]);
-
-  useEffect(() => {
-    loadDispatcher();
-  }, [loadDispatcher]);
+  const loading = isLoading && !dispatcher;
+  const pageError = error || queryError?.message || "";
 
   if (loading) {
     return (
@@ -137,15 +125,13 @@ export default function AdminDispatcherProfilePage() {
       setBusy("setup");
       setError("");
       setSuccess("");
-      await api.post(
-        `/api/admin/dispatchers/${accessState.userId}/resend-setup-email`,
-      );
-      await loadDispatcher();
+      await resendSetupEmail(accessState.userId).unwrap();
+      await refetch();
       setSuccess("A fresh password setup link has been sent if eligible.");
     } catch (err) {
       setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
+        err?.data?.error ||
+          err?.data?.message ||
           err?.message ||
           "Failed to resend setup link.",
       );
@@ -170,8 +156,8 @@ export default function AdminDispatcherProfilePage() {
             <button type="button" onClick={() => navigate(-1)}>
               Back
             </button>
-            <button type="button" onClick={loadDispatcher}>
-              Refresh
+            <button type="button" onClick={refetch}>
+              {isFetching && dispatcher ? "Updating..." : "Refresh"}
             </button>
             {accessState.canResendSetup ? (
               <button
@@ -184,7 +170,7 @@ export default function AdminDispatcherProfilePage() {
             ) : null}
           </div>
         </div>
-        {error ? <div className="dispatcher-profile-error">{error}</div> : null}
+        {pageError ? <div className="dispatcher-profile-error">{pageError}</div> : null}
         {success ? (
           <div className="dispatcher-profile-success">{success}</div>
         ) : null}

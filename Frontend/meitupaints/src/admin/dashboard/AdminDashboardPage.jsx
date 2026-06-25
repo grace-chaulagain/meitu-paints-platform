@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../api/client.js";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
+import {
+  useGetAdminDealerApplicationsQuery,
+  useGetAdminDispatcherApplicationsQuery,
+  useGetAdminScopedOrdersQuery,
+} from "../../redux/api/meituApi.js";
 import DraftOrderUtilityPage from "../../components/dashboard/DraftOrderUtilityPage.jsx";
 import {
   NOTIFICATION_CATEGORIES,
@@ -152,59 +156,50 @@ function SectionHeader({ title, subtitle }) {
 }
 
 function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) {
-  const [pulse, setPulse] = useState({
-    pendingDealerApplications: 0,
-    pendingDispatcherApplications: 0,
-    pendingFactoryOrders: 0,
-    recentFactoryOrders: [],
+  const dealerApplicationsQuery = useGetAdminDealerApplicationsQuery({
+    status: "PENDING",
+    limit: 5,
   });
-  const [loading, setLoading] = useState(true);
+  const dispatcherApplicationsQuery = useGetAdminDispatcherApplicationsQuery({
+    status: "PENDING",
+    limit: 5,
+  });
+  const factoryOrdersQuery = useGetAdminScopedOrdersQuery({
+    status: "SUBMITTED",
+    fulfillmentMode: "FACTORY",
+    limit: 5,
+  });
 
-  const loadPulse = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [dealerApplicationsRes, dispatcherApplicationsRes, factoryOrdersRes] =
-        await Promise.all([
-          api.get("/api/admin/dealer-applications", {
-            params: { status: "PENDING", limit: 5 },
-          }),
-          api.get("/api/admin/dispatcher-applications", {
-            params: { status: "PENDING", limit: 5 },
-          }),
-          api.get("/api/admin/orders", {
-            params: {
-              status: "SUBMITTED",
-              fulfillmentMode: "FACTORY",
-              limit: 5,
-            },
-          }),
-        ]);
+  const pulse = useMemo(() => {
+    const dealerApplications = dealerApplicationsQuery.data || {};
+    const dispatcherApplications = dispatcherApplicationsQuery.data || {};
+    const factoryOrders = factoryOrdersQuery.data || {};
 
-      setPulse({
-        pendingDealerApplications:
-          dealerApplicationsRes?.data?.total ??
-          dealerApplicationsRes?.data?.items?.length ??
-          0,
-        pendingDispatcherApplications:
-          dispatcherApplicationsRes?.data?.total ??
-          dispatcherApplicationsRes?.data?.items?.length ??
-          0,
-        pendingFactoryOrders:
-          factoryOrdersRes?.data?.total ??
-          factoryOrdersRes?.data?.items?.length ??
-          0,
-        recentFactoryOrders: factoryOrdersRes?.data?.items || [],
-      });
-    } catch {
-      setPulse((current) => current);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return {
+      pendingDealerApplications:
+        dealerApplications.total ?? dealerApplications.items?.length ?? 0,
+      pendingDispatcherApplications:
+        dispatcherApplications.total ?? dispatcherApplications.items?.length ?? 0,
+      pendingFactoryOrders: factoryOrders.total ?? factoryOrders.items?.length ?? 0,
+      recentFactoryOrders: factoryOrders.items || [],
+    };
+  }, [dealerApplicationsQuery.data, dispatcherApplicationsQuery.data, factoryOrdersQuery.data]);
 
-  useEffect(() => {
-    loadPulse();
-  }, [loadPulse]);
+  const hasCachedPulse = Boolean(
+    dealerApplicationsQuery.data ||
+      dispatcherApplicationsQuery.data ||
+      factoryOrdersQuery.data,
+  );
+  const loading =
+    !hasCachedPulse &&
+    (dealerApplicationsQuery.isLoading ||
+      dispatcherApplicationsQuery.isLoading ||
+      factoryOrdersQuery.isLoading);
+  const refreshing =
+    hasCachedPulse &&
+    (dealerApplicationsQuery.isFetching ||
+      dispatcherApplicationsQuery.isFetching ||
+      factoryOrdersQuery.isFetching);
 
   const applicationUnread =
     Number(
@@ -222,7 +217,7 @@ function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) 
       <GlassCard style={{ padding: 18 }}>
         <SectionHeader
           title="Operations Overview"
-          subtitle="The focus layer for what needs attention now: applications, factory-routed orders, and unread operational notifications."
+          subtitle={refreshing ? "Updating the cached operations pulse in the background." : "The focus layer for what needs attention now: applications, factory-routed orders, and unread operational notifications."}
         />
 
         <div

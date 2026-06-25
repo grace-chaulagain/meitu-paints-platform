@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { api, getApiErrorMessage } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import NavBar from "../components/NavBar.jsx";
+import { useGetNotificationsQuery } from "../redux/api/meituApi.js";
 import { useNotifications } from "./notificationContext.js";
 
 const CATEGORY_LABELS = {
@@ -99,52 +99,60 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
   const { user } = useAuth();
   const notifications = useNotifications();
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [localReadIds, setLocalReadIds] = useState(() => new Set());
   const refreshSummary = notifications?.refreshSummary;
+  const notificationParams = useMemo(() => ({ days: 7, limit: 120 }), []);
+  const role = String(user?.role || "").toUpperCase();
+  const notificationsEnabled = role === "ADMIN" || role === "DISPATCHER";
 
-  const loadNotifications = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await api.get("/api/notifications", {
-        params: { days: 7, limit: 120 },
-      });
-      setItems(res?.data?.items || []);
-      await refreshSummary?.();
-    } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load notifications."));
-    } finally {
-      setLoading(false);
-    }
-  }, [refreshSummary]);
+  const {
+    data: items = [],
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useGetNotificationsQuery(notificationParams, {
+    skip: !notificationsEnabled,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
 
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+  const visibleItems = useMemo(() => {
+    if (!localReadIds.size) return items;
+    return items.map((item) =>
+      localReadIds.has(item._id) ? { ...item, isRead: true } : item,
+    );
+  }, [items, localReadIds]);
+
+  async function loadNotifications() {
+    if (!notificationsEnabled) return;
+    await refetch();
+    await refreshSummary?.();
+  }
 
   const grouped = useMemo(() => {
     const out = new Map();
-    for (const item of items) {
+    for (const item of visibleItems) {
       const key = formatDateKey(item.createdAt);
       if (!out.has(key)) out.set(key, []);
       out.get(key).push(item);
     }
     return Array.from(out.entries());
-  }, [items]);
+  }, [visibleItems]);
 
   const unreadCount = Number(notifications?.totalUnread || 0);
-  const role = String(user?.role || "").toUpperCase();
+  const loading = isLoading && visibleItems.length === 0;
+  const refreshing = isFetching && visibleItems.length > 0;
+  const error = queryError?.message || "";
 
   async function openNotification(item) {
     if (!item?.isRead) {
       await notifications?.markNotificationRead?.(item._id);
-      setItems((prev) =>
-        prev.map((entry) =>
-          entry._id === item._id ? { ...entry, isRead: true } : entry,
-        ),
-      );
+      setLocalReadIds((prev) => {
+        const next = new Set(prev);
+        next.add(item._id);
+        return next;
+      });
     }
 
     if (item?.targetUrl) {
@@ -153,12 +161,16 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
   }
 
   async function markAllVisibleRead() {
-    const notificationIds = items
+    const notificationIds = visibleItems
       .filter((item) => !item.isRead)
       .map((item) => item._id);
     if (!notificationIds.length) return;
     await notifications?.markNotificationIdsRead?.(notificationIds);
-    setItems((prev) => prev.map((item) => ({ ...item, isRead: true })));
+    setLocalReadIds((prev) => {
+      const next = new Set(prev);
+      notificationIds.forEach((id) => next.add(id));
+      return next;
+    });
   }
 
   return (
@@ -186,13 +198,13 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
                   className="mn-button subtle"
                   onClick={loadNotifications}
                 >
-                  Refresh
+                  {refreshing ? "Updating..." : "Refresh"}
                 </button>
                 <button
                   type="button"
                   className="mn-button"
                   onClick={markAllVisibleRead}
-                  disabled={!items.some((item) => !item.isRead)}
+                  disabled={!visibleItems.some((item) => !item.isRead)}
                 >
                   Mark visible read
                 </button>
@@ -210,7 +222,7 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
                 </GlassCard>
               ))}
             </div>
-          ) : items.length === 0 ? (
+          ) : visibleItems.length === 0 ? (
             <EmptyState onRefresh={loadNotifications} />
           ) : (
             <div className="mn-list">

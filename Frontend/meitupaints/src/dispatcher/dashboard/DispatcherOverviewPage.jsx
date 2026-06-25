@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../../api/client.js";
+import { useMemo } from "react";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { useNotifications } from "../../notifications/notificationContext.js";
+import {
+  useGetDispatcherDealersQuery,
+  useGetDispatcherOrdersArchiveQuery,
+  useGetDispatcherOrdersQuery,
+} from "../../redux/api/meituApi.js";
+
+const RECENT_HANDLED_WINDOW_START_MS = Date.now() - 7 * 86400000;
 
 function GlassCard({ children, style = {} }) {
   return (
@@ -189,13 +195,12 @@ function WorkflowStep({ index, title, desc }) {
 export default function DispatcherOverviewPage() {
   const { user } = useAuth();
   const notifications = useNotifications();
-  const [pulse, setPulse] = useState({
-    pendingOrders: 0,
-    handledOrders: 0,
-    assignedDealers: 0,
-    recentHandledOrders: 0,
+  const pendingOrdersQuery = useGetDispatcherOrdersQuery({
+    status: "SUBMITTED",
+    limit: 1,
   });
-  const [loading, setLoading] = useState(true);
+  const archiveOrdersQuery = useGetDispatcherOrdersArchiveQuery({ limit: 5 });
+  const assignedDealersQuery = useGetDispatcherDealersQuery({ limit: 1 });
 
   const dispatcherName =
     user?.name ||
@@ -203,60 +208,44 @@ export default function DispatcherOverviewPage() {
     user?.fullName ||
     (user?.email ? String(user.email).split("@")[0] : "Dispatcher");
 
-  const loadPulse = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [pendingOrdersRes, archiveOrdersRes, assignedDealersRes] =
-        await Promise.all([
-          api.get("/api/dispatchers/me/orders", {
-            params: { status: "SUBMITTED", limit: 1 },
-          }),
-          api.get("/api/dispatchers/me/orders/archive", {
-            params: { limit: 5 },
-          }),
-          api.get("/api/dispatchers/me/dealers", {
-            params: { limit: 1 },
-          }),
-        ]);
+  const pulse = useMemo(() => {
+    const pendingOrders = pendingOrdersQuery.data || {};
+    const archiveOrders = archiveOrdersQuery.data || {};
+    const assignedDealers = assignedDealersQuery.data || {};
+    const archiveItems = archiveOrders.items || [];
+    const recentHandledOrders = archiveItems.filter((order) => {
+      const updated = new Date(order.updatedAt || order.createdAt).getTime();
+      return Number.isFinite(updated) && updated >= RECENT_HANDLED_WINDOW_START_MS;
+    }).length;
 
-      const archiveItems = archiveOrdersRes?.data?.items || [];
-      const recentHandledOrders = archiveItems.filter((order) => {
-        const updated = new Date(order.updatedAt || order.createdAt).getTime();
-        return Number.isFinite(updated) && Date.now() - updated <= 7 * 86400000;
-      }).length;
+    return {
+      pendingOrders: pendingOrders.total ?? pendingOrders.items?.length ?? 0,
+      handledOrders: archiveOrders.total ?? archiveOrders.items?.length ?? 0,
+      assignedDealers: assignedDealers.total ?? assignedDealers.items?.length ?? 0,
+      recentHandledOrders,
+    };
+  }, [pendingOrdersQuery.data, archiveOrdersQuery.data, assignedDealersQuery.data]);
 
-      setPulse({
-        pendingOrders:
-          pendingOrdersRes?.data?.total ??
-          pendingOrdersRes?.data?.items?.length ??
-          0,
-        handledOrders:
-          archiveOrdersRes?.data?.total ??
-          archiveOrdersRes?.data?.items?.length ??
-          0,
-        assignedDealers:
-          assignedDealersRes?.data?.total ??
-          assignedDealersRes?.data?.items?.length ??
-          0,
-        recentHandledOrders,
-      });
-    } catch {
-      setPulse((current) => current);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadPulse();
-  }, [loadPulse]);
+  const hasCachedPulse = Boolean(
+    pendingOrdersQuery.data || archiveOrdersQuery.data || assignedDealersQuery.data,
+  );
+  const loading =
+    !hasCachedPulse &&
+    (pendingOrdersQuery.isLoading ||
+      archiveOrdersQuery.isLoading ||
+      assignedDealersQuery.isLoading);
+  const refreshing =
+    hasCachedPulse &&
+    (pendingOrdersQuery.isFetching ||
+      archiveOrdersQuery.isFetching ||
+      assignedDealersQuery.isFetching);
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
       <GlassCard style={{ padding: 24 }}>
         <SectionHeader
           title={`Welcome, ${dispatcherName}`}
-          subtitle="A focused workspace for handling assigned dealer operations, submitted order review, and dispatcher-side verification flow."
+          subtitle={refreshing ? "Updating the cached dispatcher pulse in the background." : "A focused workspace for handling assigned dealer operations, submitted order review, and dispatcher-side verification flow."}
         />
 
         <div

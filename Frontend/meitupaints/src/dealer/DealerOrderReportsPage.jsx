@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client.js";
+import { useLazyGetDealerOrderStatementReportQuery } from "../redux/api/meituApi.js";
 import NavBar from "../components/NavBar.jsx";
 import { downloadUtilityOrderReportPdf } from "../utils/downloadUtilityOrderReportPdf.js";
 
@@ -333,8 +333,9 @@ function OrdersPreview({ report }) {
 export default function DealerOrderReportsPage() {
   const [form, setForm] = useState(buildInitialForm);
   const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fetchReport, reportQuery] = useLazyGetDealerOrderStatementReportQuery();
+  const loading = reportQuery.isFetching;
 
   function updateForm(key, value) {
     setError("");
@@ -365,21 +366,16 @@ export default function DealerOrderReportsPage() {
 
   async function previewReport() {
     try {
-      setLoading(true);
       setError("");
-      const res = await api.get("/api/dealer/reports/order-statements", {
-        params: buildParams(),
-      });
-      setReport(res?.data?.item || null);
+      const item = await fetchReport(buildParams(), true).unwrap();
+      setReport(item || null);
     } catch (err) {
       setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
+        err?.data?.error ||
+          err?.data?.message ||
           err?.message ||
           "Failed to preview the report.",
       );
-    } finally {
-      setLoading(false);
     }
   }
 

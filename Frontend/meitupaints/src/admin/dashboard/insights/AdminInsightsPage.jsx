@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
-import { api } from "../../../api/client.js";
+import { useGetAdminInsightsQuery } from "../../../redux/api/meituApi.js";
 
 const INSIGHT_SECTIONS = [
   {
@@ -1033,10 +1033,6 @@ export default function AdminInsightsPage() {
     status: "APPROVED",
     category: "ALL",
   });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   const queryParams = useMemo(() => {
     const params = {
       range: filters.preset,
@@ -1054,27 +1050,19 @@ export default function AdminInsightsPage() {
     return params;
   }, [filters]);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await api.get("/api/admin/insights", { params: queryParams });
-      setData(res?.data?.item || null);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load admin insights.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [queryParams]);
+  const {
+    data = null,
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useGetAdminInsightsQuery(queryParams);
+  const loading = isLoading && !data;
+  const error = queryError?.message || "";
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  function loadData() {
+    refetch();
+  }
 
   const currency = data?.meta?.currency || "NPR";
   const section = INSIGHT_SECTIONS.find((item) => item.key === activeSection) || INSIGHT_SECTIONS[0];
@@ -1113,7 +1101,7 @@ export default function AdminInsightsPage() {
         filters={filters}
         setFilters={setFilters}
         options={data?.options || {}}
-        loading={loading}
+        loading={isFetching}
         onRefresh={loadData}
       />
 

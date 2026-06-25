@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useGetDispatcherDealersQuery,
+  useGetDispatcherOrdersQuery,
+} from "../../../redux/api/meituApi.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
 
 const ORDER_FILTERS = [
@@ -841,76 +844,52 @@ export default function DispatcherDealerOrdersPage() {
     [location.pathname],
   );
 
-  const [dealer, setDealer] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [activeOrder, setActiveOrder] = useState(null);
 
-  const loadPageData = useCallback(async (nextStatus = "ALL", nextSearch = "") => {
-    try {
-      setLoading(true);
-      setError("");
+  const orderParams = useMemo(
+    () =>
+      statusFilter !== "ALL"
+        ? { status: statusFilter }
+        : { archive: true },
+    [statusFilter],
+  );
+  const dealersQuery = useGetDispatcherDealersQuery(undefined, { skip: !dealerId });
+  const ordersQuery = useGetDispatcherOrdersQuery(orderParams, { skip: !dealerId });
 
-      const [dealersRes, ordersRes] = await Promise.all([
-        api.get("/api/dispatchers/me/dealers"),
-        api.get("/api/dispatchers/me/orders", {
-          params: {
-            ...(nextStatus !== "ALL"
-              ? { status: nextStatus }
-              : { archive: true }),
-            ...(nextSearch.trim() ? { q: nextSearch.trim() } : {}),
-          },
-        }),
-      ]);
+  const dealer = useMemo(() => {
+    const dealerItems = dealersQuery.data?.items || [];
+    return dealerItems.find((item) => item._id === dealerId) || null;
+  }, [dealersQuery.data, dealerId]);
 
-      const dealerItems = dealersRes?.data?.items || [];
-      const allDispatcherOrders = ordersRes?.data?.items || [];
+  const orders = useMemo(() => {
+    const allDispatcherOrders = ordersQuery.data?.items || [];
+    return allDispatcherOrders.filter((order) => {
+      const linkedDealerId =
+        order?.dealerId?._id ||
+        order?.dealerId ||
+        order?.dealerSnapshot?._id ||
+        order?.dealerSnapshot?.id ||
+        "";
+      return String(linkedDealerId) === String(dealerId);
+    });
+  }, [ordersQuery.data, dealerId]);
 
-      const matchedDealer =
-        dealerItems.find((item) => item._id === dealerId) || null;
-      setDealer(matchedDealer);
+  const loading =
+    !dealer &&
+    orders.length === 0 &&
+    (dealersQuery.isLoading || ordersQuery.isLoading);
+  const refreshing =
+    Boolean(dealer || orders.length) &&
+    (dealersQuery.isFetching || ordersQuery.isFetching);
+  const error = dealersQuery.error?.message || ordersQuery.error?.message || "";
 
-      const scopedOrders = allDispatcherOrders.filter((order) => {
-        const linkedDealerId =
-          order?.dealerId?._id ||
-          order?.dealerId ||
-          order?.dealerSnapshot?._id ||
-          order?.dealerSnapshot?.id ||
-          "";
-        return String(linkedDealerId) === String(dealerId);
-      });
+  function loadPageData() {
+    dealersQuery.refetch();
+    ordersQuery.refetch();
+  }
 
-      setOrders(scopedOrders);
-
-      setActiveOrder((current) => {
-        if (!current?._id) return null;
-        return scopedOrders.find((item) => item._id === current._id) || null;
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load dealer orders.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dealerId]);
-
-  useEffect(() => {
-    if (!dealerId) {
-      setDealer(null);
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    loadPageData(statusFilter, search);
-  }, [dealerId, statusFilter, search, loadPageData]);
 
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -995,7 +974,7 @@ export default function DispatcherDealerOrdersPage() {
       <GlassCard style={{ padding: 18 }}>
         <SectionHeader
           title={`Order History · ${dealer.companyName || "Assigned Dealer"}`}
-          subtitle="Search and inspect every order from this assigned dealer within your dispatcher scope."
+          subtitle={refreshing ? "Updating cached dealer orders in the background." : "Search and inspect every order from this assigned dealer within your dispatcher scope."}
           action={
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <ActionButton
@@ -1038,7 +1017,7 @@ export default function DispatcherDealerOrdersPage() {
           action={
             <ActionButton
               subtle
-              onClick={() => loadPageData(statusFilter, search)}
+              onClick={loadPageData}
             >
               Refresh
             </ActionButton>
@@ -1076,7 +1055,7 @@ export default function DispatcherDealerOrdersPage() {
         <div style={{ marginTop: 14 }}>
           <ActionButton
             subtle
-            onClick={() => loadPageData(statusFilter, search)}
+            onClick={loadPageData}
           >
             Apply Search
           </ActionButton>

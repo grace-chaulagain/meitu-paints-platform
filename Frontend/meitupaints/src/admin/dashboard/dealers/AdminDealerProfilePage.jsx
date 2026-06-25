@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useAssignDispatcherToDealerMutation,
+  useGetAdminDealerAnalyticsQuery,
+  useGetAdminDealerQuery,
+  useGetVerifiedDispatchersQuery,
+  useResendDealerSetupEmailMutation,
+  useUnassignDispatcherFromDealerMutation,
+  useUpdateAdminDealerMutation,
+  useUpdateAdminDealerRoutingMutation,
+  useUpdateAdminDealerStatusMutation,
+} from "../../../redux/api/meituApi.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 
 const ROUTING_MODES = [
@@ -759,6 +769,29 @@ function RoutingModal({ open, dealer, dispatchers, saving, onClose, onSave }) {
   );
 }
 
+function getDealerFormValues(currentDealer = {}) {
+  return {
+    companyName: currentDealer.companyName || "",
+    contactName: currentDealer.contactName || "",
+    email: currentDealer.email || "",
+    phone: currentDealer.phone || "",
+    address: currentDealer.address || "",
+    panVat: currentDealer.panVat || "",
+    notes: currentDealer.notes || "",
+  };
+}
+
+function getMutationErrorMessage(err, fallback = "Action failed.") {
+  return (
+    err?.data?.error ||
+    err?.data?.message ||
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback
+  );
+}
+
 export default function AdminDealerProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -770,9 +803,6 @@ export default function AdminDealerProfilePage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
-  const [dealer, setDealer] = useState(null);
-  const [dispatchers, setDispatchers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [error, setError] = useState("");
@@ -780,63 +810,50 @@ export default function AdminDealerProfilePage() {
   const [routingDealer, setRoutingDealer] = useState(null);
   const [statusDecision, setStatusDecision] = useState(null);
   const [statusConfirmation, setStatusConfirmation] = useState("");
-  const [analytics, setAnalytics] = useState(null);
+  const [formDealerId, setFormDealerId] = useState("");
 
-  const [form, setForm] = useState({
-    companyName: "",
-    contactName: "",
-    email: "",
-    phone: "",
-    address: "",
-    panVat: "",
-    notes: "",
+  const [form, setForm] = useState(() => getDealerFormValues());
+
+  const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
+  const dispatchersQuery = useGetVerifiedDispatchersQuery();
+  const analyticsQuery = useGetAdminDealerAnalyticsQuery(dealerId, {
+    skip: !dealerId,
   });
+  const [updateDealer] = useUpdateAdminDealerMutation();
+  const [updateDealerStatus] = useUpdateAdminDealerStatusMutation();
+  const [updateDealerRouting] = useUpdateAdminDealerRoutingMutation();
+  const [assignDispatcher] = useAssignDispatcherToDealerMutation();
+  const [unassignDispatcher] = useUnassignDispatcherFromDealerMutation();
+  const [resendDealerSetupEmail] = useResendDealerSetupEmailMutation();
 
-  const loadPageData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      setSuccess("");
-
-      const [dealerRes, dispatchersRes, analyticsRes] = await Promise.all([
-        api.get(`/api/admin/dealers/${dealerId}`),
-        api.get("/api/admin/dispatchers/verified"),
-        api.get(`/api/admin/dealers/${dealerId}/analytics`),
-      ]);
-
-      const dispatcherItems = dispatchersRes?.data?.items || [];
-
-      const currentDealer = dealerRes?.data?.item || null;
-
-      setDealer(currentDealer);
-      setDispatchers(dispatcherItems);
-      setAnalytics(analyticsRes?.data?.item || null);
-
-      if (currentDealer) {
-        setForm({
-          companyName: currentDealer.companyName || "",
-          contactName: currentDealer.contactName || "",
-          email: currentDealer.email || "",
-          phone: currentDealer.phone || "",
-          address: currentDealer.address || "",
-          panVat: currentDealer.panVat || "",
-          notes: currentDealer.notes || "",
-        });
-      }
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to load dealer profile.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dealerId]);
+  const dealer = dealerQuery.data || null;
+  const dispatchers = dispatchersQuery.data?.items || [];
+  const analytics = analyticsQuery.data || null;
+  const loading =
+    !dealer &&
+    (dealerQuery.isLoading ||
+      dispatchersQuery.isLoading ||
+      analyticsQuery.isLoading);
+  const refreshing =
+    Boolean(dealer) &&
+    (dealerQuery.isFetching ||
+      dispatchersQuery.isFetching ||
+      analyticsQuery.isFetching);
+  const loadError =
+    dealerQuery.error?.message ||
+    dispatchersQuery.error?.message ||
+    analyticsQuery.error?.message ||
+    "";
 
   useEffect(() => {
-    loadPageData();
-  }, [loadPageData]);
+    if (!dealer?._id || formDealerId === dealer._id) return;
+    setForm(getDealerFormValues(dealer));
+    setFormDealerId(dealer._id);
+  }, [dealer, formDealerId]);
+
+  function updateFormField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
 
   const metrics = useMemo(() => {
     return {
@@ -863,10 +880,9 @@ export default function AdminDealerProfilePage() {
       setError("");
       setSuccess("");
       await request();
-      await loadPageData();
       return true;
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || "Action failed.");
+      setError(getMutationErrorMessage(err));
       return false;
     } finally {
       setBusyAction("");
@@ -881,24 +897,23 @@ export default function AdminDealerProfilePage() {
       setError("");
       setSuccess("");
 
-      await api.patch(`/api/admin/dealers/${dealer._id}`, {
-        companyName: form.companyName.trim(),
-        contactName: form.contactName.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
-        address: form.address.trim(),
-        panVat: form.panVat.trim(),
-        notes: form.notes.trim(),
-      });
+      await updateDealer({
+        dealerId: dealer._id,
+        payload: {
+          companyName: form.companyName.trim(),
+          contactName: form.contactName.trim(),
+          email: form.email.trim().toLowerCase(),
+          phone: form.phone.trim(),
+          address: form.address.trim(),
+          panVat: form.panVat.trim(),
+          notes: form.notes.trim(),
+        },
+      }).unwrap();
 
+      setFormDealerId(dealer._id);
       setSuccess("Dealer profile updated successfully.");
-      await loadPageData();
     } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to update dealer profile.",
-      );
+      setError(getMutationErrorMessage(err, "Failed to update dealer profile."));
     } finally {
       setSaving(false);
     }
@@ -911,9 +926,7 @@ export default function AdminDealerProfilePage() {
       targetDealer.status === "VERIFIED" ? "SUSPENDED" : "VERIFIED";
 
     return runAction(`status-${targetDealer._id}`, () =>
-      api.patch(`/api/admin/dealers/${targetDealer._id}/status`, {
-        status: nextStatus,
-      }),
+      updateDealerStatus({ dealerId: targetDealer._id, status: nextStatus }).unwrap(),
     ).then((ok) => {
       if (ok) {
         setSuccess(`Dealer status updated to ${nextStatus}.`);
@@ -929,22 +942,18 @@ export default function AdminDealerProfilePage() {
       `routing-${routingDealer._id}`,
       async () => {
         try {
-          await api.patch(`/api/admin/dealers/${routingDealer._id}/routing`, {
-            fulfillmentMode,
-            dispatcherId,
-          });
+          await updateDealerRouting({
+            dealerId: routingDealer._id,
+            payload: { fulfillmentMode, dispatcherId },
+          }).unwrap();
         } catch {
           if (fulfillmentMode === "DISPATCHER") {
-            await api.post(
-              `/api/admin/dealers/${routingDealer._id}/assign-dispatcher`,
-              {
-                dispatcherId,
-              },
-            );
+            await assignDispatcher({
+              dealerId: routingDealer._id,
+              dispatcherId,
+            }).unwrap();
           } else {
-            await api.post(
-              `/api/admin/dealers/${routingDealer._id}/unassign-dispatcher`,
-            );
+            await unassignDispatcher(routingDealer._id).unwrap();
           }
         }
       },
@@ -961,7 +970,7 @@ export default function AdminDealerProfilePage() {
     if (!userId) return;
 
     runAction(`setup-${dealer._id}`, () =>
-      api.post(`/api/admin/dealers/${userId}/resend-setup-email`),
+      resendDealerSetupEmail(userId).unwrap(),
     ).then((ok) => {
       if (ok) {
         setSuccess("A fresh password setup link has been sent if eligible.");
@@ -982,7 +991,7 @@ export default function AdminDealerProfilePage() {
       <GlassCard style={{ padding: 18 }}>
         <SectionHeader
           title={dealer.companyName || "Dealer Profile"}
-          subtitle="Review and manage the full dealer profile inside the admin workspace."
+          subtitle={refreshing ? "Updating cached dealer profile in the background." : "Review and manage the full dealer profile inside the admin workspace."}
           action={
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <ActionButton subtle onClick={() => navigate(-1)}>
@@ -1020,20 +1029,20 @@ export default function AdminDealerProfilePage() {
         </div>
       </GlassCard>
 
-      {(error || success) && (
+      {(error || loadError || success) && (
         <div
           style={{
             padding: "14px 16px",
             borderRadius: 16,
             fontWeight: 800,
-            background: error ? "rgba(180,35,24,.08)" : "rgba(18,183,106,.10)",
-            color: error ? "#b42318" : "#067647",
-            border: error
+            background: error || loadError ? "rgba(180,35,24,.08)" : "rgba(18,183,106,.10)",
+            color: error || loadError ? "#b42318" : "#067647",
+            border: error || loadError
               ? "1px solid rgba(180,35,24,.16)"
               : "1px solid rgba(18,183,106,.16)",
           }}
         >
-          {error || success}
+          {error || loadError || success}
         </div>
       )}
 
@@ -1259,7 +1268,7 @@ export default function AdminDealerProfilePage() {
               <input
                 value={form.companyName}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, companyName: e.target.value }))
+                  updateFormField("companyName", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1269,7 +1278,7 @@ export default function AdminDealerProfilePage() {
               <input
                 value={form.contactName}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, contactName: e.target.value }))
+                  updateFormField("contactName", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1280,7 +1289,7 @@ export default function AdminDealerProfilePage() {
                 type="email"
                 value={form.email}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, email: e.target.value }))
+                  updateFormField("email", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1290,7 +1299,7 @@ export default function AdminDealerProfilePage() {
               <input
                 value={form.phone}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, phone: e.target.value }))
+                  updateFormField("phone", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1300,7 +1309,7 @@ export default function AdminDealerProfilePage() {
               <input
                 value={form.address}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, address: e.target.value }))
+                  updateFormField("address", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1310,7 +1319,7 @@ export default function AdminDealerProfilePage() {
               <input
                 value={form.panVat}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, panVat: e.target.value }))
+                  updateFormField("panVat", e.target.value)
                 }
                 style={inputStyle()}
               />
@@ -1323,7 +1332,7 @@ export default function AdminDealerProfilePage() {
                 rows={5}
                 value={form.notes}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, notes: e.target.value }))
+                  updateFormField("notes", e.target.value)
                 }
                 style={textareaStyle()}
               />
@@ -1342,15 +1351,8 @@ export default function AdminDealerProfilePage() {
             <ActionButton
               subtle
               onClick={() => {
-                setForm({
-                  companyName: dealer.companyName || "",
-                  contactName: dealer.contactName || "",
-                  email: dealer.email || "",
-                  phone: dealer.phone || "",
-                  address: dealer.address || "",
-                  panVat: dealer.panVat || "",
-                  notes: dealer.notes || "",
-                });
+                setForm(getDealerFormValues(dealer));
+                setFormDealerId(dealer._id || "");
                 setError("");
                 setSuccess("");
               }}

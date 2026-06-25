@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../../api/client.js";
 import { useAuth } from "../../auth/AuthProvider.jsx";
+import { useGetMyDispatcherProfileQuery } from "../../redux/api/meituApi.js";
 
 function GlassCard({ children, style = {} }) {
   return (
@@ -30,31 +29,16 @@ function Detail({ label, value }) {
 
 export default function DispatcherProfileWorkspacePage() {
   const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const {
+    data: profile = null,
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useGetMyDispatcherProfileQuery();
 
-  const loadProfile = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const res = await api.get("/api/dispatchers/me");
-      setProfile(res?.data?.item || null);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load dispatcher profile.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
+  const loading = isLoading && !profile;
+  const error = queryError?.message || "";
 
   const displayName =
     profile?.name || user?.name || user?.username || user?.email || "Dispatcher";
@@ -71,8 +55,8 @@ export default function DispatcherProfileWorkspacePage() {
               workspace.
             </p>
           </div>
-          <button type="button" onClick={loadProfile}>
-            Refresh
+          <button type="button" onClick={refetch}>
+            {isFetching && profile ? "Updating..." : "Refresh"}
           </button>
         </div>
         {error ? <div className="dispatcher-profile-error">{error}</div> : null}

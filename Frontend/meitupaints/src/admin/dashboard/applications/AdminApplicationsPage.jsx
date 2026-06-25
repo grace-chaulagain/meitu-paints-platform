@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useGetAdminDealerApplicationsQuery,
+  useGetAdminDispatcherApplicationsQuery,
+} from "../../../redux/api/meituApi.js";
 
 const FILTERS = [
   { key: "ALL", label: "All Applications" },
@@ -128,48 +131,41 @@ function ApplicationCard({ item, onOpen }) {
 export default function AdminApplicationsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("ALL");
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const dealerApplicationsQuery = useGetAdminDealerApplicationsQuery({ limit: 100 });
+  const dispatcherApplicationsQuery = useGetAdminDispatcherApplicationsQuery({
+    limit: 100,
+  });
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const [dealerRes, dispatcherRes] = await Promise.all([
-        api.get("/api/admin/dealer-applications", { params: { limit: 100 } }),
-        api.get("/api/admin/dispatcher-applications", { params: { limit: 100 } }),
-      ]);
+  const items = useMemo(() => {
+    const dealerItems = (dealerApplicationsQuery.data?.items || []).map((item) =>
+      normalizeApplication(item, "DEALER"),
+    );
+    const dispatcherItems = (
+      dispatcherApplicationsQuery.data?.items || []
+    ).map((item) => normalizeApplication(item, "DISPATCHER"));
 
-      const dealerItems = (dealerRes?.data?.items || []).map((item) =>
-        normalizeApplication(item, "DEALER"),
-      );
-      const dispatcherItems = (dispatcherRes?.data?.items || []).map((item) =>
-        normalizeApplication(item, "DISPATCHER"),
-      );
+    return [...dealerItems, ...dispatcherItems].sort(
+      (a, b) =>
+        new Date(b.submittedAt || 0).getTime() -
+        new Date(a.submittedAt || 0).getTime(),
+    );
+  }, [dealerApplicationsQuery.data, dispatcherApplicationsQuery.data]);
 
-      setItems(
-        [...dealerItems, ...dispatcherItems].sort(
-          (a, b) =>
-            new Date(b.submittedAt || 0).getTime() -
-            new Date(a.submittedAt || 0).getTime(),
-        ),
-      );
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load applications.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loading =
+    items.length === 0 &&
+    (dealerApplicationsQuery.isLoading || dispatcherApplicationsQuery.isLoading);
+  const refreshing =
+    items.length > 0 &&
+    (dealerApplicationsQuery.isFetching || dispatcherApplicationsQuery.isFetching);
+  const error =
+    dealerApplicationsQuery.error?.message ||
+    dispatcherApplicationsQuery.error?.message ||
+    "";
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  function loadData() {
+    dealerApplicationsQuery.refetch();
+    dispatcherApplicationsQuery.refetch();
+  }
 
   const counts = useMemo(() => {
     return {
@@ -208,7 +204,7 @@ export default function AdminApplicationsPage() {
           subtitle="Unified intake for dealer and dispatcher applications, with deep review handled in the focused workspaces."
           action={
             <button type="button" className="applications-refresh" onClick={loadData}>
-              Refresh
+              {refreshing ? "Updating..." : "Refresh"}
             </button>
           }
         />

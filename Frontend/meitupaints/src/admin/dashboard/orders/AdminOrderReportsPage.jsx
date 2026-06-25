@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useGetAdminDealersQuery,
+  useGetVerifiedDispatchersQuery,
+  useLazyGetAdminOrderStatementReportQuery,
+} from "../../../redux/api/meituApi.js";
 import { downloadUtilityOrderReportPdf } from "../../../utils/downloadUtilityOrderReportPdf.js";
 
 const DATE_MODES = [
@@ -349,8 +353,17 @@ const tableCellStyle = {
 
 export default function AdminOrderReportsPage() {
   const navigate = useNavigate();
-  const [dealers, setDealers] = useState([]);
-  const [dispatchers, setDispatchers] = useState([]);
+  const dealersQuery = useGetAdminDealersQuery({ limit: 1000 });
+  const dispatchersQuery = useGetVerifiedDispatchersQuery();
+  const [fetchReport, reportQuery] = useLazyGetAdminOrderStatementReportQuery();
+  const dealers = useMemo(
+    () => dealersQuery.data?.items || [],
+    [dealersQuery.data],
+  );
+  const dispatchers = useMemo(
+    () => dispatchersQuery.data?.items || [],
+    [dispatchersQuery.data],
+  );
   const [form, setForm] = useState(() => ({
     dateMode: "CUSTOM",
     from: toDateInputValue(shiftDateByDays(-30)),
@@ -364,31 +377,10 @@ export default function AdminOrderReportsPage() {
     maxTotal: "",
   }));
   const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-
-    Promise.all([
-      api.get("/api/admin/dealers", { params: { limit: 1000 } }),
-      api.get("/api/admin/dispatchers/verified"),
-    ])
-      .then(([dealerRes, dispatcherRes]) => {
-        if (!alive) return;
-        setDealers(dealerRes?.data?.items || []);
-        setDispatchers(dispatcherRes?.data?.items || []);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setDealers([]);
-        setDispatchers([]);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const loading = reportQuery.isFetching;
+  const lookupError =
+    dealersQuery.error?.message || dispatchersQuery.error?.message || "";
 
   const routingOptions = useMemo(
     () => [
@@ -476,13 +468,9 @@ export default function AdminOrderReportsPage() {
 
   async function previewReport() {
     try {
-      setLoading(true);
       setError("");
       const params = buildParams();
-      const res = await api.get("/api/admin/reports/order-statements", {
-        params,
-      });
-      const item = res?.data?.item || {};
+      const item = await fetchReport(params, true).unwrap();
       setReport({
         ...item,
         filters: {
@@ -494,13 +482,11 @@ export default function AdminOrderReportsPage() {
       });
     } catch (err) {
       setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
+        err?.data?.error ||
+          err?.data?.message ||
           err?.message ||
           "Failed to preview the report.",
       );
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -699,7 +685,7 @@ export default function AdminOrderReportsPage() {
           </ActionButton>
         </div>
 
-        {error ? (
+        {(error || lookupError) ? (
           <div
             style={{
               marginTop: 16,
@@ -712,7 +698,7 @@ export default function AdminOrderReportsPage() {
               fontWeight: 850,
             }}
           >
-            {error}
+            {error || lookupError}
           </div>
         ) : null}
       </GlassCard>

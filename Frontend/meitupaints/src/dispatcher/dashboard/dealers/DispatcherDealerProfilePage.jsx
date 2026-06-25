@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import { useGetDispatcherDealersQuery } from "../../../redux/api/meituApi.js";
 
 function GlassCard({ children, style = {}, ...rest }) {
   return (
@@ -312,42 +312,23 @@ export default function DispatcherDealerProfilePage() {
     [location.pathname],
   );
 
-  const [dealer, setDealer] = useState(null);
-  const [allAssignedDealers, setAllAssignedDealers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const {
+    data: assignedDealerResponse,
+    isLoading,
+    isFetching,
+    error: queryError,
+  } = useGetDispatcherDealersQuery(undefined, { skip: !dealerId });
 
-  const loadPageData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const res = await api.get("/api/dispatchers/me/dealers");
-      const items = res?.data?.items || [];
-      const normalized = items.map(normalizeDealer);
-
-      setAllAssignedDealers(normalized);
-      setDealer(normalized.find((item) => item?._id === dealerId) || null);
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load assigned dealer profile.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dealerId]);
-
-  useEffect(() => {
-    if (!dealerId) {
-      setDealer(null);
-      setLoading(false);
-      return;
-    }
-    loadPageData();
-  }, [dealerId, loadPageData]);
+  const allAssignedDealers = useMemo(
+    () => (assignedDealerResponse?.items || []).map(normalizeDealer),
+    [assignedDealerResponse],
+  );
+  const dealer = useMemo(
+    () => allAssignedDealers.find((item) => item?._id === dealerId) || null,
+    [allAssignedDealers, dealerId],
+  );
+  const loading = isLoading && allAssignedDealers.length === 0;
+  const error = queryError?.message || "";
 
   if (loading) {
     return (
@@ -388,7 +369,7 @@ export default function DispatcherDealerProfilePage() {
       <GlassCard style={{ padding: 18 }}>
         <SectionHeader
           title={dealer.companyName || "Dealer Profile"}
-          subtitle="Assigned dealer profile view for dispatcher-side operational reference."
+          subtitle={isFetching && dealer ? "Updating cached assigned dealer profile in the background." : "Assigned dealer profile view for dispatcher-side operational reference."}
           action={
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <ActionButton

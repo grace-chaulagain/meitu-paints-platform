@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../../../api/client.js";
+import {
+  useGetAdminDealerQuery,
+  useGetAdminScopedOrdersQuery,
+  useLazyGetAdminScopedOrderQuery,
+} from "../../../redux/api/meituApi.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
 
 const ORDER_FILTERS = [
@@ -714,63 +718,46 @@ export default function AdminDealerOrdersPage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
-  const [dealer, setDealer] = useState(null);
-  const [allDealerOrders, setAllDealerOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [activeOrder, setActiveOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const loadPageData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
+  const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId }, { skip: !dealerId });
+  const [fetchOrderDetail] = useLazyGetAdminScopedOrderQuery();
 
-      const [dealerRes, ordersRes] = await Promise.all([
-        api.get(`/api/admin/dealers/${dealerId}`),
-        api.get("/api/admin/orders", {
-          params: {
-            dealerId,
-          },
-        }),
-      ]);
+  const dealer = dealerQuery.data || null;
+  const allDealerOrders = useMemo(() => {
+    const incomingOrders = ordersQuery.data?.items || [];
+    return incomingOrders.filter((order) => {
+      const directDealerId = String(order?.dealerId?._id || order?.dealerId || "");
+      const snapshotDealerId = String(order?.dealerSnapshot?._id || "");
+      return directDealerId === dealerId || snapshotDealerId === dealerId;
+    });
+  }, [ordersQuery.data, dealerId]);
 
-      const currentDealer = dealerRes?.data?.item || null;
-      const incomingOrders = ordersRes?.data?.items || [];
+  const loading =
+    !dealer &&
+    allDealerOrders.length === 0 &&
+    (dealerQuery.isLoading || ordersQuery.isLoading);
+  const refreshing =
+    Boolean(dealer || allDealerOrders.length) &&
+    (dealerQuery.isFetching || ordersQuery.isFetching);
+  const queryError = dealerQuery.error?.message || ordersQuery.error?.message || "";
 
-      const strictDealerOrders = incomingOrders.filter((order) => {
-        const directDealerId = String(
-          order?.dealerId?._id || order?.dealerId || "",
-        );
-        const snapshotDealerId = String(order?.dealerSnapshot?._id || "");
-        return directDealerId === dealerId || snapshotDealerId === dealerId;
-      });
-
-      setDealer(currentDealer);
-      setAllDealerOrders(strictDealerOrders);
-
-      setActiveOrder((current) => {
-        if (!current?._id) return null;
-        return (
-          strictDealerOrders.find((item) => item._id === current._id) || current
-        );
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to load dealer orders.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dealerId]);
+  function loadPageData() {
+    dealerQuery.refetch();
+    ordersQuery.refetch();
+  }
 
   useEffect(() => {
-    loadPageData();
-  }, [loadPageData]);
+    setActiveOrder((current) => {
+      if (!current?._id) return null;
+      return allDealerOrders.find((item) => item._id === current._id) || current;
+    });
+  }, [allDealerOrders]);
 
   async function handleOpenOrder(nextOrder) {
     if (!nextOrder?._id) return;
@@ -778,14 +765,13 @@ export default function AdminDealerOrdersPage() {
     try {
       setDetailLoading(true);
       setError("");
-
-      const res = await api.get(`/api/admin/orders/${nextOrder._id}`);
-      const fullOrder = res?.data?.item || nextOrder;
-      setActiveOrder(fullOrder);
+      const fullOrder = await fetchOrderDetail(nextOrder._id, true).unwrap();
+      setActiveOrder(fullOrder || nextOrder);
     } catch (err) {
       setActiveOrder(nextOrder);
       setError(
-        err?.response?.data?.error ||
+        err?.data?.error ||
+          err?.data?.message ||
           err?.message ||
           "Failed to load full order details.",
       );
@@ -870,7 +856,7 @@ export default function AdminDealerOrdersPage() {
       <GlassCard style={{ padding: 18 }}>
         <SectionHeader
           title="Order History"
-          subtitle="Search and inspect every order submitted by this dealer."
+          subtitle={refreshing ? "Updating cached dealer orders in the background." : "Search and inspect every order submitted by this dealer."}
           action={
             <ActionButton subtle onClick={loadPageData}>
               Refresh
@@ -919,7 +905,7 @@ export default function AdminDealerOrdersPage() {
           </div>
         </div>
 
-        {error ? (
+        {(error || queryError) ? (
           <div
             style={{
               marginTop: 16,
@@ -931,7 +917,7 @@ export default function AdminDealerOrdersPage() {
               fontWeight: 800,
             }}
           >
-            {error}
+            {error || queryError}
           </div>
         ) : null}
       </GlassCard>

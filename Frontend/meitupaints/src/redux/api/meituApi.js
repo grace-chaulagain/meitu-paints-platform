@@ -3,7 +3,11 @@ import { axiosBaseQuery } from "./baseQuery.js";
 
 const CATALOG_CACHE_SECONDS = 20 * 60;
 const ORDER_CACHE_SECONDS = 60;
+const NOTIFICATION_CACHE_SECONDS = 45;
 const WORKFLOW_CACHE_SECONDS = 2 * 60;
+const PROFILE_CACHE_SECONDS = 3 * 60;
+const REPORT_CACHE_SECONDS = 2 * 60;
+const INSIGHT_CACHE_SECONDS = 3 * 60;
 const VERIFIED_DISPATCHERS_CACHE_SECONDS = 4 * 60;
 
 function getItems(response) {
@@ -51,6 +55,8 @@ function orderMutationTags(orderId) {
         { type: "AdminOrder", id: orderId },
         { type: "DealerOrder", id: orderId },
         { type: "DispatcherOrder", id: orderId },
+        { type: "AdminDealerOrder", id: orderId },
+        { type: "DispatcherDealerOrder", id: orderId },
       ]
     : [];
 
@@ -59,6 +65,15 @@ function orderMutationTags(orderId) {
     listTag("AdminOrder"),
     listTag("DealerOrder"),
     listTag("DispatcherOrder"),
+    listTag("AdminDealerOrder"),
+    listTag("DispatcherDealerOrder"),
+    listTag("Dashboard"),
+    listTag("AdminDashboard"),
+    listTag("DispatcherDashboard"),
+    listTag("Report"),
+    listTag("Insight"),
+    listTag("AdminInsight"),
+    listTag("Notification"),
     ...itemTagsForOrder,
   ];
 }
@@ -71,6 +86,15 @@ function dealerMutationTags(dealerId) {
     listTag("Order"),
     listTag("AdminOrder"),
     listTag("DispatcherOrder"),
+    listTag("AdminDealerOrder"),
+    listTag("DispatcherDealerOrder"),
+    listTag("Dashboard"),
+    listTag("AdminDashboard"),
+    listTag("DispatcherDashboard"),
+    listTag("Report"),
+    listTag("Insight"),
+    listTag("AdminInsight"),
+    listTag("Notification"),
     ...(dealerId
       ? [
           { type: "Dealer", id: dealerId },
@@ -89,6 +113,16 @@ function dispatcherMutationTags(dispatcherId) {
     listTag("Dealer"),
     listTag("AdminOrder"),
     listTag("DispatcherOrder"),
+    listTag("AdminDealerOrder"),
+    listTag("DispatcherDealerOrder"),
+    listTag("Dashboard"),
+    listTag("AdminDashboard"),
+    listTag("DispatcherDashboard"),
+    listTag("Report"),
+    listTag("Insight"),
+    listTag("AdminInsight"),
+    listTag("Notification"),
+    { type: "Dispatcher", id: "VERIFIED_LIST" },
     ...(dispatcherId ? [{ type: "Dispatcher", id: dispatcherId }] : []),
   ];
 }
@@ -104,16 +138,67 @@ export const meituApi = createApi({
     "AdminOrder",
     "DealerOrder",
     "DispatcherOrder",
+    "AdminDealerOrder",
+    "DispatcherDealerOrder",
     "Dealer",
     "DealerProfile",
     "DealerApplication",
     "Dispatcher",
     "DispatcherApplication",
     "DispatcherDealer",
+    "DispatcherProfile",
     "Notification",
+    "Dashboard",
+    "AdminDashboard",
+    "DispatcherDashboard",
+    "Report",
+    "Insight",
+    "AdminInsight",
   ],
   keepUnusedDataFor: 60,
   endpoints: (builder) => ({
+
+    getNotificationSummary: builder.query({
+      query: () => ({ url: "/api/notifications/summary" }),
+      transformResponse: (response) =>
+        response?.item || { totalUnread: 0, categories: {} },
+      keepUnusedDataFor: NOTIFICATION_CACHE_SECONDS,
+      providesTags: () => [
+        listTag("Notification"),
+        { type: "Notification", id: "SUMMARY" },
+      ],
+    }),
+
+    getNotifications: builder.query({
+      query: (params = {}) => ({ url: "/api/notifications", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: NOTIFICATION_CACHE_SECONDS,
+      providesTags: (items = []) => itemTags("Notification", items),
+    }),
+
+    markNotificationRead: builder.mutation({
+      query: (notificationId) => ({
+        url: `/api/notifications/${notificationId}/read`,
+        method: "PATCH",
+      }),
+      invalidatesTags: (_result, _error, notificationId) => [
+        listTag("Notification"),
+        { type: "Notification", id: "SUMMARY" },
+        ...(notificationId ? [{ type: "Notification", id: notificationId }] : []),
+      ],
+    }),
+
+    markNotificationsRead: builder.mutation({
+      query: (payload = {}) => ({
+        url: "/api/notifications/read",
+        method: "PATCH",
+        data: payload,
+      }),
+      invalidatesTags: () => [
+        listTag("Notification"),
+        { type: "Notification", id: "SUMMARY" },
+      ],
+    }),
     getProducts: builder.query({
       query: (params = {}) => ({
         url: "/api/products",
@@ -292,6 +377,30 @@ export const meituApi = createApi({
       ],
     }),
 
+    getAdminScopedOrders: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/orders", params }),
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("AdminOrder", response),
+        ...listResponseTags("AdminDealerOrder", response),
+        listTag("Order"),
+        listTag("DealerOrder"),
+      ],
+    }),
+
+    getAdminScopedOrder: builder.query({
+      query: (orderId) => ({ url: `/api/admin/orders/${orderId}` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      providesTags: (_response, _error, orderId) => [
+        listTag("AdminOrder"),
+        listTag("AdminDealerOrder"),
+        { type: "AdminOrder", id: orderId },
+        { type: "AdminDealerOrder", id: orderId },
+        { type: "Order", id: orderId },
+      ],
+    }),
+
     verifyAdminOrder: builder.mutation({
       query: ({ orderId, payload }) => ({
         url: `/api/orders/${orderId}/verify`,
@@ -348,6 +457,21 @@ export const meituApi = createApi({
       ],
     }),
 
+    getDispatcherOrdersArchive: builder.query({
+      query: (params = {}) => ({
+        url: "/api/dispatchers/me/orders/archive",
+        params,
+      }),
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("DispatcherOrder", response),
+        ...listResponseTags("DispatcherDealerOrder", response),
+        listTag("Order"),
+        listTag("DealerOrder"),
+        listTag("AdminOrder"),
+      ],
+    }),
+
     verifyDispatcherOrder: builder.mutation({
       query: ({ orderId, payload }) => ({
         url: `/api/dispatchers/me/orders/${orderId}/verify`,
@@ -383,9 +507,21 @@ export const meituApi = createApi({
 
     getAdminDealer: builder.query({
       query: (dealerId) => ({ url: `/api/admin/dealers/${dealerId}` }),
-      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
       providesTags: (response, _error, dealerId) => [
         ...itemResponseTags("DealerProfile", response),
+        { type: "Dealer", id: dealerId },
+      ],
+    }),
+
+    getAdminDealerAnalytics: builder.query({
+      query: (dealerId) => ({ url: `/api/admin/dealers/${dealerId}/analytics` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (_response, _error, dealerId) => [
+        listTag("DealerProfile"),
+        listTag("Insight"),
+        { type: "DealerProfile", id: dealerId },
         { type: "Dealer", id: dealerId },
       ],
     }),
@@ -434,6 +570,14 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => dealerMutationTags(arg?.dealerId),
     }),
 
+    resendDealerSetupEmail: builder.mutation({
+      query: (dealerUserId) => ({
+        url: `/api/admin/dealers/${dealerUserId}/resend-setup-email`,
+        method: "POST",
+      }),
+      invalidatesTags: () => [listTag("DealerProfile")],
+    }),
+
     assignDispatcherToDealer: builder.mutation({
       query: ({ dealerId, dispatcherId }) => ({
         url: `/api/admin/dealers/${dealerId}/assign-dispatcher`,
@@ -469,6 +613,10 @@ export const meituApi = createApi({
         { type: "DealerApplication", id: arg?.applicationId },
         listTag("Dealer"),
         listTag("DispatcherDealer"),
+        listTag("Dashboard"),
+        listTag("AdminDashboard"),
+        listTag("Insight"),
+        listTag("AdminInsight"),
         listTag("Notification"),
       ],
     }),
@@ -482,6 +630,8 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => [
         listTag("DealerApplication"),
         { type: "DealerApplication", id: arg?.applicationId },
+        listTag("Dashboard"),
+        listTag("AdminDashboard"),
         listTag("Notification"),
       ],
     }),
@@ -495,6 +645,8 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => [
         listTag("DealerApplication"),
         { type: "DealerApplication", id: arg?.applicationId },
+        listTag("Dashboard"),
+        listTag("AdminDashboard"),
         listTag("Notification"),
       ],
     }),
@@ -522,11 +674,19 @@ export const meituApi = createApi({
 
     getAdminDispatcher: builder.query({
       query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}` }),
-      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
       providesTags: (response, _error, dispatcherId) => [
         ...itemResponseTags("Dispatcher", response),
         { type: "Dispatcher", id: dispatcherId },
       ],
+    }),
+
+    resendDispatcherSetupEmail: builder.mutation({
+      query: (dispatcherUserId) => ({
+        url: `/api/admin/dispatchers/${dispatcherUserId}/resend-setup-email`,
+        method: "POST",
+      }),
+      invalidatesTags: () => [listTag("Dispatcher")],
     }),
 
     approveDispatcher: builder.mutation({
@@ -582,15 +742,56 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, dispatcherId) => dispatcherMutationTags(dispatcherId),
     }),
 
+    getMyDispatcherProfile: builder.query({
+      query: () => ({ url: "/api/dispatchers/me" }),
+      transformResponse: getItem,
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (response) => {
+        const id = response?._id || response?.id || "ME";
+        return [listTag("DispatcherProfile"), { type: "DispatcherProfile", id }];
+      },
+    }),
+
     getDispatcherDealers: builder.query({
       query: (params = {}) => ({ url: "/api/dispatchers/me/dealers", params }),
       keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
       providesTags: (response) => listResponseTags("DispatcherDealer", response),
     }),
+
+    getAdminOrderStatementReport: builder.query({
+      query: (params = {}) => ({
+        url: "/api/admin/reports/order-statements",
+        params,
+      }),
+      transformResponse: getItem,
+      keepUnusedDataFor: REPORT_CACHE_SECONDS,
+      providesTags: () => [listTag("Report"), { type: "Report", id: "ADMIN_ORDER_STATEMENT" }],
+    }),
+
+    getDealerOrderStatementReport: builder.query({
+      query: (params = {}) => ({
+        url: "/api/dealer/reports/order-statements",
+        params,
+      }),
+      transformResponse: getItem,
+      keepUnusedDataFor: REPORT_CACHE_SECONDS,
+      providesTags: () => [listTag("Report"), { type: "Report", id: "DEALER_ORDER_STATEMENT" }],
+    }),
+
+    getAdminInsights: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
   }),
 });
 
 export const {
+  useGetNotificationSummaryQuery,
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkNotificationsReadMutation,
   useGetProductsQuery,
   useGetProductCategoriesQuery,
   useGetProductFamiliesQuery,
@@ -608,22 +809,28 @@ export const {
   useCreateDealerOrderMutation,
   useGetAdminOrdersQuery,
   useGetAdminOrderQuery,
+  useGetAdminScopedOrdersQuery,
+  useGetAdminScopedOrderQuery,
+  useLazyGetAdminScopedOrderQuery,
   useVerifyAdminOrderMutation,
   useRejectAdminOrderMutation,
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
   useGetDispatcherOrdersQuery,
   useGetDispatcherOrderQuery,
+  useGetDispatcherOrdersArchiveQuery,
   useVerifyDispatcherOrderMutation,
   useRejectDispatcherOrderMutation,
   useAmendDispatcherOrderMutation,
   useGetAdminDealersQuery,
   useGetAdminDealerQuery,
+  useGetAdminDealerAnalyticsQuery,
   useUpdateAdminDealerMutation,
   useUpdateAdminDealerStatusMutation,
   useDeleteAdminDealerMutation,
   useUndoDeleteAdminDealerMutation,
   useUpdateAdminDealerRoutingMutation,
+  useResendDealerSetupEmailMutation,
   useAssignDispatcherToDealerMutation,
   useUnassignDispatcherFromDealerMutation,
   useGetAdminDealerApplicationsQuery,
@@ -634,11 +841,16 @@ export const {
   useGetAdminDispatcherApplicationsQuery,
   useGetVerifiedDispatchersQuery,
   useGetAdminDispatcherQuery,
+  useResendDispatcherSetupEmailMutation,
   useApproveDispatcherMutation,
   useRejectDispatcherMutation,
   useSetAdminDispatcherActiveMutation,
   useUpdateAdminDispatcherMutation,
   useDeleteAdminDispatcherMutation,
   useUndoAdminDispatcherDeletionMutation,
+  useGetMyDispatcherProfileQuery,
   useGetDispatcherDealersQuery,
+  useLazyGetAdminOrderStatementReportQuery,
+  useLazyGetDealerOrderStatementReportQuery,
+  useGetAdminInsightsQuery,
 } = meituApi;

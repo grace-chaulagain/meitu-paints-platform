@@ -1,12 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useMemo } from "react";
 
-import { api } from "../api/client.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
+import {
+  useGetNotificationSummaryQuery,
+  useMarkNotificationReadMutation,
+  useMarkNotificationsReadMutation,
+} from "../redux/api/meituApi.js";
 import { NotificationCtx } from "./notificationContext.js";
 
 function emptySummary() {
@@ -23,53 +22,48 @@ function canUseNotifications(user) {
 
 export function NotificationProvider({ children }) {
   const { user, booting } = useAuth();
-  const [summary, setSummary] = useState(emptySummary);
-  const [loading, setLoading] = useState(false);
-
   const enabled = canUseNotifications(user);
 
-  const refreshSummary = useCallback(async () => {
-    if (!enabled) {
-      setSummary(emptySummary());
-      return emptySummary();
-    }
+  const { data, isLoading, isFetching, refetch } = useGetNotificationSummaryQuery(
+    undefined,
+    {
+      skip: booting || !enabled,
+      pollingInterval: enabled ? 45000 : 0,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+    },
+  );
+  const [markNotificationsRead] = useMarkNotificationsReadMutation();
+  const [markNotificationReadMutation] = useMarkNotificationReadMutation();
 
-    try {
-      setLoading(true);
-      const res = await api.get("/api/notifications/summary");
-      const next = res?.data?.item || emptySummary();
-      setSummary(next);
-      return next;
-    } catch {
-      setSummary(emptySummary());
-      return emptySummary();
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled]);
+  const summary = enabled ? data || emptySummary() : emptySummary();
+
+  const refreshSummary = useCallback(async () => {
+    if (!enabled) return emptySummary();
+    const result = await refetch();
+    return result?.data || emptySummary();
+  }, [enabled, refetch]);
 
   const markCategoriesRead = useCallback(
     async (categories = []) => {
       const cleanCategories = categories.filter(Boolean);
       if (!enabled || cleanCategories.length === 0) return { ok: true };
 
-      const res = await api.patch("/api/notifications/read", {
+      const result = await markNotificationsRead({
         categories: cleanCategories,
-      });
-      await refreshSummary();
-      return res?.data || { ok: true };
+      }).unwrap();
+      return result || { ok: true };
     },
-    [enabled, refreshSummary],
+    [enabled, markNotificationsRead],
   );
 
   const markNotificationRead = useCallback(
     async (notificationId) => {
       if (!enabled || !notificationId) return { ok: true };
-      const res = await api.patch(`/api/notifications/${notificationId}/read`);
-      await refreshSummary();
-      return res?.data || { ok: true };
+      const result = await markNotificationReadMutation(notificationId).unwrap();
+      return result || { ok: true };
     },
-    [enabled, refreshSummary],
+    [enabled, markNotificationReadMutation],
   );
 
   const markNotificationIdsRead = useCallback(
@@ -77,28 +71,19 @@ export function NotificationProvider({ children }) {
       const cleanIds = notificationIds.filter(Boolean);
       if (!enabled || cleanIds.length === 0) return { ok: true };
 
-      const res = await api.patch("/api/notifications/read", {
+      const result = await markNotificationsRead({
         notificationIds: cleanIds,
-      });
-      await refreshSummary();
-      return res?.data || { ok: true };
+      }).unwrap();
+      return result || { ok: true };
     },
-    [enabled, refreshSummary],
+    [enabled, markNotificationsRead],
   );
-
-  useEffect(() => {
-    if (booting) return undefined;
-    refreshSummary();
-
-    if (!enabled) return undefined;
-    const timer = window.setInterval(refreshSummary, 45000);
-    return () => window.clearInterval(timer);
-  }, [booting, enabled, refreshSummary]);
 
   const value = useMemo(
     () => ({
       enabled,
-      loading,
+      loading: isLoading && !data,
+      refreshing: isFetching && Boolean(data),
       totalUnread: Number(summary?.totalUnread || 0),
       categories: summary?.categories || {},
       refreshSummary,
@@ -108,7 +93,9 @@ export function NotificationProvider({ children }) {
     }),
     [
       enabled,
-      loading,
+      isLoading,
+      isFetching,
+      data,
       summary,
       refreshSummary,
       markCategoriesRead,
