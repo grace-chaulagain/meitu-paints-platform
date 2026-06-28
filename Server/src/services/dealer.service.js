@@ -377,7 +377,18 @@ export async function getMyOrderStatementsReport({
   const normalizedStatus = sanitizeStr(status, 40).toUpperCase();
   if (normalizedStatus) {
     if (["ARCHIVE", "ARCHIVED"].includes(normalizedStatus)) {
-      query.status = { $in: ["VERIFIED", "REJECTED"] };
+      query.status = {
+        $in: [
+          "VERIFIED",
+          "REJECTED",
+          "PROCESSING",
+          "AWAITING_SHIPMENT",
+          "OUT_FOR_DELIVERY",
+          "DELIVERED",
+          "CLOSED",
+          "CANCELLED",
+        ],
+      };
     } else if (normalizedStatus === "PENDING") {
       query.status = "SUBMITTED";
     } else {

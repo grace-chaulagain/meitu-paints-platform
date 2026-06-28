@@ -3,6 +3,7 @@ import ApiError from "../utils/apiError.js";
 
 import * as adminService from "../services/admin.service.js";
 import * as adminInsightsService from "../services/adminInsights.service.js";
+import * as factoryService from "../services/factory.service.js";
 import { resendPasswordSetupEmailForUser } from "../services/auth.service.js";
 
 // Settings
@@ -577,6 +578,24 @@ export const sendOrderToDispatcherController = asyncHandler(
     res.status(200).json({ ok: true });
   },
 );
+
+export const sendOrderToFactoryController = asyncHandler(async (req, res) => {
+  const { orderId } = req.params || {};
+  const { note = "" } = req.body || {};
+  if (!orderId) throw new ApiError(400, "Missing orderId");
+
+  const item = await factoryService.sendOrderToFactory({
+    orderId,
+    adminUser: req.user,
+    note,
+  });
+
+  res.status(200).json({
+    ok: true,
+    message: "Order sent to Factory.",
+    item,
+  });
+});
 
 export const closeOrderController = asyncHandler(async (req, res) => {
   const { orderId } = req.params || {};

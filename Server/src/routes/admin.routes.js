@@ -53,6 +53,7 @@ import {
   getOrderStatementsReportController,
   hardDeleteOrderController,
   approveOrderController,
+  sendOrderToFactoryController,
   sendOrderToDispatcherController,
   closeOrderController,
   reviseOrderController,
@@ -187,6 +188,11 @@ router.post(
   "/orders/:orderId/send-to-dispatcher",
   validateParams(orderIdParamsSchema),
   sendOrderToDispatcherController,
+);
+router.post(
+  "/orders/:orderId/send-to-factory",
+  validateParams(orderIdParamsSchema),
+  sendOrderToFactoryController,
 );
 router.get(
   "/orders/:orderId/outstanding",

@@ -12,6 +12,7 @@
     "package:hostinger": "npm --prefix Frontend/meitupaints run build && node scripts/create-hostinger-zip.mjs",
     "build": "npm run hostinger:build",
     "start": "node server.js",
-    "check": "node --check server.js && npm --prefix Server run check && npm --prefix Frontend/meitupaints run build"
+    "check": "node --check server.js && npm --prefix Server run check && npm --prefix Frontend/meitupaints run build",
+    "start:staging": "DOTENV_CONFIG_PATH=Server/.env.staging node server.js"
   }
 }

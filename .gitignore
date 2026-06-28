@@ -11,5 +11,6 @@ dist-packages/
 .env
 .env.*
 !.env.example
+!.env.*.example
 Server/.env
 Frontend/meitupaints/.env

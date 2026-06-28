@@ -146,14 +146,14 @@ export const verifyOrderController = asyncHandler(async (req, res) => {
 
 export const rejectOrderController = asyncHandler(async (req, res) => {
   const { orderId } = req.params || {};
-  const { reviewNote = "" } = req.body || {};
+  const { reviewNote = "", reason = "", note = "" } = req.body || {};
 
   if (!orderId) throw new ApiError(400, "Missing orderId");
 
   const item = await orderService.rejectOrder({
     orderId,
     actorUser: req.user,
-    reviewNote,
+    reviewNote: reviewNote || reason || note,
   });
 
   res.status(200).json({

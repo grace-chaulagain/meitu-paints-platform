@@ -77,6 +77,23 @@ const PricingSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const ProductStockSchema = new mongoose.Schema(
+  {
+    currentQuantity: { type: Number, default: 0, min: 0 },
+    reservedQuantity: { type: Number, default: 0, min: 0 },
+    lowStockThreshold: { type: Number, default: 0, min: 0 },
+    unit: { type: String, default: "", trim: true },
+    notes: { type: String, default: "", trim: true },
+    lastUpdatedAt: { type: Date, default: null },
+    lastUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 // ----------------------------
 // Product
 // ----------------------------
@@ -122,6 +139,11 @@ const ProductSchema = new mongoose.Schema(
     // Keep this for quick UI defaults. For tiered SKUs, you can set it to Tier-1 price.
     basePrice: { type: Number, default: 0 },
 
+    stock: {
+      type: ProductStockSchema,
+      default: () => ({}),
+    },
+
     isActive: { type: Boolean, default: true },
 
     meta: {
@@ -136,5 +158,7 @@ const ProductSchema = new mongoose.Schema(
 ProductSchema.index({ category: 1, isActive: 1 });
 ProductSchema.index({ name: "text", sku: "text", code: "text" });
 ProductSchema.index({ code: 1, "pack.size": 1, "pack.unit": 1 });
+ProductSchema.index({ "stock.currentQuantity": 1 });
+ProductSchema.index({ "stock.lowStockThreshold": 1 });
 
 export default mongoose.model("Product", ProductSchema);

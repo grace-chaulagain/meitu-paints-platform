@@ -600,6 +600,16 @@ export async function createOrder({
     dealerNote: normalizeText(dealerNote),
     internalNote: normalizeText(internalNote),
     status: ORDER_STATUS.SUBMITTED,
+    statusHistory: [
+      {
+        fromStatus: "",
+        toStatus: ORDER_STATUS.SUBMITTED,
+        note: "Order submitted by dealer.",
+        changedByUserId: getUserId(actorUser),
+        changedByRole: normalizeUpper(actorUser.role),
+        changedAt: new Date(),
+      },
+    ],
     submittedByUserId: getUserId(actorUser),
   });
 
@@ -638,7 +648,18 @@ export async function listOrdersForActor({
   if (normalizedStatus) {
     query.status = normalizedStatus;
   } else if (archive === true || String(archive) === "true") {
-    query.status = { $in: [ORDER_STATUS.VERIFIED, ORDER_STATUS.REJECTED] };
+    query.status = {
+      $in: [
+        ORDER_STATUS.VERIFIED,
+        ORDER_STATUS.REJECTED,
+        ORDER_STATUS.PROCESSING,
+        ORDER_STATUS.AWAITING_SHIPMENT,
+        ORDER_STATUS.OUT_FOR_DELIVERY,
+        ORDER_STATUS.DELIVERED,
+        ORDER_STATUS.CLOSED,
+        ORDER_STATUS.CANCELLED,
+      ],
+    };
   } else {
     query.status = ORDER_STATUS.SUBMITTED;
   }
@@ -842,6 +863,7 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
 
   const reviewMeta = await assertCanReviewOrder({ order, actorUser });
 
+  const previousStatus = order.status;
   order.status = ORDER_STATUS.VERIFIED;
   order.review = {
     reviewedByRole: reviewMeta.reviewedByRole,
@@ -849,28 +871,36 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
     reviewedAt: new Date(),
     reviewNote: normalizeText(reviewNote),
   };
+  order.statusHistory.push({
+    fromStatus: previousStatus || "",
+    toStatus: ORDER_STATUS.VERIFIED,
+    note: normalizeText(reviewNote) || "Order verified.",
+    changedByUserId: getUserId(actorUser),
+    changedByRole: normalizeUpper(actorUser.role),
+    changedAt: new Date(),
+  });
 
   const isFactoryOrder =
     (order.dealerSnapshot?.fulfillmentMode || "FACTORY") === "FACTORY";
 
   if (isFactoryOrder) {
     if (!smtpConfigured()) {
-      throw new ApiError(500, "SMTP is not configured");
+      console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
+    } else {
+      const recipients = await buildFactoryRecipients();
+      const mail = buildFactoryOrderEmail(order);
+      const pdfAttachment = buildOrderSummaryPdfAttachment(order);
+
+      await sendMail({
+        to: recipients,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
+        attachments: [pdfAttachment],
+      });
+
+      order.factoryEmailSentAt = new Date();
     }
-
-    const recipients = await buildFactoryRecipients();
-    const mail = buildFactoryOrderEmail(order);
-    const pdfAttachment = buildOrderSummaryPdfAttachment(order);
-
-    await sendMail({
-      to: recipients,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-      attachments: [pdfAttachment],
-    });
-
-    order.factoryEmailSentAt = new Date();
   }
 
   await order.save();
@@ -900,6 +930,11 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
 
   const reviewMeta = await assertCanReviewOrder({ order, actorUser });
 
+  if (!normalizeText(reviewNote)) {
+    throw new ApiError(400, "Rejection reason is required");
+  }
+
+  const previousStatus = order.status;
   order.status = ORDER_STATUS.REJECTED;
   order.review = {
     reviewedByRole: reviewMeta.reviewedByRole,
@@ -907,6 +942,21 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
     reviewedAt: new Date(),
     reviewNote: normalizeText(reviewNote),
   };
+  order.rejection = {
+    reason: normalizeText(reviewNote),
+    rejectedAt: new Date(),
+    rejectedBy: getUserId(actorUser),
+    rejectedByRole: normalizeUpper(actorUser.role),
+  };
+  order.statusHistory.push({
+    fromStatus: previousStatus || "",
+    toStatus: ORDER_STATUS.REJECTED,
+    note: normalizeText(reviewNote),
+    reason: normalizeText(reviewNote),
+    changedByUserId: getUserId(actorUser),
+    changedByRole: normalizeUpper(actorUser.role),
+    changedAt: new Date(),
+  });
 
   await order.save();
   return order;

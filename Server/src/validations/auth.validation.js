@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { emailSchema, optionalTrimmedString } from "./common.validation.js";
 
-const authRoleSchema = z.enum(["ADMIN", "DEALER", "DISPATCHER"]);
+const authRoleSchema = z.enum(["ADMIN", "DEALER", "DISPATCHER", "FACTORY"]);
 
 const passwordSchema = z.string().min(1).max(256);
 const newPasswordSchema = z

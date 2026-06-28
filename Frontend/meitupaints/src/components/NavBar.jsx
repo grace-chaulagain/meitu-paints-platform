@@ -64,6 +64,7 @@ function NavBar() {
   const profileHref = "/profile";
   const dashboardHref = "/admin/dashboard";
   const dispatcherDashboardHref = "/dispatcher/dashboard";
+  const factoryDashboardHref = "/factory/dashboard";
   const adminCatalogHref = "/admin/products";
   const dealerCatalogHref = "/dealer/catalog";
   const dealerOrdersHref = "/dealer/orders";
@@ -359,6 +360,17 @@ function NavBar() {
             {unreadBadge ? (
               <span className="account-menu-badge">{unreadBadge}</span>
             ) : null}
+          </Link>
+        ) : null}
+
+        {account.role === "FACTORY" ? (
+          <Link
+            to={factoryDashboardHref}
+            className="account-link-btn"
+            role="menuitem"
+            onClick={() => setProfileMenuOpen(false)}
+          >
+            Factory Dashboard
           </Link>
         ) : null}
 
@@ -729,6 +741,15 @@ function NavBar() {
                 onClick={() => setMobileOpen(false)}
               >
                 Dashboard{unreadBadge ? ` (${unreadBadge})` : ""}
+              </Link>
+            ) : null}
+
+            {account.role === "FACTORY" ? (
+              <Link
+                to={factoryDashboardHref}
+                onClick={() => setMobileOpen(false)}
+              >
+                Factory Dashboard
               </Link>
             ) : null}
 

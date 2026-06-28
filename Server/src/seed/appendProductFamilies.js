@@ -5,6 +5,10 @@ import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import ProductFamily from "../models/ProductFamily.model.js";
 import { MONGO_URI as CONFIG_MONGO_URI } from "../config/env.js";
+import {
+  assertSafeDatabaseWrite,
+  describeDatabaseTarget,
+} from "../utils/dbWriteSafety.js";
 
 dotenv.config();
 
@@ -119,6 +123,13 @@ const appendProductFamilies = async () => {
         "MONGO_URI is missing. Add it to Server/.env as MONGO_URI=... or ensure ../config/env.js exports it.",
       );
     }
+
+    assertSafeDatabaseWrite({
+      mongoUri,
+      operation: "append product families",
+      destructive: false,
+    });
+    console.log(`[db-write] ${describeDatabaseTarget(mongoUri)}`);
 
     await mongoose.connect(mongoUri);
     console.log("MongoDB Connected");

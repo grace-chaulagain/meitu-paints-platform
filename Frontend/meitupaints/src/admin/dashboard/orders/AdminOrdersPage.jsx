@@ -8,6 +8,7 @@ import {
   useGetAdminOrdersQuery,
   useGetVerifiedDispatchersQuery,
   useRejectAdminOrderMutation,
+  useSendAdminOrderToFactoryMutation,
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
@@ -788,6 +789,7 @@ function OrderViewModal({
   onAmend,
   onVerify,
   onReject,
+  onSendToFactory,
   onDelete,
 }) {
   if (!open || !order) return null;
@@ -953,6 +955,17 @@ function OrderViewModal({
             >
               {busyAction === `verify-${order._id}` ? "Verifying..." : "Verify"}
             </ActionButton>
+
+            {(order?.dealerSnapshot?.fulfillmentMode || "FACTORY") === "FACTORY" ? (
+              <ActionButton
+                onClick={() => onSendToFactory(order)}
+                disabled={busyAction === `factory-${order._id}`}
+              >
+                {busyAction === `factory-${order._id}`
+                  ? "Sending..."
+                  : "Send to Factory"}
+              </ActionButton>
+            ) : null}
 
             <ActionButton
               danger
@@ -1490,6 +1503,7 @@ export default function AdminOrdersPage() {
   const [rejectAdminOrder] = useRejectAdminOrderMutation();
   const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [deleteAdminOrder] = useDeleteAdminOrderMutation();
+  const [sendAdminOrderToFactory] = useSendAdminOrderToFactoryMutation();
 
   const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
   const dispatchers = useMemo(
@@ -1601,6 +1615,20 @@ export default function AdminOrdersPage() {
       rejectAdminOrder({
         orderId: order._id,
         payload: { reviewNote: reviewNote.trim() },
+      }).unwrap(),
+    );
+    if (success) {
+      setActiveOrder(null);
+      clearOrderQuery();
+    }
+  };
+
+  const handleSendToFactory = async (order) => {
+    const note = window.prompt("Optional Factory handoff note:", "") ?? "";
+    const success = await runAction(`factory-${order._id}`, () =>
+      sendAdminOrderToFactory({
+        orderId: order._id,
+        payload: { note: note.trim() },
       }).unwrap(),
     );
     if (success) {
@@ -1790,6 +1818,7 @@ export default function AdminOrdersPage() {
         }}
         onVerify={handleVerify}
         onReject={handleReject}
+        onSendToFactory={handleSendToFactory}
         onDelete={(order) => {
           setDeleteOrder(order);
           setDeleteConfirmation("");

@@ -5,7 +5,13 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const serverEnvPath = path.resolve(__dirname, "../../.env");
+const explicitEnvPath = process.env.DOTENV_CONFIG_PATH
+  ? path.resolve(process.cwd(), process.env.DOTENV_CONFIG_PATH)
+  : "";
 
+if (explicitEnvPath) {
+  dotenv.config({ path: explicitEnvPath, override: false });
+}
 dotenv.config();
 dotenv.config({ path: serverEnvPath, override: false });
 

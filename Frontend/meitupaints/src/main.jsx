@@ -80,6 +80,7 @@ import DispatcherDealerOrdersPage from "./dispatcher/dashboard/dealers/Dispatche
 import DispatcherProfileWorkspacePage from "./dispatcher/dashboard/DispatcherProfileWorkspacePage.jsx";
 import DispatcherRegisterPage from "./dispatcher/DispatcherRegisterPage.jsx";
 import DispatcherDashboardPage from "./dispatcher/dashboard/DispatcherDashboardPage.jsx";
+import FactoryDashboardPage from "./factory/FactoryDashboardPage.jsx";
 
 function Layout() {
   return (
@@ -129,6 +130,15 @@ function RequireDispatcher({ children }) {
   if (recoveringSession) return null;
   if (!user) return sessionExpired ? <SessionExpiredPrompt /> : <LoginRedirect />;
   if (String(user.role || "").toUpperCase() !== "DISPATCHER")
+    return <NotFoundPage />;
+  return children;
+}
+
+function RequireFactory({ children }) {
+  const { recoveringSession, user, sessionExpired } = useAuth();
+  if (recoveringSession) return null;
+  if (!user) return sessionExpired ? <SessionExpiredPrompt /> : <LoginRedirect />;
+  if (String(user.role || "").toUpperCase() !== "FACTORY")
     return <NotFoundPage />;
   return children;
 }
@@ -352,6 +362,14 @@ const router = createBrowserRouter([
       {
         path: "/dispatcher/apply",
         element: withFooter(<DispatcherRegisterPage />),
+      },
+      {
+        path: "/factory/dashboard/*",
+        element: (
+          <RequireFactory>
+            <FactoryDashboardPage />
+          </RequireFactory>
+        ),
       },
       {
         path: "/dispatcher/dashboard",

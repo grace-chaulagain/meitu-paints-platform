@@ -18,6 +18,10 @@ import mongoose from "mongoose";
 import User from "../models/User.model.js";
 import { ROLES } from "../constants/roles.js";
 import { hashPassword } from "../services/auth.service.js";
+import {
+  assertSafeDatabaseWrite,
+  describeDatabaseTarget,
+} from "../utils/dbWriteSafety.js";
 
 function argValue(flag) {
   const idx = process.argv.indexOf(flag);
@@ -58,6 +62,12 @@ async function main() {
   if (!password)
     throw new Error("Missing admin password (ADMIN_PASSWORD or --password)");
   validatePassword(password);
+
+  assertSafeDatabaseWrite({
+    mongoUri: MONGODB_URI,
+    operation: "seed admin user",
+  });
+  console.log(`[db-write] ${describeDatabaseTarget(MONGODB_URI)}`);
 
   await mongoose.connect(MONGODB_URI);
 

@@ -512,7 +512,7 @@ async function loginCore({
 
   const wantedRole = normalizeRole(role);
   if (wantedRole) {
-    const allowed = [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER];
+    const allowed = [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER, ROLES.FACTORY];
     if (!allowed.includes(wantedRole)) {
       throw new ApiError(400, "Invalid role");
     }
@@ -718,7 +718,7 @@ export async function requestPasswordReset(email) {
   const user = await User.findOne({
     email: normalizedEmail,
     isActive: true,
-    role: { $in: [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER] },
+    role: { $in: [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER, ROLES.FACTORY] },
     accountStatus: { $ne: USER_ACCOUNT_STATUS.SUSPENDED },
   }).select(
     "username email role dealerId dispatcherId isActive accountStatus +passwordHash",

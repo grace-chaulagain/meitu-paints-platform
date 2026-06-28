@@ -159,7 +159,18 @@ export default function UserLogin() {
         }),
       );
 
-      nav(getSafeReturnTo(location.search) || "/");
+      const defaultDestination =
+        role === "ADMIN"
+          ? "/admin/dashboard"
+          : role === "DISPATCHER"
+            ? "/dispatcher/dashboard"
+            : role === "FACTORY"
+              ? "/factory/dashboard"
+              : role === "DEALER"
+                ? "/dealer/catalog"
+                : "/";
+
+      nav(getSafeReturnTo(location.search) || defaultDestination);
     } catch (err) {
       const message = getApiErrorMessage(
         err,

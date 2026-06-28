@@ -2,8 +2,24 @@ import mongoose from "mongoose";
 
 const ORDER_STATUS = Object.freeze({
   SUBMITTED: "SUBMITTED",
+  PROCESSING: "PROCESSING",
+  AWAITING_SHIPMENT: "AWAITING_SHIPMENT",
+  OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
+  DELIVERED: "DELIVERED",
   VERIFIED: "VERIFIED",
   REJECTED: "REJECTED",
+  APPROVED: "APPROVED",
+  SENT_TO_DISPATCHER: "SENT_TO_DISPATCHER",
+  DISPATCHED: "DISPATCHED",
+  CLOSED: "CLOSED",
+  CANCELLED: "CANCELLED",
+});
+
+const FACTORY_STAGE = Object.freeze({
+  INBOX: "INBOX",
+  PREPARING: "PREPARING",
+  SHIPMENT: "SHIPMENT",
+  COMPLETED: "COMPLETED",
 });
 
 const ORDER_REVIEWED_BY = Object.freeze({
@@ -175,7 +191,7 @@ const OrderAmendmentSchema = new mongoose.Schema(
 
     amendedByRole: {
       type: String,
-      enum: ["ADMIN", "DISPATCHER"],
+      enum: ["ADMIN", "DISPATCHER", "FACTORY"],
       required: true,
     },
 
@@ -199,6 +215,44 @@ const OrderAmendmentSchema = new mongoose.Schema(
   {
     _id: false,
   },
+);
+
+const OrderStatusHistorySchema = new mongoose.Schema(
+  {
+    fromStatus: { type: String, default: "", trim: true },
+    toStatus: {
+      type: String,
+      enum: Object.values(ORDER_STATUS),
+      required: true,
+    },
+    note: { type: String, default: "", trim: true },
+    reason: { type: String, default: "", trim: true },
+    changedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    changedByRole: { type: String, default: "", trim: true },
+    changedAt: { type: Date, default: Date.now },
+    dealerEmailSentAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+const StockDeductionLineSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      default: null,
+    },
+    sku: { type: String, default: "", trim: true },
+    name: { type: String, default: "", trim: true },
+    previousQuantity: { type: Number, default: 0 },
+    deductedQuantity: { type: Number, default: 0 },
+    newQuantity: { type: Number, default: 0 },
+  },
+  { _id: false },
 );
 
 const OrderSchema = new mongoose.Schema(
@@ -300,6 +354,11 @@ const OrderSchema = new mongoose.Schema(
       index: true,
     },
 
+    statusHistory: {
+      type: [OrderStatusHistorySchema],
+      default: [],
+    },
+
     review: {
       type: OrderReviewSchema,
       default: () => ({}),
@@ -313,6 +372,64 @@ const OrderSchema = new mongoose.Schema(
     factoryEmailSentAt: {
       type: Date,
       default: null,
+    },
+
+    factoryStage: {
+      type: String,
+      enum: Object.values(FACTORY_STAGE),
+      default: null,
+      index: true,
+    },
+
+    factory: {
+      sentToFactoryAt: { type: Date, default: null },
+      sentToFactoryBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      preparingAt: { type: Date, default: null },
+      preparingBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      outForDeliveryAt: { type: Date, default: null },
+      outForDeliveryBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      deliveredAt: { type: Date, default: null },
+      deliveredBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      driverName: { type: String, default: "", trim: true },
+      driverPhone: { type: String, default: "", trim: true },
+      remarks: { type: String, default: "", trim: true },
+    },
+
+    rejection: {
+      reason: { type: String, default: "", trim: true },
+      rejectedAt: { type: Date, default: null },
+      rejectedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      rejectedByRole: { type: String, default: "", trim: true },
+    },
+
+    stockDeduction: {
+      deductedAt: { type: Date, default: null },
+      deductedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      lines: { type: [StockDeductionLineSchema], default: [] },
     },
 
     externalArchives: {
@@ -365,6 +482,7 @@ const OrderSchema = new mongoose.Schema(
 OrderSchema.index({ dealerId: 1, createdAt: -1 });
 OrderSchema.index({ dispatcherId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ factoryStage: 1, createdAt: -1 });
 OrderSchema.index({ "deletion.pending": 1, "deletion.deleteAfter": 1 });
 OrderSchema.index({
   "dealerSnapshot.fulfillmentMode": 1,
@@ -405,8 +523,13 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
   }
 
   if (
-    this.status === ORDER_STATUS.VERIFIED ||
-    this.status === ORDER_STATUS.REJECTED
+    [
+      ORDER_STATUS.VERIFIED,
+      ORDER_STATUS.REJECTED,
+      ORDER_STATUS.DELIVERED,
+      ORDER_STATUS.CLOSED,
+      ORDER_STATUS.CANCELLED,
+    ].includes(this.status)
   ) {
     this.archivedAt = this.archivedAt || new Date();
   } else {
@@ -414,5 +537,5 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
   }
 });
 
-export { ORDER_STATUS, ORDER_REVIEWED_BY };
+export { ORDER_STATUS, ORDER_REVIEWED_BY, FACTORY_STAGE };
 export default mongoose.model("Order", OrderSchema);

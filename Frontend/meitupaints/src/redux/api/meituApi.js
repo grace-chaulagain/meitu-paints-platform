@@ -9,6 +9,8 @@ const PROFILE_CACHE_SECONDS = 3 * 60;
 const REPORT_CACHE_SECONDS = 2 * 60;
 const INSIGHT_CACHE_SECONDS = 3 * 60;
 const VERIFIED_DISPATCHERS_CACHE_SECONDS = 4 * 60;
+const STOCK_CACHE_SECONDS = 2 * 60;
+const FACTORY_CACHE_SECONDS = 60;
 
 function getItems(response) {
   return response?.items || response?.products || [];
@@ -57,6 +59,7 @@ function orderMutationTags(orderId) {
         { type: "DispatcherOrder", id: orderId },
         { type: "AdminDealerOrder", id: orderId },
         { type: "DispatcherDealerOrder", id: orderId },
+        { type: "FactoryOrder", id: orderId },
       ]
     : [];
 
@@ -67,9 +70,11 @@ function orderMutationTags(orderId) {
     listTag("DispatcherOrder"),
     listTag("AdminDealerOrder"),
     listTag("DispatcherDealerOrder"),
+    listTag("FactoryOrder"),
     listTag("Dashboard"),
     listTag("AdminDashboard"),
     listTag("DispatcherDashboard"),
+    listTag("FactoryDashboard"),
     listTag("Report"),
     listTag("Insight"),
     listTag("AdminInsight"),
@@ -147,6 +152,12 @@ export const meituApi = createApi({
     "DispatcherApplication",
     "DispatcherDealer",
     "DispatcherProfile",
+    "Stock",
+    "StockHistory",
+    "StockAdjustment",
+    "FactoryOrder",
+    "FactoryDashboard",
+    "ProformaInvoice",
     "Notification",
     "Dashboard",
     "AdminDashboard",
@@ -758,6 +769,174 @@ export const meituApi = createApi({
       providesTags: (response) => listResponseTags("DispatcherDealer", response),
     }),
 
+    getFactoryDashboard: builder.query({
+      query: () => ({ url: "/api/factory/dashboard" }),
+      transformResponse: getItem,
+      keepUnusedDataFor: FACTORY_CACHE_SECONDS,
+      providesTags: () => [listTag("FactoryDashboard")],
+    }),
+
+    getStock: builder.query({
+      query: (params = {}) => ({ url: "/api/stock", params }),
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("Stock", response),
+        listTag("StockHistory"),
+      ],
+    }),
+
+    getStockDetail: builder.query({
+      query: (productId) => ({ url: `/api/stock/${productId}` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      providesTags: (response) => {
+        const id = response?._id || response?.productId || response?.id;
+        return id ? [listTag("Stock"), { type: "Stock", id }] : [listTag("Stock")];
+      },
+    }),
+
+    getStockHistory: builder.query({
+      query: ({ productId, ...params }) => ({
+        url: `/api/stock/${productId}/history`,
+        params,
+      }),
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      providesTags: (_response, _error, arg) => [
+        listTag("StockHistory"),
+        ...(arg?.productId ? [{ type: "StockHistory", id: arg.productId }] : []),
+      ],
+    }),
+
+    updateStockQuantity: builder.mutation({
+      query: ({ productId, payload }) => ({
+        url: `/api/stock/${productId}`,
+        method: "PATCH",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("Stock"),
+        listTag("StockHistory"),
+        listTag("StockAdjustment"),
+        listTag("FactoryDashboard"),
+        ...(arg?.productId
+          ? [
+              { type: "Stock", id: arg.productId },
+              { type: "StockHistory", id: arg.productId },
+            ]
+          : []),
+      ],
+    }),
+
+    updateStockThreshold: builder.mutation({
+      query: ({ productId, payload }) => ({
+        url: `/api/stock/${productId}/threshold`,
+        method: "PATCH",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("Stock"),
+        listTag("StockHistory"),
+        listTag("StockAdjustment"),
+        listTag("FactoryDashboard"),
+        ...(arg?.productId
+          ? [
+              { type: "Stock", id: arg.productId },
+              { type: "StockHistory", id: arg.productId },
+            ]
+          : []),
+      ],
+    }),
+
+    getFactoryOrders: builder.query({
+      query: (params = {}) => ({ url: "/api/factory/orders", params }),
+      keepUnusedDataFor: FACTORY_CACHE_SECONDS,
+      providesTags: (response) => listResponseTags("FactoryOrder", response),
+    }),
+
+    getFactoryOrder: builder.query({
+      query: (orderId) => ({ url: `/api/factory/orders/${orderId}` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: FACTORY_CACHE_SECONDS,
+      providesTags: (response) => itemResponseTags("FactoryOrder", response),
+    }),
+
+    startFactoryOrderPreparing: builder.mutation({
+      query: ({ orderId, payload = {} }) => ({
+        url: `/api/factory/orders/${orderId}/start-preparing`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    markFactoryOrderOutForDelivery: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/factory/orders/${orderId}/mark-out-for-delivery`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => [
+        ...orderMutationTags(arg?.orderId),
+        listTag("Stock"),
+        listTag("StockHistory"),
+        listTag("StockAdjustment"),
+      ],
+    }),
+
+    markFactoryOrderDelivered: builder.mutation({
+      query: ({ orderId, payload = {} }) => ({
+        url: `/api/factory/orders/${orderId}/mark-delivered`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    rejectFactoryOrder: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/factory/orders/${orderId}/reject`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    amendFactoryOrder: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/factory/orders/${orderId}/amend`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    getProformaInvoice: builder.query({
+      query: (orderId) => ({ url: `/api/factory/orders/${orderId}/proforma` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: FACTORY_CACHE_SECONDS,
+      providesTags: (_result, _error, orderId) => [
+        listTag("ProformaInvoice"),
+        ...(orderId ? [{ type: "ProformaInvoice", id: orderId }] : []),
+      ],
+    }),
+
+    sendAdminOrderToFactory: builder.mutation({
+      query: ({ orderId, payload = {} }) => ({
+        url: `/api/admin/orders/${orderId}/send-to-factory`,
+        method: "POST",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
     getAdminOrderStatementReport: builder.query({
       query: (params = {}) => ({
         url: "/api/admin/reports/order-statements",
@@ -850,6 +1029,22 @@ export const {
   useUndoAdminDispatcherDeletionMutation,
   useGetMyDispatcherProfileQuery,
   useGetDispatcherDealersQuery,
+  useGetFactoryDashboardQuery,
+  useGetStockQuery,
+  useGetStockDetailQuery,
+  useGetStockHistoryQuery,
+  useUpdateStockQuantityMutation,
+  useUpdateStockThresholdMutation,
+  useGetFactoryOrdersQuery,
+  useGetFactoryOrderQuery,
+  useStartFactoryOrderPreparingMutation,
+  useMarkFactoryOrderOutForDeliveryMutation,
+  useMarkFactoryOrderDeliveredMutation,
+  useRejectFactoryOrderMutation,
+  useAmendFactoryOrderMutation,
+  useGetProformaInvoiceQuery,
+  useLazyGetProformaInvoiceQuery,
+  useSendAdminOrderToFactoryMutation,
   useLazyGetAdminOrderStatementReportQuery,
   useLazyGetDealerOrderStatementReportQuery,
   useGetAdminInsightsQuery,

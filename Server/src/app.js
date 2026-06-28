@@ -20,6 +20,7 @@ import { publicReadRateLimit } from "./middlewares/rateLimit.middleware.js";
 import "./models/FactorySettings.model.js";
 import "./models/AdminNotificationSettings.model.js";
 import "./models/Notification.model.js";
+import "./models/StockAdjustmentLog.model.js";
 
 const app = express();
 const clientIndexPath = path.join(CLIENT_DIST_DIR, "index.html");
