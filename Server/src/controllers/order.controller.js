@@ -80,6 +80,21 @@ export const getOrderController = asyncHandler(async (req, res) => {
   });
 });
 
+export const getOrderStockCheckController = asyncHandler(async (req, res) => {
+  const { orderId } = req.params || {};
+  if (!orderId) throw new ApiError(400, "Missing orderId");
+
+  const item = await orderService.getOrderStockCheck({
+    orderId,
+    actorUser: req.user,
+  });
+
+  res.status(200).json({
+    ok: true,
+    item,
+  });
+});
+
 // ----------------------------
 // Amend order
 // ----------------------------

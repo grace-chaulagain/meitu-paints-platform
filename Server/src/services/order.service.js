@@ -16,8 +16,14 @@ import {
   notifyAssignedDealerOrderSubmitted,
   notifyFactoryOrderSubmitted,
 } from "./adminNotification.service.js";
+import { sendOrderToFactory } from "./factory.service.js";
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { buildOrderSummaryPdfAttachment } from "./orderPdf.service.js";
+import {
+  checkOrderStock,
+  releaseReservationForOrder,
+  reserveStockForOrder,
+} from "./stock.service.js";
 
 function getFactorySettingsModel() {
   const model = mongoose.models.FactorySettings;
@@ -766,6 +772,29 @@ export async function getOrderForActor({ orderId, actorUser }) {
   return order;
 }
 
+export async function getOrderStockCheck({ orderId, actorUser }) {
+  assertUser(actorUser);
+  if (!isAdmin(actorUser)) {
+    throw new ApiError(403, "Admin access required");
+  }
+  if (!orderId) {
+    throw new ApiError(400, "Missing orderId");
+  }
+
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  const out = await checkOrderStock(order);
+  return {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    reservationStatus: order.stockReservation?.status || "NONE",
+    ...out,
+  };
+}
+
 // ----------------------------
 // Amend order
 // ----------------------------
@@ -834,14 +863,6 @@ export async function amendOrder({
 
   await order.save();
 
-  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
-    console.error("[google-sheets-archive] Failed to archive verified order", {
-      orderId: String(order._id),
-      orderNumber: order.orderNumber,
-      message: error?.message,
-    });
-  });
-
   return order;
 }
 
@@ -884,6 +905,13 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
     (order.dealerSnapshot?.fulfillmentMode || "FACTORY") === "FACTORY";
 
   if (isFactoryOrder) {
+    await reserveStockForOrder({
+      order,
+      actorUser,
+      reason: "Admin verified order for Factory fulfillment",
+      note: normalizeText(reviewNote),
+    });
+
     if (!smtpConfigured()) {
       console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
     } else {
@@ -905,15 +933,26 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
 
   await order.save();
 
-  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
+  let finalOrder = order;
+  if (isFactoryOrder) {
+    finalOrder = await sendOrderToFactory({
+      orderId: order._id,
+      adminUser: actorUser,
+      note:
+        normalizeText(reviewNote) ||
+        "Order verified and automatically sent to Factory.",
+    });
+  }
+
+  archiveVerifiedOrderToGoogleSheets(finalOrder).catch((error) => {
     console.error("[google-sheets-archive] Failed to archive verified order", {
-      orderId: String(order._id),
-      orderNumber: order.orderNumber,
+      orderId: String(finalOrder._id),
+      orderNumber: finalOrder.orderNumber,
       message: error?.message,
     });
   });
 
-  return order;
+  return finalOrder;
 }
 
 export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
@@ -935,6 +974,13 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
   }
 
   const previousStatus = order.status;
+  await releaseReservationForOrder({
+    order,
+    actorUser,
+    reason: "Order rejected during review",
+    note: normalizeText(reviewNote),
+  });
+
   order.status = ORDER_STATUS.REJECTED;
   order.review = {
     reviewedByRole: reviewMeta.reviewedByRole,

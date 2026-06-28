@@ -72,6 +72,10 @@ function orderMutationTags(orderId) {
     listTag("DispatcherDealerOrder"),
     listTag("FactoryOrder"),
     listTag("FactoryInvoice"),
+    listTag("Stock"),
+    listTag("StockHistory"),
+    listTag("StockAdjustment"),
+    listTag("DealerProfile"),
     listTag("Dashboard"),
     listTag("AdminDashboard"),
     listTag("DispatcherDashboard"),
@@ -387,6 +391,22 @@ export const meituApi = createApi({
       providesTags: (response, _error, orderId) => [
         ...itemResponseTags("AdminOrder", response),
         { type: "Order", id: orderId },
+      ],
+    }),
+
+    getAdminOrderStockCheck: builder.query({
+      query: (orderId) => ({ url: `/api/orders/${orderId}/stock-check` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: 15,
+      providesTags: (_response, _error, orderId) => [
+        listTag("Stock"),
+        listTag("AdminOrder"),
+        ...(orderId
+          ? [
+              { type: "Order", id: orderId },
+              { type: "AdminOrder", id: orderId },
+            ]
+          : []),
       ],
     }),
 
@@ -1012,6 +1032,7 @@ export const {
   useCreateDealerOrderMutation,
   useGetAdminOrdersQuery,
   useGetAdminOrderQuery,
+  useGetAdminOrderStockCheckQuery,
   useGetAdminScopedOrdersQuery,
   useGetAdminScopedOrderQuery,
   useLazyGetAdminScopedOrderQuery,

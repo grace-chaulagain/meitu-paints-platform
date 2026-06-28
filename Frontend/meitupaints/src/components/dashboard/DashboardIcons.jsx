@@ -80,6 +80,12 @@ const paths = {
       <path d="m8 12 2.6 2.6L16.5 9" />
     </>
   ),
+  play: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m10 8 6 4-6 4V8Z" />
+    </>
+  ),
   truck: (
     <>
       <path d="M3 6h11v9H3V6Z" />

@@ -52,11 +52,11 @@ const ROUTES = {
 };
 
 const ORDER_LANES = [
-  { key: "INBOX", label: "Inbox" },
-  { key: "PREPARING", label: "Preparing" },
-  { key: "SHIPMENT", label: "Shipment" },
-  { key: "COMPLETED", label: "Completed" },
-  { key: "REJECTED", label: "Rejected" },
+  { key: "INBOX", label: "Inbox", icon: "orders" },
+  { key: "PREPARING", label: "Preparing", icon: "play" },
+  { key: "SHIPMENT", label: "Shipment", icon: "truck" },
+  { key: "COMPLETED", label: "Completed", icon: "check" },
+  { key: "REJECTED", label: "Rejected", icon: "reject" },
 ];
 
 const STOCK_STATUS_OPTIONS = [
@@ -154,6 +154,51 @@ function priorityForOrder(order) {
   if (hours >= 24) return "High";
   if (hours >= 8) return "Medium";
   return "Normal";
+}
+
+function orderStatus(order) {
+  return String(order?.status || "").toUpperCase();
+}
+
+function isOrderAwaitingFactory(order) {
+  return ["AWAITING_SHIPMENT", "VERIFIED"].includes(orderStatus(order));
+}
+
+function isOrderPreparing(order) {
+  return orderStatus(order) === "PROCESSING";
+}
+
+function isOrderInShipment(order) {
+  return orderStatus(order) === "OUT_FOR_DELIVERY";
+}
+
+function isOrderDone(order) {
+  return ["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(orderStatus(order));
+}
+
+function nextFactoryStep(order) {
+  if (isOrderAwaitingFactory(order)) return "Start preparation";
+  if (isOrderPreparing(order)) return "Generate invoice, assign driver, dispatch";
+  if (isOrderInShipment(order)) return "Mark delivered after dealer handoff";
+  if (orderStatus(order) === "DELIVERED") return "Delivery completed";
+  if (orderStatus(order) === "REJECTED") return "Order rejected";
+  return "Review order";
+}
+
+function reservationLabel(order) {
+  const status = String(order?.stockReservation?.status || "NONE").toUpperCase();
+  if (status === "RESERVED") return "Reserved";
+  if (status === "CONSUMED") return "Deducted";
+  if (status === "RELEASED") return "Released";
+  return "Not reserved";
+}
+
+function stockCheckTone(status = "") {
+  const normalized = String(status).toUpperCase();
+  if (normalized === "AVAILABLE") return "success";
+  if (normalized === "LOW") return "warning";
+  if (["INSUFFICIENT", "OUT_OF_STOCK"].includes(normalized)) return "danger";
+  return "neutral";
 }
 
 function makeActivity({ orders = [], history = [] }) {
@@ -336,6 +381,7 @@ function StatusTabs({ value, options, counts = {}, onChange }) {
             key={option.key}
             onClick={() => onChange(option.key)}
           >
+            {option.icon ? <DashboardIcon name={option.icon} size={15} /> : null}
             <span>{option.label}</span>
             {typeof counts[option.key] === "number" ? (
               <strong>{counts[option.key]}</strong>
@@ -588,7 +634,7 @@ function OverviewPage({ globalSearch, onNavigate }) {
   );
 }
 
-function OrderDrawer({ order, onClose, onInvoice }) {
+function OrderDrawer({ order, onClose, onInvoice, onOrderChange }) {
   const [driverName, setDriverName] = useState(order?.factory?.driverName || "");
   const [driverPhone, setDriverPhone] = useState(order?.factory?.driverPhone || "");
   const [vehicleNumber, setVehicleNumber] = useState(order?.factory?.vehicleNumber || "");
@@ -601,7 +647,6 @@ function OrderDrawer({ order, onClose, onInvoice }) {
     stock: false,
     packing: false,
     invoice: false,
-    driver: Boolean(order?.factory?.driverName),
     quality: false,
   });
   const [startPreparing, preparingState] = useStartFactoryOrderPreparingMutation();
@@ -615,14 +660,27 @@ function OrderDrawer({ order, onClose, onInvoice }) {
     deliveredState.isLoading ||
     rejectState.isLoading ||
     amendState.isLoading;
+  const canStart = isOrderAwaitingFactory(order);
+  const canDispatch = isOrderPreparing(order);
+  const canDeliver = isOrderInShipment(order);
+  const canAmend = isOrderAwaitingFactory(order) || isOrderPreparing(order);
+  const canReject = !isOrderDone(order);
+  const canInvoice = isOrderPreparing(order) || isOrderInShipment(order) || orderStatus(order) === "DELIVERED";
+  const driverReady = Boolean(driverName.trim() && driverPhone.trim());
   const readyForShipment =
-    Object.values(checklist).every(Boolean) && driverName.trim() && driverPhone.trim();
+    checklist.stock && checklist.packing && checklist.invoice && checklist.quality && driverReady;
+  const stockRows = order?.stockCheck?.items || [];
+  const reservationStatus = reservationLabel(order);
+  const hasReservedStock = String(order?.stockReservation?.status || "").toUpperCase() === "RESERVED";
+  const hasDeductedStock = Boolean(order?.stockDeduction?.deductedAt);
 
   const run = async (fn) => {
     setError("");
     try {
-      await fn();
-      onClose();
+      const updatedOrder = await fn();
+      if (updatedOrder?._id) {
+        onOrderChange?.(updatedOrder);
+      }
     } catch (err) {
       setError(err?.data?.message || err?.message || "Action failed.");
     }
@@ -632,6 +690,11 @@ function OrderDrawer({ order, onClose, onInvoice }) {
     setChecklist((current) => ({ ...current, [key]: !current[key] }));
   };
 
+  const handleInvoice = () => {
+    setChecklist((current) => ({ ...current, invoice: true }));
+    onInvoice(order._id);
+  };
+
   return (
     <Drawer
       title={order.orderNumber}
@@ -639,103 +702,169 @@ function OrderDrawer({ order, onClose, onInvoice }) {
       onClose={onClose}
       wide
     >
+      <div className="stage-banner">
+        <div>
+          <span>Current step</span>
+          <strong>{statusLabel(laneForOrder(order))}</strong>
+          <small>{nextFactoryStep(order)}</small>
+        </div>
+        <span className={`status-pill ${String(order.status || "").toLowerCase()}`}>
+          {statusLabel(order.status)}
+        </span>
+      </div>
+
       <div className="drawer-actions sticky">
-        <button
-          type="button"
-          onClick={() =>
-            run(() =>
-              startPreparing({ orderId: order._id, payload: { note: remarks } }).unwrap(),
-            )
-          }
-          disabled={busy}
-        >
-          <IconText icon="check">Start Preparing</IconText>
-        </button>
-        <button
-          type="button"
-          disabled={busy || !amendReason.trim()}
-          onClick={() =>
-            run(() =>
-              amendOrder({
-                orderId: order._id,
-                payload: { reason: amendReason, note: amendNote || remarks },
-              }).unwrap(),
-            )
-          }
-        >
-          <IconText icon="edit">Amend Order</IconText>
-        </button>
-        <button type="button" onClick={() => onInvoice(order._id)}>
-          <IconText icon="invoice">Proforma</IconText>
-        </button>
-        <button
-          type="button"
-          disabled={busy || !readyForShipment}
-          onClick={() =>
-            run(() =>
-              markOut({
-                orderId: order._id,
-                payload: { driverName, driverPhone, vehicleNumber, remarks },
-              }).unwrap(),
-            )
-          }
-        >
-          <IconText icon="truck">Out for Delivery</IconText>
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            run(() =>
-              markDelivered({ orderId: order._id, payload: { note: remarks } }).unwrap(),
-            )
-          }
-        >
-          <IconText icon="check">Delivered</IconText>
-        </button>
-        <button
-          type="button"
-          className="danger"
-          disabled={busy || !rejectReason.trim()}
-          onClick={() =>
-            run(() =>
-              rejectOrder({
-                orderId: order._id,
-                payload: { reason: rejectReason, note: remarks },
-              }).unwrap(),
-            )
-          }
-        >
-          <IconText icon="reject">Reject</IconText>
-        </button>
+        {canStart ? (
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() =>
+              run(() =>
+                startPreparing({ orderId: order._id, payload: { note: remarks } }).unwrap(),
+              )
+            }
+            disabled={busy}
+          >
+            <IconText icon="play">Prepare</IconText>
+          </button>
+        ) : null}
+        {canInvoice ? (
+          <button type="button" onClick={handleInvoice} disabled={busy}>
+            <IconText icon="invoice">Invoice</IconText>
+          </button>
+        ) : null}
+        {canDispatch ? (
+          <button
+            type="button"
+            className="primary-action"
+            disabled={busy || !readyForShipment}
+            title={
+              readyForShipment
+                ? "Dispatch order"
+                : "Complete checklist and driver details first"
+            }
+            onClick={() => {
+              const confirmed = window.confirm(
+                `Dispatch ${order.orderNumber || "this order"} now?\n\nThis will consume the reserved stock and mark the order out for delivery.`,
+              );
+              if (!confirmed) return;
+              run(() =>
+                markOut({
+                  orderId: order._id,
+                  payload: { driverName, driverPhone, vehicleNumber, remarks },
+                }).unwrap(),
+              );
+            }}
+          >
+            <IconText icon="truck">Dispatch</IconText>
+          </button>
+        ) : null}
+        {canDeliver ? (
+          <button
+            type="button"
+            className="primary-action"
+            disabled={busy}
+            onClick={() =>
+              run(() =>
+                markDelivered({ orderId: order._id, payload: { note: remarks } }).unwrap(),
+              )
+            }
+          >
+            <IconText icon="check">Delivered</IconText>
+          </button>
+        ) : null}
+        {!canStart && !canInvoice && !canDispatch && !canDeliver ? (
+          <span className="drawer-stage-note">No pending factory action</span>
+        ) : null}
       </div>
       {error ? <div className="alert-line">{error}</div> : null}
-      <details open>
-        <summary>Order Preparation</summary>
-        <div className="checklist">
-          {[
-            ["stock", "Stock Available"],
-            ["packing", "Packing Complete"],
-            ["invoice", "Invoice Generated"],
-            ["driver", "Driver Assigned"],
-            ["quality", "Quality Checked"],
-          ].map(([key, label]) => (
-            <label key={key}>
-              <input
-                type="checkbox"
-                checked={checklist[key]}
-                onChange={() => toggleChecklist(key)}
-              />
-              <span>{label}</span>
-            </label>
-          ))}
+
+      <section className="drawer-section workflow-section">
+        <div className="drawer-section-head">
+          <div>
+            <span>Workflow</span>
+            <h3>Order preparation</h3>
+          </div>
+          <div className={readyForShipment ? "ready-line success" : "ready-line"}>
+            {readyForShipment ? "Ready for shipment" : nextFactoryStep(order)}
+          </div>
         </div>
-        <div className="ready-line">
-          {readyForShipment ? "Ready for shipment" : "Complete checklist and driver details"}
-        </div>
-      </details>
-      <details open>
-        <summary>Dealer Information</summary>
+
+        {canStart ? (
+          <p className="drawer-hint">
+            Start preparation to unlock checklist, driver details, invoice, and dispatch controls.
+          </p>
+        ) : null}
+
+        {canDispatch ? (
+          <>
+            <div className="checklist">
+              {[
+                ["stock", "Stock Available"],
+                ["packing", "Packing Complete"],
+                ["invoice", "Invoice Generated"],
+                ["quality", "Quality Checked"],
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <input
+                    type="checkbox"
+                    checked={checklist[key]}
+                    onChange={() => toggleChecklist(key)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <label className={driverReady ? "ready" : ""}>
+                <DashboardIcon name="truck" size={16} />
+                <span>{driverReady ? "Driver Ready" : "Driver Details Needed"}</span>
+              </label>
+            </div>
+            <div className="form-grid shipment-form">
+              <label>
+                Driver Name
+                <input value={driverName} onChange={(event) => setDriverName(event.target.value)} />
+              </label>
+              <label>
+                Driver Phone
+                <input value={driverPhone} onChange={(event) => setDriverPhone(event.target.value)} />
+              </label>
+              <label>
+                Vehicle Number
+                <input
+                  value={vehicleNumber}
+                  onChange={(event) => setVehicleNumber(event.target.value)}
+                />
+              </label>
+              <label>
+                Dispatch Remarks
+                <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} />
+              </label>
+            </div>
+          </>
+        ) : null}
+
+        {(canDeliver || isOrderDone(order)) && (driverName || driverPhone || vehicleNumber) ? (
+          <div className="info-grid">
+            <span>Driver</span>
+            <strong>{driverName || "-"}</strong>
+            <span>Phone</span>
+            <strong>{driverPhone || "-"}</strong>
+            <span>Vehicle</span>
+            <strong>{vehicleNumber || "-"}</strong>
+            <span>Remarks</span>
+            <strong>{remarks || "-"}</strong>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="drawer-section-grid">
+        <section className="drawer-section">
+          <div className="drawer-section-head">
+            <div>
+              <span>Dealer</span>
+              <h3>Dealer information</h3>
+            </div>
+          </div>
         <div className="info-grid">
           <span>Dealer</span>
           <strong>{order.dealerSnapshot?.companyName || "-"}</strong>
@@ -746,9 +875,111 @@ function OrderDrawer({ order, onClose, onInvoice }) {
           <span>Phone</span>
           <strong>{order.dealerSnapshot?.phone || "-"}</strong>
         </div>
-      </details>
-      <details open>
-        <summary>Product List</summary>
+        </section>
+
+        <section className="drawer-section">
+          <div className="drawer-section-head">
+            <div>
+              <span>Payment</span>
+              <h3>Order summary</h3>
+            </div>
+          </div>
+          <div className="info-grid">
+            <span>Products</span>
+            <strong>{productCount(order)}</strong>
+            <span>Total</span>
+            <strong>{currency(order.totals?.total, order.totals?.currency)}</strong>
+            <span>Payment</span>
+            <strong>{order.payment?.method || "-"}</strong>
+            <span>Reference</span>
+            <strong>{order.payment?.reference || "-"}</strong>
+          </div>
+        </section>
+
+        <section className="drawer-section">
+          <div className="drawer-section-head">
+            <div>
+              <span>Stage</span>
+              <h3>Factory status</h3>
+            </div>
+          </div>
+          <div className="info-grid">
+            <span>Stage</span>
+            <strong>{statusLabel(order.factoryStage || laneForOrder(order))}</strong>
+            <span>Status</span>
+            <strong>{statusLabel(order.status)}</strong>
+            <span>Priority</span>
+            <strong>{priorityForOrder(order)}</strong>
+            <span>Received</span>
+            <strong>{compactDate(order.factory?.sentToFactoryAt || order.createdAt)}</strong>
+            <span>Stock</span>
+            <strong>{reservationStatus}</strong>
+            <span>Deduction</span>
+            <strong>{hasDeductedStock ? "Deducted" : hasReservedStock ? "Pending dispatch" : "Not deducted"}</strong>
+          </div>
+        </section>
+      </div>
+
+      <section className="drawer-section stock-snapshot-section">
+        <div className="drawer-section-head">
+          <div>
+            <span>Stock</span>
+            <h3>Reservation snapshot</h3>
+          </div>
+          <span className={`stock-state-chip ${hasReservedStock || hasDeductedStock ? "success" : "neutral"}`}>
+            {reservationStatus}
+          </span>
+        </div>
+        <div className="table-wrap">
+          <table className="dense-table stock-snapshot-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Requested</th>
+                <th>Current</th>
+                <th>Reserved</th>
+                <th>Available</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stockRows.map((row, index) => (
+                <tr key={`${row.sku || row.name || "stock"}-${index}`}>
+                  <td>
+                    <strong>{row.name || "Product"}</strong>
+                    <span>{row.sku || "No SKU"}</span>
+                  </td>
+                  <td>{Number(row.requestedQuantity || 0).toLocaleString()}</td>
+                  <td>{Number(row.currentQuantity || 0).toLocaleString()}</td>
+                  <td>{Number(row.reservedQuantity || 0).toLocaleString()}</td>
+                  <td>{Number(row.availableQuantity || 0).toLocaleString()}</td>
+                  <td>
+                    <span className={`stock-state-chip ${stockCheckTone(row.status)}`}>
+                      {statusLabel(row.status)}
+                    </span>
+                    {row.message ? <small>{row.message}</small> : null}
+                  </td>
+                </tr>
+              ))}
+              {!stockRows.length ? (
+                <tr>
+                  <td colSpan={6}>
+                    No stock snapshot is attached to this order yet. New Factory orders receive one during Admin verification.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="drawer-section">
+        <div className="drawer-section-head">
+          <div>
+            <span>Items</span>
+            <h3>Product list</h3>
+          </div>
+        </div>
         <div className="table-wrap">
           <table className="dense-table">
             <thead>
@@ -772,110 +1003,97 @@ function OrderDrawer({ order, onClose, onInvoice }) {
                   <td>{currency(item.lineTotal, order.totals?.currency)}</td>
                 </tr>
               ))}
+              {!(order.items || []).length ? (
+                <tr>
+                  <td colSpan={6}>No product items found.</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
-      </details>
-      <details>
-        <summary>Order Summary and Payment</summary>
-        <div className="info-grid">
-          <span>Products</span>
-          <strong>{productCount(order)}</strong>
-          <span>Total</span>
-          <strong>{currency(order.totals?.total, order.totals?.currency)}</strong>
-          <span>Payment Method</span>
-          <strong>{order.payment?.method || "-"}</strong>
-          <span>Payment Reference</span>
-          <strong>{order.payment?.reference || "-"}</strong>
+      </section>
+
+      {canAmend || canReject ? (
+        <section className="drawer-section corrections-section">
+          <div className="drawer-section-head">
+            <div>
+              <span>Correction</span>
+              <h3>Amend or reject</h3>
+            </div>
+          </div>
+          <div className="correction-grid">
+            {canAmend ? (
+              <div className="form-grid">
+                <label>
+                  Amendment Reason
+                  <input
+                    value={amendReason}
+                    onChange={(event) => setAmendReason(event.target.value)}
+                    placeholder="Required before amending"
+                  />
+                </label>
+                <label>
+                  Amendment Note
+                  <textarea
+                    value={amendNote}
+                    onChange={(event) => setAmendNote(event.target.value)}
+                    placeholder="Optional internal note"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy || !amendReason.trim()}
+                  onClick={() =>
+                    run(() =>
+                      amendOrder({
+                        orderId: order._id,
+                        payload: { reason: amendReason, note: amendNote || remarks },
+                      }).unwrap(),
+                    )
+                  }
+                >
+                  <IconText icon="edit">Record Amendment</IconText>
+                </button>
+              </div>
+            ) : null}
+            {canReject ? (
+              <div className="form-grid reject-panel">
+                <label>
+                  Rejection Reason
+                  <input
+                    value={rejectReason}
+                    onChange={(event) => setRejectReason(event.target.value)}
+                    placeholder="Required only when rejecting"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={busy || !rejectReason.trim()}
+                  onClick={() =>
+                    run(() =>
+                      rejectOrder({
+                        orderId: order._id,
+                        payload: { reason: rejectReason, note: remarks },
+                      }).unwrap(),
+                    )
+                  }
+                >
+                  <IconText icon="reject">Reject Order</IconText>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="drawer-section">
+        <div className="drawer-section-head">
+          <div>
+            <span>Timeline</span>
+            <h3>History</h3>
+          </div>
         </div>
-      </details>
-      <details>
-        <summary>Driver / Shipment</summary>
-        <div className="form-grid">
-          <label>
-            Driver Name
-            <input value={driverName} onChange={(event) => setDriverName(event.target.value)} />
-          </label>
-          <label>
-            Driver Phone
-            <input value={driverPhone} onChange={(event) => setDriverPhone(event.target.value)} />
-          </label>
-          <label>
-            Vehicle Number
-            <input
-              value={vehicleNumber}
-              onChange={(event) => setVehicleNumber(event.target.value)}
-            />
-          </label>
-          <label>
-            Dispatch Remarks
-            <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} />
-          </label>
-        </div>
-      </details>
-      <details>
-        <summary>Factory Stage</summary>
-        <div className="info-grid">
-          <span>Stage</span>
-          <strong>{statusLabel(order.factoryStage || laneForOrder(order))}</strong>
-          <span>Status</span>
-          <strong>{statusLabel(order.status)}</strong>
-          <span>Priority</span>
-          <strong>{priorityForOrder(order)}</strong>
-          <span>Received</span>
-          <strong>{compactDate(order.factory?.sentToFactoryAt || order.createdAt)}</strong>
-        </div>
-      </details>
-      <details>
-        <summary>Amendment</summary>
-        <div className="form-grid">
-          <label>
-            Amendment Reason
-            <input
-              value={amendReason}
-              onChange={(event) => setAmendReason(event.target.value)}
-              placeholder="Required before amending"
-            />
-          </label>
-          <label>
-            Amendment Note
-            <textarea
-              value={amendNote}
-              onChange={(event) => setAmendNote(event.target.value)}
-              placeholder="Optional internal note"
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy || !amendReason.trim()}
-            onClick={() =>
-              run(() =>
-                amendOrder({
-                  orderId: order._id,
-                  payload: { reason: amendReason, note: amendNote || remarks },
-                }).unwrap(),
-              )
-            }
-          >
-            <IconText icon="edit">Save Amendment</IconText>
-          </button>
-        </div>
-      </details>
-      <details>
-        <summary>Rejection</summary>
-        <div className="form-grid">
-          <label>
-            Rejection Reason
-            <input
-              value={rejectReason}
-              onChange={(event) => setRejectReason(event.target.value)}
-              placeholder="Required only when rejecting"
-            />
-          </label>
-        </div>
-      </details>
-      <details>
-        <summary>History Timeline</summary>
         <div className="timeline-list">
           {(order.statusHistory || []).slice().reverse().map((item, index) => (
             <div className="timeline-item" key={`${item.toStatus}-${index}`}>
@@ -886,14 +1104,17 @@ function OrderDrawer({ order, onClose, onInvoice }) {
               </div>
             </div>
           ))}
+          {!(order.statusHistory || []).length ? (
+            <div className="empty-line">No status history recorded.</div>
+          ) : null}
         </div>
-      </details>
+      </section>
     </Drawer>
   );
 }
 
 function OrdersPage({ globalSearch, onInvoice }) {
-  const [lane, setLane] = useState("PENDING");
+  const [lane, setLane] = useState("INBOX");
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [date, setDate] = useState("");
@@ -929,6 +1150,16 @@ function OrdersPage({ globalSearch, onInvoice }) {
     return new Date(b.factory?.sentToFactoryAt || b.updatedAt || b.createdAt || 0) -
       new Date(a.factory?.sentToFactoryAt || a.updatedAt || a.createdAt || 0);
   });
+  const hasFilters = Boolean(query || draftQuery || date || dealer || priority !== "ALL" || sort !== "received-desc");
+
+  const clearFilters = () => {
+    setDraftQuery("");
+    setQuery("");
+    setDate("");
+    setDealer("");
+    setPriority("ALL");
+    setSort("received-desc");
+  };
 
   return (
     <div className="factory-page">
@@ -974,6 +1205,11 @@ function OrdersPage({ globalSearch, onInvoice }) {
             <option value="total-desc">Highest total</option>
             <option value="total-asc">Lowest total</option>
           </select>
+          {hasFilters ? (
+            <button type="button" className="clear-filter-btn" onClick={clearFilters}>
+              Clear
+            </button>
+          ) : null}
         </div>
         <div className="order-list">
           {listQuery.isLoading && !listQuery.data ? (
@@ -990,17 +1226,25 @@ function OrdersPage({ globalSearch, onInvoice }) {
                 <strong>{order.dealerSnapshot?.companyName || "Dealer"}</strong>
                 <span>#{order.orderNumber}</span>
               </div>
-              <span>{productCount(order)} Products</span>
-              <strong>{currency(order.totals?.total, order.totals?.currency)}</strong>
-              <span>{compactDate(order.createdAt)}</span>
+              <span className="order-stat">
+                <DashboardIcon name="stock" size={15} />
+                {productCount(order)}
+              </span>
+              <strong className="order-total">{currency(order.totals?.total, order.totals?.currency)}</strong>
+              <span className="order-stat">
+                <DashboardIcon name="history" size={15} />
+                {timeAgo(order.factory?.sentToFactoryAt || order.updatedAt || order.createdAt)}
+              </span>
               <span className={`status-pill ${String(order.status || "").toLowerCase()}`}>
                 {statusLabel(order.status)}
               </span>
               <span className={`priority ${priorityForOrder(order).toLowerCase()}`}>
                 {priorityForOrder(order)}
               </span>
-              <span>{order.factory?.driverName || "-"}</span>
-              <span>{timeAgo(order.factory?.sentToFactoryAt || order.updatedAt || order.createdAt)}</span>
+              <span className="order-stat">
+                <DashboardIcon name="truck" size={15} />
+                {order.factory?.driverName || "No driver"}
+              </span>
               <span className="row-open">
                 <DashboardIcon name="chevron" size={17} />
               </span>
@@ -1016,6 +1260,7 @@ function OrdersPage({ globalSearch, onInvoice }) {
           order={selected}
           onClose={() => setSelected(null)}
           onInvoice={onInvoice}
+          onOrderChange={setSelected}
         />
       ) : null}
     </div>
@@ -1321,22 +1566,77 @@ function BulkImportPanel({ products }) {
   };
 
   return (
-    <details className="bulk-panel">
-      <summary>Bulk Stock Update</summary>
-      <p>Import a CSV exported from Excel. Preview changes before saving.</p>
-      <div className="filter-row">
-        <input type="file" accept=".csv,text/csv" onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) parseFile(file);
-        }} />
-        <select value={reason} onChange={(event) => setReason(event.target.value)}>
-          {STOCK_REASONS.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Import note" />
+    <section className="bulk-panel stock-import-panel">
+      <div className="stock-import-head">
+        <div>
+          <span>Bulk Update</span>
+          <h2>Import stock from CSV or Excel</h2>
+          <p>Upload a CSV exported from Excel. Changes are previewed before stock is updated.</p>
+        </div>
+        <div className="format-help">
+          <button type="button" aria-label="View import file format">
+            i
+          </button>
+          <div className="format-popover" role="note">
+            <strong>Accepted format</strong>
+            <p>Use CSV from Excel with these columns. Header names are not case-sensitive.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>sku</th>
+                  <th>newQuantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>EXT-HIGH-GLOSS-20L</td>
+                  <td>145</td>
+                </tr>
+                <tr>
+                  <td>ROLLER-10IN</td>
+                  <td>32</td>
+                </tr>
+              </tbody>
+            </table>
+            <small>Also accepted: product_sku, quantity, stock, current_stock.</small>
+          </div>
+        </div>
+      </div>
+      <div className="stock-import-grid">
+        <label className="stock-file-drop">
+          <DashboardIcon name="download" size={22} />
+          <span>
+            <strong>Choose CSV file</strong>
+            <small>Export your Excel sheet as .csv before uploading.</small>
+          </span>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) parseFile(file);
+            }}
+          />
+        </label>
+        <label>
+          Reason
+          <select value={reason} onChange={(event) => setReason(event.target.value)}>
+            {STOCK_REASONS.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+        <label>
+          Note
+          <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional import note" />
+        </label>
       </div>
       {error ? <div className="alert-line">{error}</div> : null}
       {rows.length ? (
         <>
+          <div className="import-summary">
+            <span>{rows.length} rows parsed</span>
+            <span>{rows.filter((row) => row.valid).length} ready</span>
+            <span>{rows.filter((row) => !row.valid).length} skipped</span>
+          </div>
           <div className="table-wrap import-preview">
             <table className="dense-table">
               <thead>
@@ -1371,7 +1671,7 @@ function BulkImportPanel({ products }) {
           </div>
         </>
       ) : null}
-    </details>
+    </section>
   );
 }
 
@@ -1475,54 +1775,131 @@ function StockPage({ globalSearch }) {
       {stockQuery.isLoading && !stockQuery.data ? (
         <div className="empty-line">Loading stock catalog...</div>
       ) : null}
-      <div className={view === "grid" ? "stock-catalog-grid" : "stock-catalog-list"}>
-        {items.map((item) => {
-          const imageUrl = stockImageUrl(item);
-          return (
-            <button
-              type="button"
-              key={item._id || item.sku}
-              className={`stock-card stock-${String(item.stock?.status || "").toLowerCase()}`}
-              onClick={() => setSelected(item)}
-            >
-              <div className="stock-preview">
-                {imageUrl ? (
-                  <img src={imageUrl} alt={item.name || item.sku || "Product"} loading="lazy" />
-                ) : (
-                  <span>{String(item.name || "M").slice(0, 1)}</span>
-                )}
-              </div>
-              <div className="stock-card-copy">
-                <span className="status-pill">{statusLabel(item.stock?.status)}</span>
-                <h3>{item.name}</h3>
-                <p>{item.sku}</p>
-                <span>{item.category || "Uncategorized"} · {item.packLabel || item.pack?.label || "Variant"}</span>
-                <small>Updated {item.stock?.lastUpdatedAt ? timeAgo(item.stock.lastUpdatedAt) : "not yet"}</small>
-              </div>
-              <div className="stock-card-numbers">
-                <div>
-                  <span>Current</span>
-                  <strong>{item.stock?.currentQuantity || 0}</strong>
+      {view === "grid" ? (
+        <div className="stock-catalog-grid">
+          {items.map((item) => {
+            return (
+              <button
+                type="button"
+                key={item._id || item.sku}
+                className={`stock-card stock-${String(item.stock?.status || "").toLowerCase()}`}
+                onClick={() => setSelected(item)}
+              >
+                <div className="stock-card-head">
+                  <div className="stock-card-copy">
+                    <h3>{item.name}</h3>
+                    <span>{item.packLabel || item.pack?.label || "Variant"}</span>
+                  </div>
+                  <span className="quick-edit" aria-hidden="true">
+                    <DashboardIcon name="edit" size={15} />
+                  </span>
                 </div>
-                <div>
-                  <span>Reserved</span>
-                  <strong>{item.stock?.reservedQuantity || 0}</strong>
+                <div className="stock-card-numbers">
+                  <div>
+                    <DashboardIcon name="stock" size={15} />
+                    <span>Current</span>
+                    <strong>{item.stock?.currentQuantity || 0}</strong>
+                  </div>
+                  <div>
+                    <DashboardIcon name="history" size={15} />
+                    <span>Reserved</span>
+                    <strong>{item.stock?.reservedQuantity || 0}</strong>
+                  </div>
+                  <div>
+                    <DashboardIcon name="check" size={15} />
+                    <span>Available</span>
+                    <strong>{item.stock?.availableQuantity || 0}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>Available</span>
-                  <strong>{item.stock?.availableQuantity || 0}</strong>
-                </div>
-              </div>
-              <span className="quick-edit">
-                <IconText icon="edit">Update</IconText>
-              </span>
-            </button>
-          );
-        })}
-        {!stockQuery.isLoading && !items.length ? (
-          <div className="empty-line">No stock rows found.</div>
-        ) : null}
-      </div>
+              </button>
+            );
+          })}
+          {!stockQuery.isLoading && !items.length ? (
+            <div className="empty-line">No stock rows found.</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="table-wrap stock-table-wrap">
+          <table className="dense-table stock-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Variant</th>
+                <th>Current</th>
+                <th>Reserved</th>
+                <th>Available</th>
+                <th>Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const imageUrl = stockImageUrl(item);
+                const rowKey = item._id || item.sku;
+                return (
+                  <tr
+                    key={rowKey}
+                    className={`stock-table-row stock-${String(item.stock?.status || "").toLowerCase()}`}
+                    onClick={() => setSelected(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelected(item);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <td>
+                      <div className="stock-table-product">
+                        <span className="stock-table-thumb">
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={item.name || item.sku || "Product"}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <strong>{String(item.name || "M").slice(0, 1)}</strong>
+                          )}
+                        </span>
+                        <span>
+                          <strong>{item.name || "-"}</strong>
+                          <small>{item.category || "Uncategorized"}</small>
+                        </span>
+                        <button
+                          type="button"
+                          className="table-action-btn"
+                          aria-label={`Update stock for ${item.name || item.sku || "product"}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelected(item);
+                          }}
+                        >
+                          <DashboardIcon name="edit" size={16} />
+                        </button>
+                      </div>
+                    </td>
+                    <td>{item.packLabel || item.pack?.label || "-"}</td>
+                    <td>{item.stock?.currentQuantity || 0}</td>
+                    <td>{item.stock?.reservedQuantity || 0}</td>
+                    <td>
+                      <strong>{item.stock?.availableQuantity || 0}</strong>
+                    </td>
+                    <td>
+                      <span className="status-pill">{statusLabel(item.stock?.status)}</span>
+                    </td>
+                    <td>{item.stock?.lastUpdatedAt ? timeAgo(item.stock.lastUpdatedAt) : "Not updated"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {!stockQuery.isLoading && !items.length ? (
+            <div className="empty-line">No stock rows found.</div>
+          ) : null}
+        </div>
+      )}
       <BulkImportPanel products={items} />
       {selected ? <StockEditDrawer product={selected} onClose={() => setSelected(null)} /> : null}
     </div>
@@ -1915,10 +2292,11 @@ function FactoryStyles() {
       .page-head.compact h1{font-size:clamp(25px,2.5vw,34px);}
       .page-head span{display:block;margin-top:7px;color:var(--factory-muted);font-weight:750;line-height:1.55;}
       .page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-      .page-actions button,.drawer-actions button,.dense-table button,.invoice-row button,.quick-edit{border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:9px 13px;font-weight:900;color:var(--factory-ink);cursor:pointer;}
-      .page-actions button,.drawer-actions button,.invoice-row button,.quick-edit,.view-toggle button{display:inline-flex;align-items:center;justify-content:center;gap:7px;}
-      .page-actions button:hover,.drawer-actions button:hover,.dense-table button:hover,.invoice-row button:hover{border-color:rgba(180,35,24,.22);color:var(--factory-red);}
-      .drawer-actions button:last-child{background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);border-color:transparent;color:#fff;}
+      .page-actions button,.drawer-actions button,.dense-table button,.invoice-row button,.form-grid button,.quick-edit,.clear-filter-btn{border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:9px 13px;font-weight:900;color:var(--factory-ink);cursor:pointer;}
+      .page-actions button,.drawer-actions button,.invoice-row button,.form-grid button,.quick-edit,.view-toggle button{display:inline-flex;align-items:center;justify-content:center;gap:7px;}
+      .page-actions button:hover,.drawer-actions button:hover,.dense-table button:hover,.invoice-row button:hover,.form-grid button:hover{border-color:rgba(180,35,24,.22);color:var(--factory-red);}
+      .drawer-actions button.primary-action{background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);border-color:transparent;color:#fff;}
+      .drawer-actions button:disabled,.form-grid button:disabled,.clear-filter-btn:disabled{opacity:.52;cursor:not-allowed;box-shadow:none;}
       .drawer-actions button.danger,.danger{background:#991b1b!important;border-color:#991b1b!important;color:#fff!important;}
       .updating-chip,.ready-line,.alert-line,.inline-loading{display:inline-flex;align-items:center;border-radius:999px;padding:9px 12px;background:rgba(180,35,24,.07);color:var(--factory-red);font-size:12px;font-weight:950;}
       .metric-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;}
@@ -1943,7 +2321,7 @@ function FactoryStyles() {
       .factory-tabs button.active{background:#fff;color:var(--factory-ink);box-shadow:0 8px 20px rgba(15,23,42,.10);}
       .factory-tabs strong{min-width:21px;height:21px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:rgba(15,23,42,.06);color:inherit;font-size:11px;}
       .filter-row{display:grid;gap:10px;align-items:center;}
-      .orders-filter-row{grid-template-columns:minmax(280px,1.4fr) .7fr .85fr .75fr .75fr;}
+      .orders-filter-row{grid-template-columns:minmax(280px,1.4fr) .7fr .85fr .75fr .75fr auto;}
       .stock-filter-row{grid-template-columns:minmax(260px,1.5fr) .75fr .75fr .7fr .75fr auto;}
       .history-filter-row{grid-template-columns:minmax(280px,1.4fr) .75fr .6fr .6fr;}
       .invoice-filter-row{grid-template-columns:minmax(280px,1.4fr) .65fr .75fr;}
@@ -1954,39 +2332,54 @@ function FactoryStyles() {
       .factory-clear-search{width:28px;height:28px;border-radius:999px;border:1px solid var(--factory-line);background:var(--factory-soft);color:var(--factory-muted);font-size:18px;font-weight:950;line-height:1;cursor:pointer;}
       .filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input,.stock-edit-console input{width:100%;min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;}
       .form-grid textarea{min-height:92px;padding:12px 14px;resize:vertical;}
+      .form-grid input:disabled,.form-grid textarea:disabled{background:#f8fafc;color:rgba(15,23,42,.55);cursor:not-allowed;}
       .view-toggle{height:50px;display:inline-flex;align-items:center;gap:3px;padding:4px;border-radius:16px;border:1px solid var(--factory-line);background:rgba(241,245,249,.92);}
       .view-toggle button{height:40px;border:0;background:transparent;border-radius:12px;padding:0 13px;font-weight:950;color:var(--factory-muted);cursor:pointer;}
       .view-toggle button.active{background:#fff;color:var(--factory-red);box-shadow:0 8px 20px rgba(15,23,42,.10);}
       .orders-board{display:grid;gap:14px;min-width:0;}
-      .order-row,.invoice-row{display:grid;grid-template-columns:1.45fr .65fr .82fr .82fr .9fr .65fr .76fr .76fr 28px;align-items:center;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:13px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .order-row,.invoice-row{display:grid;grid-template-columns:minmax(220px,1.45fr) .45fr .82fr .78fr .9fr .65fr minmax(110px,.78fr) 28px;align-items:center;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:13px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
       .invoice-row{grid-template-columns:1.4fr .8fr .8fr auto auto auto;cursor:default;}
       .order-row:hover,.invoice-row:hover,.stock-card:hover{border-color:rgba(180,35,24,.18);box-shadow:0 12px 30px rgba(15,23,42,.08);}
       .order-main{display:grid;gap:3px;min-width:0;}
       .order-main strong,.invoice-row strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--factory-ink);}
       .order-row span,.invoice-row span{color:var(--factory-muted);font-size:13px;font-weight:750;}
+      .order-stat{display:inline-flex!important;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .order-stat svg{flex:0 0 auto;color:rgba(15,23,42,.42);}
+      .order-total{font-size:14px;color:var(--factory-ink);white-space:nowrap;}
       .row-open{display:inline-flex!important;align-items:center;justify-content:center;color:rgba(15,23,42,.42);}
       .status-pill,.priority,.unread-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(15,23,42,.06);color:#475569;padding:5px 9px;font-size:11px!important;font-weight:950!important;text-transform:uppercase;white-space:nowrap;}
       .status-pill.out_for_delivery,.status-pill.awaiting_shipment,.priority.high{background:#fff7ed;color:#c2410c;}
       .status-pill.rejected,.stock-out_of_stock{background:#fef2f2!important;}
       .priority.normal{background:#ecfdf3;color:#027a48;}
       .priority.medium{background:#fff7ed;color:#c2410c;}
-      .stock-catalog-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+      .stock-state-chip{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:950;text-transform:uppercase;white-space:nowrap;background:#f8fafc;color:#475569;border:1px solid rgba(15,23,42,.08);}
+      .stock-state-chip.success{background:#ecfdf3;color:#027a48;border-color:#abefc6;}
+      .stock-state-chip.warning{background:#fffaeb;color:#b54708;border-color:#fedf89;}
+      .stock-state-chip.danger{background:#fef3f2;color:#b42318;border-color:#fecdca;}
+      .stock-state-chip.neutral{background:#f8fafc;color:#475569;border-color:#e2e8f0;}
+      .stock-snapshot-table td:nth-child(n+2):nth-child(-n+5){text-align:right;font-weight:900;color:var(--factory-ink);}
+      .stock-snapshot-table td:first-child strong{display:block;color:var(--factory-ink);font-size:13px;}
+      .stock-snapshot-table td:first-child span,.stock-snapshot-table small{display:block;margin-top:3px;color:var(--factory-muted);font-size:12px;font-weight:780;}
+      .stock-catalog-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
       .stock-catalog-list{display:grid;gap:10px;}
-      .stock-card{position:relative;display:grid;grid-template-columns:112px minmax(0,1fr);gap:14px;align-items:start;border:1px solid var(--factory-line);background:#fff;border-radius:18px;padding:14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .stock-card{position:relative;display:grid;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:12px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
       .stock-catalog-list .stock-card{grid-template-columns:88px minmax(0,1fr) minmax(280px,.9fr) auto;align-items:center;}
       .stock-preview{height:112px;border-radius:16px;border:1px solid rgba(15,23,42,.06);background:linear-gradient(180deg,#f8fafc,#eef2f7);display:grid;place-items:center;color:rgba(15,23,42,.32);font-size:32px;font-weight:950;}
       .stock-preview img{width:100%;height:100%;object-fit:contain;border-radius:14px;background:#fff;}
       .stock-catalog-list .stock-preview{height:78px;}
+      .stock-card-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;}
       .stock-card-copy{display:grid;gap:6px;min-width:0;}
-      .stock-card-copy h3{margin:0;font-size:18px;line-height:1.15;letter-spacing:-.025em;color:var(--factory-ink);}
+      .stock-card-copy h3{margin:0;font-size:15px;line-height:1.2;letter-spacing:-.018em;color:var(--factory-ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
       .stock-card-copy p,.stock-card-copy span,.stock-card-copy small{margin:0;color:var(--factory-muted);font-size:13px;font-weight:800;}
+      .stock-card-copy span{font-size:12px;}
       .stock-card-copy small{font-size:12px;color:rgba(15,23,42,.48);}
-      .stock-card-numbers{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+      .stock-card-numbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
       .stock-catalog-list .stock-card-numbers{grid-column:auto;}
-      .stock-card-numbers div{border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:10px;background:#fff;}
-      .stock-card-numbers span{display:block;color:var(--factory-muted);font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.06em;}
-      .stock-card-numbers strong{display:block;margin-top:5px;font-size:20px;color:var(--factory-ink);}
-      .quick-edit{justify-self:end;align-self:center;}
+      .stock-card-numbers div{min-height:64px;border:1px solid rgba(15,23,42,.06);border-radius:12px;padding:8px;background:#fff;display:grid;align-content:center;justify-items:start;gap:3px;}
+      .stock-card-numbers svg{color:rgba(15,23,42,.44);}
+      .stock-card-numbers span{display:block;color:var(--factory-muted);font-size:9px;font-weight:950;text-transform:uppercase;letter-spacing:.05em;}
+      .stock-card-numbers strong{display:block;font-size:18px;line-height:1;color:var(--factory-ink);letter-spacing:-.03em;}
+      .quick-edit{width:30px;height:30px;border:1px solid rgba(15,23,42,.07);border-radius:10px;display:inline-flex;align-items:center;justify-content:center;color:rgba(15,23,42,.54);background:#fff;}
       .stock-low_stock{background:#fffbeb;}
       .stock-out_of_stock{background:#fff5f5;}
       .stock-in_stock{background:#fff;}
@@ -1997,13 +2390,32 @@ function FactoryStyles() {
       .drawer-head span{color:var(--factory-red);font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
       .drawer-head h2{margin:4px 0 0;font-size:24px;letter-spacing:-.03em;color:var(--factory-ink);}
       .icon-btn{width:34px;height:34px;border:1px solid var(--factory-line);background:#fff;border-radius:12px;font-weight:950;cursor:pointer;}
+      .stage-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid rgba(15,23,42,.08);background:linear-gradient(180deg,#fff,#f8fafc);border-radius:18px;padding:14px;}
+      .stage-banner div{display:grid;gap:3px;min-width:0;}
+      .stage-banner span:first-child{color:var(--factory-red);font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
+      .stage-banner strong{font-size:18px;color:var(--factory-ink);letter-spacing:-.025em;}
+      .stage-banner small{color:var(--factory-muted);font-weight:780;line-height:1.35;}
       .drawer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
       .drawer-actions.sticky{position:sticky;top:-18px;background:#fff;z-index:2;padding:10px 0;border-bottom:1px solid var(--factory-line);}
+      .drawer-stage-note{display:inline-flex;align-items:center;min-height:38px;border-radius:999px;background:rgba(15,23,42,.055);color:var(--factory-muted);padding:0 12px;font-size:12px;font-weight:950;}
+      .drawer-section{display:grid;gap:12px;border:1px solid var(--factory-line);border-radius:16px;background:#fff;padding:15px;box-shadow:0 1px 2px rgba(15,23,42,.035);}
+      .drawer-section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+      .drawer-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+      .drawer-section-head span{display:block;color:var(--factory-red);font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
+      .drawer-section-head h3{margin:3px 0 0;color:var(--factory-ink);font-size:17px;letter-spacing:-.02em;}
+      .workflow-section{background:linear-gradient(180deg,#fff,#f8fafc);}
+      .drawer-hint{margin:0;color:var(--factory-muted);font-size:13px;font-weight:780;line-height:1.55;}
+      .ready-line.success{background:#ecfdf3;color:#027a48;}
+      .shipment-form{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;}
+      .shipment-form label:last-child{grid-column:1 / -1;}
+      .correction-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;}
+      .reject-panel{align-content:start;}
       .factory-drawer details,.factory-page details{border:1px solid var(--factory-line);border-radius:16px;background:#fff;padding:0;overflow:hidden;}
       .factory-drawer summary,.factory-page summary{cursor:pointer;padding:13px 15px;font-weight:950;color:var(--factory-ink);}
       .factory-drawer details>div,.factory-page details>div,.factory-drawer details>.table-wrap{padding:0 15px 15px;}
       .checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
       .checklist label{display:flex;gap:8px;align-items:center;background:var(--factory-soft);border-radius:12px;padding:10px;font-weight:850;}
+      .checklist label.ready{background:#ecfdf3;color:#027a48;}
       .info-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;}
       .info-grid span,.stock-change span{color:var(--factory-muted);font-weight:850;}
       .form-grid{display:grid;gap:10px;}
@@ -2012,6 +2424,25 @@ function FactoryStyles() {
       .dense-table{width:100%;border-collapse:collapse;font-size:14px;}
       .dense-table th,.dense-table td{border-bottom:1px solid rgba(15,23,42,.06);padding:11px 12px;text-align:left;vertical-align:middle;}
       .dense-table th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--factory-muted);background:rgba(248,250,252,.9);}
+      .stock-table-wrap{box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .stock-table{min-width:860px;}
+      .stock-table-row{cursor:pointer;transition:background .14s ease, box-shadow .14s ease;}
+      .stock-table-row:hover,.stock-table-row:focus{background:rgba(180,35,24,.035);outline:0;}
+      .stock-table-row.stock-low_stock{background:#fffbeb;}
+      .stock-table-row.stock-low_stock:hover,.stock-table-row.stock-low_stock:focus{background:#fff7d6;}
+      .stock-table-row.stock-out_of_stock{background:#fff5f5;}
+      .stock-table-row.stock-out_of_stock:hover,.stock-table-row.stock-out_of_stock:focus{background:#feecec;}
+      .stock-table td{font-size:13px;font-weight:800;color:rgba(15,23,42,.72);white-space:nowrap;}
+      .stock-table td:first-child{min-width:340px;white-space:normal;}
+      .stock-table-product{display:flex;align-items:center;gap:11px;min-width:0;}
+      .stock-table-product>span:not(.stock-table-thumb){display:grid;gap:3px;min-width:0;flex:1 1 auto;}
+      .stock-table-product strong{display:block;color:var(--factory-ink);font-size:14px;line-height:1.25;}
+      .stock-table-product small{display:block;color:var(--factory-muted);font-size:12px;font-weight:800;}
+      .stock-table-thumb{width:44px;height:44px;flex:0 0 44px;border-radius:12px;border:1px solid rgba(15,23,42,.07);background:linear-gradient(180deg,#f8fafc,#eef2f7);display:grid;place-items:center;overflow:hidden;color:rgba(15,23,42,.36);}
+      .stock-table-thumb img{width:100%;height:100%;object-fit:contain;background:#fff;}
+      .stock-table-thumb strong{font-size:17px;color:rgba(15,23,42,.42);}
+      .table-action-btn{width:36px;height:36px;border:1px solid var(--factory-line);background:#fff;border-radius:12px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:var(--factory-ink);cursor:pointer;flex:0 0 36px;}
+      .table-action-btn:hover{border-color:rgba(180,35,24,.22);color:var(--factory-red);}
       .stock-change{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
       .stock-change>div{display:grid;gap:6px;border:1px solid var(--factory-line);border-radius:16px;padding:12px;background:#fff;}
       .stock-change strong{font-size:24px;letter-spacing:-.04em;color:var(--factory-ink);}
@@ -2034,8 +2465,33 @@ function FactoryStyles() {
       .positive{color:#027a48!important;}
       .negative{color:#b42318!important;}
       .confirm-box{display:grid;gap:10px;border:1px solid rgba(180,35,24,.22);background:#fff7f5;border-radius:16px;padding:14px;}
-      .bulk-panel summary{padding:0;list-style:none;}
-      .bulk-panel p{color:var(--factory-muted);font-weight:750;}
+      .stock-import-panel{display:grid;gap:14px;padding:16px;}
+      .stock-import-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:12px;border-bottom:1px solid rgba(15,23,42,.07);}
+      .stock-import-head span{display:block;color:var(--factory-red);font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
+      .stock-import-head h2{margin:4px 0 0;color:var(--factory-ink);font-size:18px;line-height:1.2;letter-spacing:-.025em;}
+      .stock-import-head p{margin:5px 0 0;color:var(--factory-muted);font-size:13px;font-weight:750;line-height:1.55;}
+      .format-help{position:relative;flex:0 0 auto;}
+      .format-help>button{width:32px;height:32px;border-radius:999px;border:1px solid rgba(15,23,42,.09);background:#fff;color:rgba(15,23,42,.62);font-size:14px;font-weight:950;font-family:Georgia,serif;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .format-help>button:hover,.format-help>button:focus{border-color:rgba(180,35,24,.2);color:var(--factory-red);outline:0;}
+      .format-popover{position:absolute;top:40px;right:0;width:min(340px,calc(100vw - 42px));z-index:12;border:1px solid rgba(15,23,42,.1);border-radius:16px;background:#fff;padding:14px;box-shadow:0 22px 60px rgba(15,23,42,.16);opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .15s ease, transform .15s ease;}
+      .format-help:hover .format-popover,.format-help:focus-within .format-popover{opacity:1;pointer-events:auto;transform:translateY(0);}
+      .format-popover strong{display:block;color:var(--factory-ink);font-size:14px;}
+      .format-popover p,.format-popover small{display:block;margin:6px 0 0;color:var(--factory-muted);font-size:12px;font-weight:750;line-height:1.5;}
+      .format-popover table{width:100%;margin-top:10px;border-collapse:collapse;font-size:12px;}
+      .format-popover th,.format-popover td{border:1px solid rgba(15,23,42,.08);padding:7px 8px;text-align:left;}
+      .format-popover th{background:#f8fafc;color:rgba(15,23,42,.58);font-size:10px;text-transform:uppercase;letter-spacing:.08em;}
+      .stock-import-grid{display:grid;grid-template-columns:minmax(260px,1.2fr) .65fr .9fr;gap:10px;align-items:end;}
+      .stock-import-grid label{display:grid;gap:7px;color:var(--factory-ink);font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.04em;}
+      .stock-import-grid select,.stock-import-grid input:not([type="file"]){width:100%;min-height:48px;border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:0 13px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;text-transform:none;letter-spacing:0;}
+      .stock-file-drop{position:relative;min-height:74px;border:1px dashed rgba(15,23,42,.22);border-radius:16px;background:linear-gradient(180deg,#fff,#f8fafc);padding:13px 15px;display:grid!important;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:12px;cursor:pointer;text-transform:none!important;letter-spacing:0!important;}
+      .stock-file-drop:hover{border-color:rgba(180,35,24,.28);background:#fff7f5;}
+      .stock-file-drop>svg{color:var(--factory-red);}
+      .stock-file-drop span{display:grid;gap:3px;}
+      .stock-file-drop strong{font-size:14px;color:var(--factory-ink);}
+      .stock-file-drop small{font-size:12px;line-height:1.45;color:var(--factory-muted);font-weight:750;}
+      .stock-file-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+      .import-summary{display:flex;gap:8px;flex-wrap:wrap;}
+      .import-summary span{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;background:rgba(15,23,42,.055);color:rgba(15,23,42,.66);padding:0 11px;font-size:12px;font-weight:950;}
       .import-preview tr.invalid{background:#fef2f2;}
       .notification-list.compact .notification-row{grid-template-columns:1fr;}
       .notification-row{display:grid;grid-template-columns:1fr 1fr 90px;gap:12px;align-items:center;background:#fff;border:1px solid var(--factory-line);border-radius:14px;padding:12px;}
@@ -2047,10 +2503,15 @@ function FactoryStyles() {
       .proforma-total{display:grid;justify-items:end;gap:5px;margin-top:12px;}
       .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:46px;}
       .signatures span{border-top:1px solid #111827;text-align:center;padding-top:8px;}
+      @media (max-width: 1280px){
+        .stock-catalog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+      }
       @media (max-width: 980px){
         .metric-strip,.factory-overview-grid,.split-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
-        .stock-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
-        .orders-filter-row,.stock-filter-row,.history-filter-row,.invoice-filter-row,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
+        .stock-catalog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+        .orders-filter-row,.stock-filter-row,.history-filter-row,.invoice-filter-row,.stock-import-grid,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.drawer-section-grid,.shipment-form,.correction-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
+        .stock-import-head{display:grid;}
+        .format-popover{right:auto;left:0;}
         .stock-card-numbers,.stock-catalog-list .stock-card-numbers{grid-column:1 / -1;}
         .stock-step-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
         .stock-custom-adjust{grid-template-columns:1fr;}

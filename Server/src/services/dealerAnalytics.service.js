@@ -5,7 +5,7 @@ import DealerProfile from "../models/DealerProfile.model.js";
 import Order from "../models/Order.model.js";
 
 const DAY_MS = 86400000;
-const APPROVED_STATUS = "VERIFIED";
+const APPROVED_STATUS = "DELIVERED";
 
 function toObjectId(value) {
   if (!value || !mongoose.Types.ObjectId.isValid(String(value))) return null;

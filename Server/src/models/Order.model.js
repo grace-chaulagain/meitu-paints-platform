@@ -22,6 +22,21 @@ const FACTORY_STAGE = Object.freeze({
   COMPLETED: "COMPLETED",
 });
 
+const STOCK_RESERVATION_STATUS = Object.freeze({
+  NONE: "NONE",
+  RESERVED: "RESERVED",
+  RELEASED: "RELEASED",
+  CONSUMED: "CONSUMED",
+});
+
+const STOCK_CHECK_STATUS = Object.freeze({
+  AVAILABLE: "AVAILABLE",
+  LOW: "LOW",
+  INSUFFICIENT: "INSUFFICIENT",
+  OUT_OF_STOCK: "OUT_OF_STOCK",
+  UNMATCHED: "UNMATCHED",
+});
+
 const ORDER_REVIEWED_BY = Object.freeze({
   ADMIN: "ADMIN",
   DISPATCHER: "DISPATCHER",
@@ -255,6 +270,46 @@ const StockDeductionLineSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const StockReservationItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      default: null,
+    },
+    sku: { type: String, default: "", trim: true },
+    name: { type: String, default: "", trim: true },
+    quantity: { type: Number, default: 0, min: 0 },
+    previousReservedQuantity: { type: Number, default: 0, min: 0 },
+    newReservedQuantity: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false },
+);
+
+const StockCheckItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      default: null,
+    },
+    sku: { type: String, default: "", trim: true },
+    name: { type: String, default: "", trim: true },
+    requestedQuantity: { type: Number, default: 0, min: 0 },
+    currentQuantity: { type: Number, default: 0, min: 0 },
+    reservedQuantity: { type: Number, default: 0, min: 0 },
+    availableQuantity: { type: Number, default: 0, min: 0 },
+    status: {
+      type: String,
+      enum: Object.values(STOCK_CHECK_STATUS),
+      default: STOCK_CHECK_STATUS.UNMATCHED,
+    },
+    matched: { type: Boolean, default: false },
+    message: { type: String, default: "", trim: true },
+  },
+  { _id: false },
+);
+
 const OrderSchema = new mongoose.Schema(
   {
     orderNumber: {
@@ -423,6 +478,39 @@ const OrderSchema = new mongoose.Schema(
       rejectedByRole: { type: String, default: "", trim: true },
     },
 
+    stockReservation: {
+      status: {
+        type: String,
+        enum: Object.values(STOCK_RESERVATION_STATUS),
+        default: STOCK_RESERVATION_STATUS.NONE,
+        index: true,
+      },
+      reservedAt: { type: Date, default: null },
+      reservedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      releasedAt: { type: Date, default: null },
+      releasedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      consumedAt: { type: Date, default: null },
+      consumedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      items: { type: [StockReservationItemSchema], default: [] },
+    },
+
+    stockCheck: {
+      checkedAt: { type: Date, default: null },
+      items: { type: [StockCheckItemSchema], default: [] },
+    },
+
     stockDeduction: {
       deductedAt: { type: Date, default: null },
       deductedBy: {
@@ -539,4 +627,5 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
 });
 
 export { ORDER_STATUS, ORDER_REVIEWED_BY, FACTORY_STAGE };
+export { STOCK_RESERVATION_STATUS, STOCK_CHECK_STATUS };
 export default mongoose.model("Order", OrderSchema);

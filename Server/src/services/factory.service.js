@@ -6,7 +6,13 @@ import {
   createFactoryNotification,
   NOTIFICATION_CATEGORY,
 } from "./notification.service.js";
-import { deductStockForOrder, listStock } from "./stock.service.js";
+import {
+  adjustReservationForOrderAmendment,
+  consumeReservationForOrder,
+  listStock,
+  releaseReservationForOrder,
+  reserveStockForOrder,
+} from "./stock.service.js";
 
 let smtpTransport = null;
 
@@ -135,11 +141,15 @@ async function pushStatus({
   const changedAt = new Date();
   let dealerEmailSentAt = null;
   if (emailDealer) {
-    dealerEmailSentAt = await sendDealerStatusEmail({
-      order,
-      status: nextStatus,
-      reason,
-    });
+    try {
+      dealerEmailSentAt = await sendDealerStatusEmail({
+        order,
+        status: nextStatus,
+        reason,
+      });
+    } catch (error) {
+      console.warn("[factory-email] dealer status email failed:", error.message);
+    }
   }
 
   order.status = nextStatus;
@@ -227,6 +237,13 @@ export async function sendOrderToFactory({ orderId, adminUser, note = "" }) {
   if (![ORDER_STATUS.SUBMITTED, ORDER_STATUS.PROCESSING, ORDER_STATUS.VERIFIED].includes(order.status)) {
     throw new ApiError(400, `Order cannot be sent to Factory from status ${order.status}`);
   }
+
+  await reserveStockForOrder({
+    order,
+    actorUser: adminUser,
+    reason: "Admin verified order for Factory fulfillment",
+    note,
+  });
 
   await pushStatus({
     order,
@@ -368,7 +385,12 @@ export async function markOutForDelivery({
     throw new ApiError(400, `Order cannot be dispatched from status ${order.status}`);
   }
 
-  const stockLines = await deductStockForOrder({ order, actorUser: factoryUser });
+  const stockLines = await consumeReservationForOrder({
+    order,
+    actorUser: factoryUser,
+    reason: `Order ${order.orderNumber || order._id} marked out for delivery`,
+    note: remarks,
+  });
 
   await pushStatus({
     order,
@@ -386,8 +408,9 @@ export async function markOutForDelivery({
     remarks: clean(remarks),
   };
   order.stockDeduction = {
-    deductedAt: new Date(),
-    deductedBy: actorId(factoryUser),
+    ...(order.stockDeduction?.toObject?.() || order.stockDeduction || {}),
+    deductedAt: order.stockDeduction?.deductedAt || new Date(),
+    deductedBy: order.stockDeduction?.deductedBy || actorId(factoryUser),
     lines: stockLines,
   };
   order.factoryStage = FACTORY_STAGE.SHIPMENT;
@@ -427,6 +450,13 @@ export async function rejectFactoryOrder({ orderId, factoryUser, reason, note = 
     throw new ApiError(400, `Order cannot be rejected from status ${order.status}`);
   }
 
+  await releaseReservationForOrder({
+    order,
+    actorUser: factoryUser,
+    reason: "Factory rejected order before shipment",
+    note: reason,
+  });
+
   await pushStatus({
     order,
     nextStatus: ORDER_STATUS.REJECTED,
@@ -460,8 +490,19 @@ export async function amendFactoryOrder({
     throw new ApiError(400, `Order cannot be amended from status ${order.status}`);
   }
 
+  const previousItems = (order.items || []).map((item) =>
+    item?.toObject?.() ? item.toObject() : item,
+  );
   if (Array.isArray(items) && items.length > 0) {
     order.items = items;
+    await adjustReservationForOrderAmendment({
+      order,
+      previousItems,
+      nextItems: items,
+      actorUser: factoryUser,
+      reason: "Factory amended reserved order",
+      note,
+    });
   }
   order.amendments.push({
     amendedByUserId: actorId(factoryUser),

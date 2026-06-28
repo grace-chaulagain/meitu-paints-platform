@@ -4,6 +4,7 @@ import {
   createOrderController,
   listOrdersController,
   getOrderController,
+  getOrderStockCheckController,
   amendOrderController,
   verifyOrderController,
   rejectOrderController,
@@ -46,6 +47,15 @@ router.get(
   requireRole("ADMIN", "DEALER", "DISPATCHER"),
   validateQuery(adminOrderListQuerySchema),
   listOrdersController,
+);
+
+// Admin stock check for an order before verification / factory handoff
+router.get(
+  "/:orderId/stock-check",
+  auth,
+  requireRole("ADMIN"),
+  validateParams(orderIdParamsSchema),
+  getOrderStockCheckController,
 );
 
 // Get a single order by id

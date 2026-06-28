@@ -1,10 +1,37 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import NavBar from "../NavBar.jsx";
 import DashboardIcon from "./DashboardIcons.jsx";
 
 function badgeText(value) {
   return value === null || value === undefined ? "" : String(value);
+}
+
+const DASHBOARD_RAIL_STORAGE_KEY = "meitu.dashboard.rail";
+const DEFAULT_RAIL_WIDTH = 286;
+const MIN_RAIL_WIDTH = 232;
+const MAX_RAIL_WIDTH = 430;
+
+function clampRailWidth(value) {
+  const width = Number(value || DEFAULT_RAIL_WIDTH);
+  return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, width));
+}
+
+function getInitialRailState() {
+  if (typeof window === "undefined") {
+    return { visible: true, width: DEFAULT_RAIL_WIDTH };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_RAIL_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      visible: parsed.visible !== false,
+      width: clampRailWidth(parsed.width),
+    };
+  } catch {
+    return { visible: true, width: DEFAULT_RAIL_WIDTH };
+  }
 }
 
 function DashboardNavItem({ item, active, onNavigate, compact = false }) {
@@ -49,58 +76,155 @@ export default function DashboardShell({
   const allItems = navGroups.flatMap((group) => group.items || []);
   const location = useLocation();
   const mainRef = useRef(null);
+  const [railState, setRailState] = useState(getInitialRailState);
+  const railVisible = railState.visible;
+  const railWidth = clampRailWidth(railState.width);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.setItem(
+        DASHBOARD_RAIL_STORAGE_KEY,
+        JSON.stringify({ visible: railVisible, width: railWidth }),
+      );
+    } catch {
+      // Dashboard preferences are nice-to-have; storage failures should not block navigation.
+    }
+  }, [railVisible, railWidth]);
+
+  function setRailVisible(visible) {
+    setRailState((current) => ({ ...current, visible }));
+  }
+
+  function setRailWidth(width) {
+    setRailState((current) => ({ ...current, width: clampRailWidth(width) }));
+  }
+
+  function nudgeRailWidth(amount) {
+    setRailState((current) => ({
+      ...current,
+      width: clampRailWidth(Number(current.width || DEFAULT_RAIL_WIDTH) + amount),
+    }));
+  }
+
+  function startRailResize(event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = railWidth;
+
+    function handleMove(moveEvent) {
+      setRailWidth(startWidth + moveEvent.clientX - startX);
+    }
+
+    function handleUp() {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  }
+
   return (
     <>
       <NavBar />
 
-      <div className="dashboard-shell">
-        <aside className="dashboard-rail" aria-label={`${title} navigation`}>
-          <div className="dashboard-rail-inner">
-            <div className="dashboard-rail-head">
-              <div className="dashboard-eyebrow">{eyebrow}</div>
-              <div className="dashboard-rail-title">{title}</div>
-              {accountLabel ? (
-                <div className="dashboard-account">{accountLabel}</div>
+      <div
+        className={`dashboard-shell ${railVisible ? "" : "rail-hidden"}`}
+        style={{ "--dashboard-rail-width": `${railWidth}px` }}
+      >
+        {railVisible ? (
+          <aside className="dashboard-rail" aria-label={`${title} navigation`}>
+            <div className="dashboard-rail-inner">
+              <div className="dashboard-rail-head">
+                <div className="dashboard-rail-topline">
+                  <div className="dashboard-eyebrow">{eyebrow}</div>
+                  <button
+                    type="button"
+                    className="dashboard-rail-hide-btn"
+                    onClick={() => setRailVisible(false)}
+                    aria-label="Hide sidebar"
+                  >
+                    <DashboardIcon name="chevron" size={16} className="dashboard-chevron-left" />
+                  </button>
+                </div>
+                <div className="dashboard-rail-title">{title}</div>
+                {accountLabel ? (
+                  <div className="dashboard-account">{accountLabel}</div>
+                ) : null}
+              </div>
+
+              <nav className="dashboard-nav" aria-label="Dashboard sections">
+                {navGroups.map((group) => (
+                  <div className="dashboard-nav-group" key={group.label}>
+                    {group.label ? (
+                      <div className="dashboard-nav-group-label">
+                        {group.label}
+                      </div>
+                    ) : null}
+                    <div className="dashboard-nav-items">
+                      {(group.items || []).map((item) => (
+                        <DashboardNavItem
+                          key={item.key}
+                          item={item}
+                          active={activeKey === item.key}
+                          onNavigate={onNavigate}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+
+              {priorityText ? (
+                <div className="dashboard-rail-note">
+                  <div className="dashboard-rail-note-label">{priorityLabel}</div>
+                  <div className="dashboard-rail-note-text">{priorityText}</div>
+                </div>
               ) : null}
             </div>
-
-            <nav className="dashboard-nav" aria-label="Dashboard sections">
-              {navGroups.map((group) => (
-                <div className="dashboard-nav-group" key={group.label}>
-                  {group.label ? (
-                    <div className="dashboard-nav-group-label">
-                      {group.label}
-                    </div>
-                  ) : null}
-                  <div className="dashboard-nav-items">
-                    {(group.items || []).map((item) => (
-                      <DashboardNavItem
-                        key={item.key}
-                        item={item}
-                        active={activeKey === item.key}
-                        onNavigate={onNavigate}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </nav>
-
-            {priorityText ? (
-              <div className="dashboard-rail-note">
-                <div className="dashboard-rail-note-label">{priorityLabel}</div>
-                <div className="dashboard-rail-note-text">{priorityText}</div>
-              </div>
-            ) : null}
-          </div>
-        </aside>
+            <button
+              type="button"
+              className="dashboard-rail-resizer"
+              onPointerDown={startRailResize}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  nudgeRailWidth(-12);
+                }
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  nudgeRailWidth(12);
+                }
+              }}
+              aria-label="Resize sidebar"
+              aria-orientation="vertical"
+            />
+          </aside>
+        ) : null}
 
         <section className="dashboard-main-shell" ref={mainRef}>
+          {!railVisible ? (
+            <div className="dashboard-sidebar-return">
+              <button
+                type="button"
+                onClick={() => setRailVisible(true)}
+                aria-label="Show sidebar"
+              >
+                <DashboardIcon name="chevron" size={17} />
+              </button>
+            </div>
+          ) : null}
+
           <div className="dashboard-mobile-head">
             <div>
               <div className="dashboard-eyebrow">{eyebrow}</div>
@@ -141,6 +265,10 @@ export default function DashboardShell({
           color:#0f172a;
         }
 
+        .dashboard-shell.rail-hidden{
+          grid-template-columns:minmax(0,1fr);
+        }
+
         .dashboard-rail{
           position:relative;
           height:100%;
@@ -149,6 +277,43 @@ export default function DashboardShell({
           border-right:1px solid rgba(15,23,42,.09);
           background:
             linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(248,250,252,.94) 100%);
+        }
+
+        .dashboard-rail-resizer{
+          position:absolute;
+          top:0;
+          right:0;
+          width:10px;
+          height:100%;
+          border:0;
+          border-radius:0;
+          background:transparent;
+          cursor:col-resize;
+          z-index:5;
+        }
+
+        .dashboard-rail-resizer::after{
+          content:"";
+          position:absolute;
+          top:50%;
+          right:3px;
+          width:3px;
+          height:42px;
+          border-radius:999px;
+          transform:translateY(-50%);
+          background:rgba(15,23,42,.12);
+          opacity:0;
+          transition:opacity .16s ease, background .16s ease;
+        }
+
+        .dashboard-rail:hover .dashboard-rail-resizer::after,
+        .dashboard-rail-resizer:focus-visible::after{
+          opacity:1;
+        }
+
+        .dashboard-rail-resizer:focus-visible{
+          outline:2px solid rgba(180,35,24,.28);
+          outline-offset:-2px;
         }
 
         .dashboard-rail-inner{
@@ -166,6 +331,37 @@ export default function DashboardShell({
           justify-content:flex-start;
           padding:0 10px 14px;
           border-bottom:1px solid rgba(15,23,42,.08);
+        }
+
+        .dashboard-rail-topline{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:10px;
+        }
+
+        .dashboard-rail-hide-btn{
+          width:30px;
+          height:30px;
+          border:1px solid rgba(15,23,42,.08);
+          border-radius:10px;
+          background:#fff;
+          color:rgba(15,23,42,.58);
+          padding:0;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          cursor:pointer;
+        }
+
+        .dashboard-chevron-left{
+          transform:rotate(180deg);
+        }
+
+        .dashboard-rail-hide-btn:hover{
+          color:#b42318;
+          border-color:rgba(180,35,24,.18);
+          background:rgba(180,35,24,.04);
         }
 
         .dashboard-eyebrow{
@@ -365,6 +561,39 @@ export default function DashboardShell({
           padding:24px 32px 48px;
         }
 
+        .dashboard-sidebar-return{
+          position:sticky;
+          top:0;
+          z-index:25;
+          margin:-8px 0 14px;
+          display:flex;
+          justify-content:flex-start;
+          pointer-events:none;
+        }
+
+        .dashboard-sidebar-return button{
+          width:38px;
+          height:38px;
+          border:1px solid rgba(15,23,42,.08);
+          border-radius:13px;
+          background:rgba(255,255,255,.94);
+          color:#0f172a;
+          padding:0;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          cursor:pointer;
+          pointer-events:auto;
+          box-shadow:0 10px 28px rgba(15,23,42,.08);
+          backdrop-filter:blur(16px);
+          -webkit-backdrop-filter:blur(16px);
+        }
+
+        .dashboard-sidebar-return button:hover{
+          color:#b42318;
+          border-color:rgba(180,35,24,.18);
+        }
+
         .dashboard-content{
           width:min(100%, 1420px);
           min-width:0;
@@ -401,6 +630,10 @@ export default function DashboardShell({
           }
 
           .dashboard-rail{
+            display:none;
+          }
+
+          .dashboard-sidebar-return{
             display:none;
           }
 

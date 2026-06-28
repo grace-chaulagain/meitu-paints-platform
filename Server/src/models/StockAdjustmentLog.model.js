@@ -4,6 +4,10 @@ export const STOCK_ADJUSTMENT_TYPE = Object.freeze({
   MANUAL_CORRECTION: "MANUAL_CORRECTION",
   THRESHOLD_UPDATE: "THRESHOLD_UPDATE",
   ORDER_SHIPMENT_DEDUCTION: "ORDER_SHIPMENT_DEDUCTION",
+  RESERVATION_CREATED: "RESERVATION_CREATED",
+  RESERVATION_RELEASED: "RESERVATION_RELEASED",
+  RESERVATION_CONSUMED: "RESERVATION_CONSUMED",
+  ORDER_AMENDED: "ORDER_AMENDED",
 });
 
 const StockAdjustmentLogSchema = new mongoose.Schema(
@@ -31,6 +35,12 @@ const StockAdjustmentLogSchema = new mongoose.Schema(
     previousQuantity: { type: Number, required: true, min: 0 },
     newQuantity: { type: Number, required: true, min: 0 },
     delta: { type: Number, required: true },
+    previousCurrentQuantity: { type: Number, default: null },
+    newCurrentQuantity: { type: Number, default: null },
+    deltaCurrent: { type: Number, default: null },
+    previousReservedQuantity: { type: Number, default: null },
+    newReservedQuantity: { type: Number, default: null },
+    deltaReserved: { type: Number, default: null },
     previousLowStockThreshold: { type: Number, default: null },
     newLowStockThreshold: { type: Number, default: null },
 
@@ -44,6 +54,12 @@ const StockAdjustmentLogSchema = new mongoose.Schema(
       index: true,
     },
     orderNumber: { type: String, default: "", trim: true },
+    dealerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DealerProfile",
+      default: null,
+      index: true,
+    },
 
     changedBy: {
       type: mongoose.Schema.Types.ObjectId,

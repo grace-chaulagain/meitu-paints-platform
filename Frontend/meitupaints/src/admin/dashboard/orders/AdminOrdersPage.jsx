@@ -5,10 +5,10 @@ import {
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
   useGetAdminOrderQuery,
+  useGetAdminOrderStockCheckQuery,
   useGetAdminOrdersQuery,
   useGetVerifiedDispatchersQuery,
   useRejectAdminOrderMutation,
-  useSendAdminOrderToFactoryMutation,
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
@@ -748,6 +748,175 @@ function OrderItemsTable({ items = [] }) {
   );
 }
 
+function StockCheckPanel({ stockCheck, loading, error }) {
+  const rows = stockCheck?.items || [];
+  const ok = stockCheck?.ok === true;
+  const checkedAt = stockCheck?.checkedAt
+    ? new Date(stockCheck.checkedAt).toLocaleString()
+    : null;
+
+  const statusStyles = {
+    AVAILABLE: { background: "#ecfdf3", color: "#027a48", border: "#abefc6" },
+    LOW: { background: "#fffaeb", color: "#b54708", border: "#fedf89" },
+    INSUFFICIENT: { background: "#fef3f2", color: "#b42318", border: "#fecdca" },
+    OUT_OF_STOCK: { background: "#fef3f2", color: "#b42318", border: "#fecdca" },
+    UNMATCHED: { background: "#f8fafc", color: "#475467", border: "#e2e8f0" },
+    CHECKING: { background: "#eef4ff", color: "#3538cd", border: "#c7d7fe" },
+  };
+
+  const statusPill = (status) => {
+    const style = statusStyles[status] || statusStyles.UNMATCHED;
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          borderRadius: 999,
+          padding: "5px 9px",
+          border: `1px solid ${style.border}`,
+          background: style.background,
+          color: style.color,
+          fontSize: 11,
+          fontWeight: 950,
+          letterSpacing: ".04em",
+          textTransform: "uppercase",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {String(status || "UNKNOWN").replace(/_/g, " ")}
+      </span>
+    );
+  };
+
+  return (
+    <GlassCard style={{ padding: 18, background: "#fff" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <Label>Factory Stock Check</Label>
+          <p style={{ margin: "6px 0 0", color: "#64748b", fontWeight: 800 }}>
+            Verification reserves stock automatically for Factory fulfillment.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {loading ? statusPill("CHECKING") : statusPill(ok ? "AVAILABLE" : "INSUFFICIENT")}
+          {checkedAt ? (
+            <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
+              {checkedAt}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {error ? (
+        <div
+          style={{
+            marginTop: 12,
+            borderRadius: 14,
+            border: "1px solid #fecdca",
+            background: "#fef3f2",
+            color: "#b42318",
+            padding: 12,
+            fontWeight: 850,
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 14, overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+          <thead>
+            <tr>
+              {["Product", "Requested", "Current", "Reserved", "Available", "Status"].map((heading) => (
+                <th
+                  key={heading}
+                  style={{
+                    padding: "10px 12px",
+                    textAlign:
+                      heading === "Product" || heading === "Status" ? "left" : "right",
+                    color: "#64748b",
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: ".08em",
+                    borderBottom: "1px solid rgba(15,23,42,.08)",
+                    background: "#f8fafc",
+                  }}
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={`${row.sku || row.name || "stock"}-${index}`}>
+                <td style={{ padding: "11px 12px", borderBottom: "1px solid rgba(15,23,42,.06)" }}>
+                  <div style={{ display: "grid", gap: 2 }}>
+                    <strong style={{ color: "#0f172a" }}>{row.name || "Product"}</strong>
+                    <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 850 }}>
+                      {row.sku || "No SKU"}
+                    </span>
+                  </div>
+                </td>
+                {[
+                  row.requestedQuantity,
+                  row.currentQuantity,
+                  row.reservedQuantity,
+                  row.availableQuantity,
+                ].map((value, valueIndex) => (
+                  <td
+                    key={valueIndex}
+                    style={{
+                      padding: "11px 12px",
+                      borderBottom: "1px solid rgba(15,23,42,.06)",
+                      textAlign: "right",
+                      color: "#0f172a",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {Number(value || 0).toLocaleString()}
+                  </td>
+                ))}
+                <td style={{ padding: "11px 12px", borderBottom: "1px solid rgba(15,23,42,.06)" }}>
+                  {statusPill(row.status)}
+                  {row.message ? (
+                    <div style={{ marginTop: 6, color: "#64748b", fontSize: 12, fontWeight: 800 }}>
+                      {row.message}
+                    </div>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+            {!rows.length ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  style={{
+                    padding: 16,
+                    color: "#64748b",
+                    fontWeight: 850,
+                    textAlign: "center",
+                  }}
+                >
+                  {loading ? "Checking stock..." : "No stock check rows available."}
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </GlassCard>
+  );
+}
+
 function ModalShell({ open, onClose, children, maxWidth = 1080 }) {
   if (!open) return null;
 
@@ -789,13 +958,30 @@ function OrderViewModal({
   onAmend,
   onVerify,
   onReject,
-  onSendToFactory,
   onDelete,
 }) {
-  if (!open || !order) return null;
-
   const dealer = order?.dealerSnapshot || order?.dealerId || {};
   const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
+  const isFactoryFulfillment = (dealer?.fulfillmentMode || "FACTORY") === "FACTORY";
+  const shouldCheckStock =
+    Boolean(open && order?._id) &&
+    order?.status === "SUBMITTED" &&
+    isFactoryFulfillment;
+  const stockCheckQuery = useGetAdminOrderStockCheckQuery(order?._id, {
+    skip: !shouldCheckStock,
+  });
+  const stockCheck = stockCheckQuery.data;
+  const stockCheckError = stockCheckQuery.error
+    ? getQueryErrorMessage(stockCheckQuery.error)
+    : "";
+  const stockCheckLoading =
+    shouldCheckStock &&
+    (stockCheckQuery.isLoading || (stockCheckQuery.isFetching && !stockCheck));
+  const stockBlocksVerify =
+    shouldCheckStock &&
+    (stockCheckLoading || Boolean(stockCheckError) || stockCheck?.ok !== true);
+
+  if (!open || !order) return null;
 
   return (
     <ModalShell open={open} onClose={onClose} maxWidth={1120}>
@@ -931,6 +1117,16 @@ function OrderViewModal({
           </div>
         </div>
 
+        {shouldCheckStock ? (
+          <div style={{ marginTop: 18 }}>
+            <StockCheckPanel
+              stockCheck={stockCheck}
+              loading={stockCheckLoading || stockCheckQuery.isFetching}
+              error={stockCheckError}
+            />
+          </div>
+        ) : null}
+
         {order.status === "SUBMITTED" ? (
           <div
             style={{
@@ -951,21 +1147,14 @@ function OrderViewModal({
 
             <ActionButton
               onClick={() => onVerify(order)}
-              disabled={busyAction === `verify-${order._id}`}
+              disabled={busyAction === `verify-${order._id}` || stockBlocksVerify}
             >
-              {busyAction === `verify-${order._id}` ? "Verifying..." : "Verify"}
+              {busyAction === `verify-${order._id}`
+                ? "Verifying..."
+                : stockBlocksVerify
+                  ? "Stock blocked"
+                  : "Verify"}
             </ActionButton>
-
-            {(order?.dealerSnapshot?.fulfillmentMode || "FACTORY") === "FACTORY" ? (
-              <ActionButton
-                onClick={() => onSendToFactory(order)}
-                disabled={busyAction === `factory-${order._id}`}
-              >
-                {busyAction === `factory-${order._id}`
-                  ? "Sending..."
-                  : "Send to Factory"}
-              </ActionButton>
-            ) : null}
 
             <ActionButton
               danger
@@ -1503,7 +1692,6 @@ export default function AdminOrdersPage() {
   const [rejectAdminOrder] = useRejectAdminOrderMutation();
   const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [deleteAdminOrder] = useDeleteAdminOrderMutation();
-  const [sendAdminOrderToFactory] = useSendAdminOrderToFactoryMutation();
 
   const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
   const dispatchers = useMemo(
@@ -1615,20 +1803,6 @@ export default function AdminOrdersPage() {
       rejectAdminOrder({
         orderId: order._id,
         payload: { reviewNote: reviewNote.trim() },
-      }).unwrap(),
-    );
-    if (success) {
-      setActiveOrder(null);
-      clearOrderQuery();
-    }
-  };
-
-  const handleSendToFactory = async (order) => {
-    const note = window.prompt("Optional Factory handoff note:", "") ?? "";
-    const success = await runAction(`factory-${order._id}`, () =>
-      sendAdminOrderToFactory({
-        orderId: order._id,
-        payload: { note: note.trim() },
       }).unwrap(),
     );
     if (success) {
@@ -1818,7 +1992,6 @@ export default function AdminOrdersPage() {
         }}
         onVerify={handleVerify}
         onReject={handleReject}
-        onSendToFactory={handleSendToFactory}
         onDelete={(order) => {
           setDeleteOrder(order);
           setDeleteConfirmation("");
