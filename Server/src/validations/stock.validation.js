@@ -11,6 +11,7 @@ export const stockListQuerySchema = z
   .object({
     q: optionalTrimmedString(120),
     category: optionalTrimmedString(120),
+    code: optionalTrimmedString(120),
     status: z
       .enum(["ALL", "IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK", "all", "in_stock", "low_stock", "out_of_stock"])
       .optional(),
@@ -23,6 +24,8 @@ export const stockHistoryQuerySchema = z
   .object({
     q: optionalTrimmedString(120),
     reason: optionalTrimmedString(120),
+    dateFrom: optionalTrimmedString(40),
+    dateTo: optionalTrimmedString(40),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })

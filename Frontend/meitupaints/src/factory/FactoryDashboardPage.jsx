@@ -1,15 +1,22 @@
 import React, { useMemo, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
+import { jsPDF } from "jspdf";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import DashboardShell from "../components/dashboard/DashboardShell.jsx";
+import DashboardIcon from "../components/dashboard/DashboardIcons.jsx";
 import { useAuth } from "../auth/AuthProvider.jsx";
+import {
+  NOTIFICATION_CATEGORIES,
+  useNotifications,
+} from "../notifications/notificationContext.js";
 import {
   useAmendFactoryOrderMutation,
   useBulkUpdateStockMutation,
   useGetAllStockHistoryQuery,
   useGetFactoryDashboardQuery,
   useGetFactoryOrdersQuery,
+  useGetNotificationsQuery,
   useGetStockHistoryQuery,
   useGetStockQuery,
   useLazyGetProformaInvoiceQuery,
@@ -45,12 +52,11 @@ const ROUTES = {
 };
 
 const ORDER_LANES = [
-  { key: "PENDING", label: "Pending" },
+  { key: "INBOX", label: "Inbox" },
   { key: "PREPARING", label: "Preparing" },
-  { key: "AWAITING_SHIPMENT", label: "Awaiting Shipment" },
-  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
-  { key: "DELIVERED", label: "Delivered" },
-  { key: "ARCHIVE", label: "Archive" },
+  { key: "SHIPMENT", label: "Shipment" },
+  { key: "COMPLETED", label: "Completed" },
+  { key: "REJECTED", label: "Rejected" },
 ];
 
 const STOCK_STATUS_OPTIONS = [
@@ -70,8 +76,9 @@ const SORT_OPTIONS = [
 const STOCK_REASONS = [
   "Manual Count",
   "Stock Received",
-  "Correction",
-  "Damage",
+  "Stock Correction",
+  "Damage / Loss",
+  "Return",
   "Adjustment",
   "Other",
 ];
@@ -110,7 +117,7 @@ function todayKey(value = new Date()) {
 
 function sectionFromPath(pathname = "") {
   if (pathname === ROUTES[SECTIONS.DASHBOARD] || pathname === `${ROUTES[SECTIONS.DASHBOARD]}/`) {
-    return SECTIONS.DASHBOARD;
+    return SECTIONS.OVERVIEW;
   }
   if (pathname.startsWith(ROUTES[SECTIONS.ORDERS])) return SECTIONS.ORDERS;
   if (pathname.startsWith(ROUTES[SECTIONS.STOCK_HISTORY])) return SECTIONS.STOCK_HISTORY;
@@ -123,22 +130,17 @@ function sectionFromPath(pathname = "") {
 
 function laneForOrder(order) {
   const status = String(order?.status || "").toUpperCase();
-  if (status === "PROCESSING") return "PREPARING";
-  if (status === "AWAITING_SHIPMENT" || status === "VERIFIED") return "AWAITING_SHIPMENT";
-  if (status === "OUT_FOR_DELIVERY") return "OUT_FOR_DELIVERY";
-  if (status === "DELIVERED") return "DELIVERED";
-  if (["REJECTED", "CLOSED", "CANCELLED"].includes(status)) return "ARCHIVE";
-  return "PENDING";
+  const stage = String(order?.factoryStage || "").toUpperCase();
+
+  if (status === "REJECTED") return "REJECTED";
+  if (["DELIVERED", "CLOSED", "CANCELLED"].includes(status)) return "COMPLETED";
+  if (stage === "COMPLETED") return "COMPLETED";
+  if (stage === "SHIPMENT" || status === "OUT_FOR_DELIVERY") return "SHIPMENT";
+  if (stage === "PREPARING" || status === "PROCESSING") return "PREPARING";
+  return "INBOX";
 }
 
 function orderMatchesLane(order, lane) {
-  const status = String(order?.status || "").toUpperCase();
-  if (lane === "PENDING") {
-    return !["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(status);
-  }
-  if (lane === "ARCHIVE") {
-    return ["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(status);
-  }
   return laneForOrder(order) === lane;
 }
 
@@ -175,6 +177,82 @@ function makeActivity({ orders = [], history = [] }) {
     .slice(0, 8);
 }
 
+function stockImageUrl(item) {
+  return (
+    item?.primaryImage?.url ||
+    item?.image?.url ||
+    item?.imageUrl ||
+    item?.images?.find?.((image) => image?.isPrimary)?.url ||
+    item?.images?.[0]?.url ||
+    ""
+  );
+}
+
+function IconText({ icon, children }) {
+  return (
+    <>
+      <DashboardIcon name={icon} size={16} />
+      <span>{children}</span>
+    </>
+  );
+}
+
+function downloadInvoicePdf(invoice) {
+  if (!invoice) return;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const copies = invoice.copies || ["Factory Copy", "Driver Copy", "Dealer Copy"];
+  const left = 42;
+  const lineHeight = 17;
+
+  copies.forEach((copy, copyIndex) => {
+    if (copyIndex > 0) doc.addPage();
+    let y = 46;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("MEITU PAINTS", left, y);
+    doc.setFontSize(11);
+    doc.text(copy, 430, y);
+    y += 22;
+    doc.setFont("helvetica", "normal");
+    doc.text("Proforma Invoice", left, y);
+    y += 26;
+    [
+      `Order: ${invoice.orderNumber || "-"}`,
+      `Date: ${compactDate(invoice.generatedAt)}`,
+      `Dealer: ${invoice.dealer?.companyName || "-"}`,
+      `Driver: ${invoice.driver?.name || "-"}`,
+      `Vehicle: ${invoice.driver?.vehicleNumber || "-"}`,
+    ].forEach((line) => {
+      doc.text(line, left, y);
+      y += lineHeight;
+    });
+    y += 14;
+    doc.setFont("helvetica", "bold");
+    doc.text("Items", left, y);
+    y += lineHeight;
+    doc.setFont("helvetica", "normal");
+    (invoice.items || []).forEach((item, index) => {
+      if (y > 710) {
+        doc.addPage();
+        y = 46;
+      }
+      const text = `${index + 1}. ${item.name || "-"} | ${item.sku || "-"} | ${item.packLabel || item.variantLabel || "-"} | Qty ${item.quantity || 0} | ${currency(item.lineTotal, invoice.totals?.currency)}`;
+      doc.text(doc.splitTextToSize(text, 510), left, y);
+      y += lineHeight * Math.max(1, Math.ceil(text.length / 78));
+    });
+    y += 18;
+    doc.setFont("helvetica", "bold");
+    doc.text(`Grand Total: ${currency(invoice.totals?.total, invoice.totals?.currency)}`, left, y);
+    y += 66;
+    doc.setFont("helvetica", "normal");
+    doc.text("Factory", left, y);
+    doc.text("Driver", 250, y);
+    doc.text("Dealer", 430, y);
+  });
+
+  doc.save(`proforma-${invoice.orderNumber || "factory-order"}.pdf`);
+}
+
 function Drawer({ title, eyebrow, children, onClose, wide = false }) {
   return (
     <div className="factory-drawer-backdrop" onClick={(event) => {
@@ -186,7 +264,9 @@ function Drawer({ title, eyebrow, children, onClose, wide = false }) {
             <span>{eyebrow}</span>
             <h2>{title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="icon-btn">x</button>
+          <button type="button" onClick={onClose} className="icon-btn" aria-label="Close drawer">
+            <DashboardIcon name="reject" size={17} />
+          </button>
         </div>
         {children}
       </aside>
@@ -222,7 +302,7 @@ function SearchField({
         onSubmit?.();
       }}
     >
-      <span aria-hidden="true">⌕</span>
+      <DashboardIcon name="search" size={20} className="factory-search-icon" />
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -270,40 +350,53 @@ function StatusTabs({ value, options, counts = {}, onChange }) {
 function FactoryShell({ active, children }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const notifications = useNotifications();
+  const factoryOrderBadge = Number(
+    notifications?.categories?.[NOTIFICATION_CATEGORIES.FACTORY_ORDER] || 0,
+  );
   const navGroups = [
-    {
-      label: "Factory",
-      items: [
-        {
-          key: SECTIONS.DASHBOARD,
-          title: "Factory Dashboard",
-          subtitle: "Operations home",
-        },
-      ],
-    },
     {
       label: "Operations",
       items: [
-        { key: SECTIONS.OVERVIEW, title: "Overview", subtitle: "Pulse" },
-        { key: SECTIONS.ORDERS, title: "Orders", subtitle: "Shipment workflow" },
-        { key: SECTIONS.STOCK, title: "Stock", subtitle: "Inventory control" },
-        { key: SECTIONS.INVOICES, title: "Invoices", subtitle: "Proforma prints" },
+        { key: SECTIONS.OVERVIEW, title: "Overview", subtitle: "Operational pulse", icon: "overview" },
+        {
+          key: SECTIONS.ORDERS,
+          title: "Orders",
+          subtitle: "Factory workflow",
+          icon: "orders",
+          badge: factoryOrderBadge > 0 ? factoryOrderBadge : "",
+        },
+        { key: SECTIONS.STOCK, title: "Stock", subtitle: "Inventory control", icon: "stock" },
         {
           key: SECTIONS.STOCK_HISTORY,
           title: "Stock History",
           subtitle: "Audit trail",
+          icon: "history",
         },
+        {
+          key: SECTIONS.INVOICES,
+          title: "Invoices",
+          subtitle: "Proforma prints",
+          icon: "invoice",
+        },
+      ],
+    },
+    {
+      label: "System",
+      items: [
         {
           key: SECTIONS.NOTIFICATIONS,
           title: "Notifications",
           subtitle: "Alerts",
+          icon: "bell",
+          badge: notifications?.totalUnread ? notifications.totalUnread : "",
         },
-        { key: SECTIONS.PROFILE, title: "Profile", subtitle: "Factory user" },
+        { key: SECTIONS.PROFILE, title: "Profile", subtitle: "Factory user", icon: "user" },
       ],
     },
     {
       label: "Session",
-      items: [{ key: SECTIONS.LOGOUT, title: "Logout", subtitle: "End session" }],
+      items: [{ key: SECTIONS.LOGOUT, title: "Logout", subtitle: "End session", icon: "logout" }],
     },
   ];
 
@@ -501,6 +594,8 @@ function OrderDrawer({ order, onClose, onInvoice }) {
   const [vehicleNumber, setVehicleNumber] = useState(order?.factory?.vehicleNumber || "");
   const [remarks, setRemarks] = useState(order?.factory?.remarks || "");
   const [rejectReason, setRejectReason] = useState("");
+  const [amendReason, setAmendReason] = useState("");
+  const [amendNote, setAmendNote] = useState("");
   const [error, setError] = useState("");
   const [checklist, setChecklist] = useState({
     stock: false,
@@ -554,10 +649,24 @@ function OrderDrawer({ order, onClose, onInvoice }) {
           }
           disabled={busy}
         >
-          Prepare Order
+          <IconText icon="check">Start Preparing</IconText>
+        </button>
+        <button
+          type="button"
+          disabled={busy || !amendReason.trim()}
+          onClick={() =>
+            run(() =>
+              amendOrder({
+                orderId: order._id,
+                payload: { reason: amendReason, note: amendNote || remarks },
+              }).unwrap(),
+            )
+          }
+        >
+          <IconText icon="edit">Amend Order</IconText>
         </button>
         <button type="button" onClick={() => onInvoice(order._id)}>
-          Generate Proforma
+          <IconText icon="invoice">Proforma</IconText>
         </button>
         <button
           type="button"
@@ -571,7 +680,7 @@ function OrderDrawer({ order, onClose, onInvoice }) {
             )
           }
         >
-          Mark Out For Delivery
+          <IconText icon="truck">Out for Delivery</IconText>
         </button>
         <button
           type="button"
@@ -582,7 +691,7 @@ function OrderDrawer({ order, onClose, onInvoice }) {
             )
           }
         >
-          Mark Delivered
+          <IconText icon="check">Delivered</IconText>
         </button>
         <button
           type="button"
@@ -597,7 +706,7 @@ function OrderDrawer({ order, onClose, onInvoice }) {
             )
           }
         >
-          Reject
+          <IconText icon="reject">Reject</IconText>
         </button>
       </div>
       {error ? <div className="alert-line">{error}</div> : null}
@@ -681,7 +790,7 @@ function OrderDrawer({ order, onClose, onInvoice }) {
         </div>
       </details>
       <details>
-        <summary>Driver Assignment</summary>
+        <summary>Driver / Shipment</summary>
         <div className="form-grid">
           <label>
             Driver Name
@@ -705,7 +814,55 @@ function OrderDrawer({ order, onClose, onInvoice }) {
         </div>
       </details>
       <details>
-        <summary>Internal Notes and Rejection</summary>
+        <summary>Factory Stage</summary>
+        <div className="info-grid">
+          <span>Stage</span>
+          <strong>{statusLabel(order.factoryStage || laneForOrder(order))}</strong>
+          <span>Status</span>
+          <strong>{statusLabel(order.status)}</strong>
+          <span>Priority</span>
+          <strong>{priorityForOrder(order)}</strong>
+          <span>Received</span>
+          <strong>{compactDate(order.factory?.sentToFactoryAt || order.createdAt)}</strong>
+        </div>
+      </details>
+      <details>
+        <summary>Amendment</summary>
+        <div className="form-grid">
+          <label>
+            Amendment Reason
+            <input
+              value={amendReason}
+              onChange={(event) => setAmendReason(event.target.value)}
+              placeholder="Required before amending"
+            />
+          </label>
+          <label>
+            Amendment Note
+            <textarea
+              value={amendNote}
+              onChange={(event) => setAmendNote(event.target.value)}
+              placeholder="Optional internal note"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || !amendReason.trim()}
+            onClick={() =>
+              run(() =>
+                amendOrder({
+                  orderId: order._id,
+                  payload: { reason: amendReason, note: amendNote || remarks },
+                }).unwrap(),
+              )
+            }
+          >
+            <IconText icon="edit">Save Amendment</IconText>
+          </button>
+        </div>
+      </details>
+      <details>
+        <summary>Rejection</summary>
         <div className="form-grid">
           <label>
             Rejection Reason
@@ -715,21 +872,6 @@ function OrderDrawer({ order, onClose, onInvoice }) {
               placeholder="Required only when rejecting"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => {
-              const reason = window.prompt("Factory amendment reason:", "");
-              if (!reason) return;
-              run(() =>
-                amendOrder({
-                  orderId: order._id,
-                  payload: { reason, note: remarks },
-                }).unwrap(),
-              );
-            }}
-          >
-            Amend Order
-          </button>
         </div>
       </details>
       <details>
@@ -763,7 +905,7 @@ function OrdersPage({ globalSearch, onInvoice }) {
   const listQuery = useGetFactoryOrdersQuery({
     stage: "ALL",
     q: effectiveSearch,
-    limit: 200,
+    limit: 100,
   });
   const allOrders = listQuery.data?.items || [];
   const counts = ORDER_LANES.reduce((acc, item) => {
@@ -859,6 +1001,9 @@ function OrdersPage({ globalSearch, onInvoice }) {
               </span>
               <span>{order.factory?.driverName || "-"}</span>
               <span>{timeAgo(order.factory?.sentToFactoryAt || order.updatedAt || order.createdAt)}</span>
+              <span className="row-open">
+                <DashboardIcon name="chevron" size={17} />
+              </span>
             </button>
           ))}
           {!listQuery.isLoading && !items.length ? (
@@ -1243,6 +1388,7 @@ function StockPage({ globalSearch }) {
   const stockQuery = useGetStockQuery({
     q: effectiveSearch,
     category: category === "ALL" ? "" : category,
+    code: family === "ALL" ? "" : family,
     status,
     limit: 200,
   });
@@ -1253,7 +1399,6 @@ function StockPage({ globalSearch }) {
     ...new Set(allItems.map((item) => item.code).filter(Boolean)),
   ].sort();
   const items = [...(stockQuery.data?.items || [])]
-    .filter((item) => family === "ALL" || item.code === family)
     .sort((a, b) => {
       if (sort === "stock-asc") {
         return Number(a.stock?.availableQuantity || 0) - Number(b.stock?.availableQuantity || 0);
@@ -1316,14 +1461,14 @@ function StockPage({ globalSearch }) {
             className={view === "grid" ? "active" : ""}
             onClick={() => setView("grid")}
           >
-            Grid
+            <IconText icon="overview">Grid</IconText>
           </button>
           <button
             type="button"
             className={view === "list" ? "active" : ""}
             onClick={() => setView("list")}
           >
-            List
+            <IconText icon="orders">List</IconText>
           </button>
         </div>
       </div>
@@ -1331,39 +1476,49 @@ function StockPage({ globalSearch }) {
         <div className="empty-line">Loading stock catalog...</div>
       ) : null}
       <div className={view === "grid" ? "stock-catalog-grid" : "stock-catalog-list"}>
-        {items.map((item) => (
-          <button
-            type="button"
-            key={item._id || item.sku}
-            className={`stock-card stock-${String(item.stock?.status || "").toLowerCase()}`}
-            onClick={() => setSelected(item)}
-          >
-            <div className="stock-preview">
-              <span>{String(item.name || "M").slice(0, 1)}</span>
-            </div>
-            <div className="stock-card-copy">
-              <span className="status-pill">{statusLabel(item.stock?.status)}</span>
-              <h3>{item.name}</h3>
-              <p>{item.sku}</p>
-              <span>{item.category || "Uncategorized"} · {item.packLabel || item.pack?.label || "Variant"}</span>
-            </div>
-            <div className="stock-card-numbers">
-              <div>
-                <span>Current</span>
-                <strong>{item.stock?.currentQuantity || 0}</strong>
+        {items.map((item) => {
+          const imageUrl = stockImageUrl(item);
+          return (
+            <button
+              type="button"
+              key={item._id || item.sku}
+              className={`stock-card stock-${String(item.stock?.status || "").toLowerCase()}`}
+              onClick={() => setSelected(item)}
+            >
+              <div className="stock-preview">
+                {imageUrl ? (
+                  <img src={imageUrl} alt={item.name || item.sku || "Product"} loading="lazy" />
+                ) : (
+                  <span>{String(item.name || "M").slice(0, 1)}</span>
+                )}
               </div>
-              <div>
-                <span>Reserved</span>
-                <strong>{item.stock?.reservedQuantity || 0}</strong>
+              <div className="stock-card-copy">
+                <span className="status-pill">{statusLabel(item.stock?.status)}</span>
+                <h3>{item.name}</h3>
+                <p>{item.sku}</p>
+                <span>{item.category || "Uncategorized"} · {item.packLabel || item.pack?.label || "Variant"}</span>
+                <small>Updated {item.stock?.lastUpdatedAt ? timeAgo(item.stock.lastUpdatedAt) : "not yet"}</small>
               </div>
-              <div>
-                <span>Available</span>
-                <strong>{item.stock?.availableQuantity || 0}</strong>
+              <div className="stock-card-numbers">
+                <div>
+                  <span>Current</span>
+                  <strong>{item.stock?.currentQuantity || 0}</strong>
+                </div>
+                <div>
+                  <span>Reserved</span>
+                  <strong>{item.stock?.reservedQuantity || 0}</strong>
+                </div>
+                <div>
+                  <span>Available</span>
+                  <strong>{item.stock?.availableQuantity || 0}</strong>
+                </div>
               </div>
-            </div>
-            <span className="quick-edit">Edit</span>
-          </button>
-        ))}
+              <span className="quick-edit">
+                <IconText icon="edit">Update</IconText>
+              </span>
+            </button>
+          );
+        })}
         {!stockQuery.isLoading && !items.length ? (
           <div className="empty-line">No stock rows found.</div>
         ) : null}
@@ -1377,8 +1532,17 @@ function StockPage({ globalSearch }) {
 function StockHistoryPage({ globalSearch }) {
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
+  const [reason, setReason] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const effectiveSearch = query || globalSearch;
-  const historyQuery = useGetAllStockHistoryQuery({ q: effectiveSearch, limit: 120 });
+  const historyQuery = useGetAllStockHistoryQuery({
+    q: effectiveSearch,
+    reason: reason === "ALL" ? "" : reason,
+    dateFrom,
+    dateTo,
+    limit: 120,
+  });
   const items = historyQuery.data?.items || [];
   const exportCsv = () => {
     const headers = ["Date", "Product", "Old", "New", "Difference", "Reason", "Factory User"];
@@ -1413,11 +1577,15 @@ function StockHistoryPage({ globalSearch }) {
         </div>
         <div className="page-actions">
           {historyQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
-          <button type="button" onClick={exportCsv}>Export CSV</button>
-          <button type="button" onClick={() => window.print()}>Export PDF</button>
+          <button type="button" onClick={exportCsv}>
+            <IconText icon="download">CSV</IconText>
+          </button>
+          <button type="button" onClick={() => window.print()}>
+            <IconText icon="print">Print</IconText>
+          </button>
         </div>
       </div>
-      <div className="filter-row single">
+      <div className="filter-row history-filter-row">
         <SearchField
           value={draftQuery}
           onChange={setDraftQuery}
@@ -1427,6 +1595,24 @@ function StockHistoryPage({ globalSearch }) {
             setQuery("");
           }}
           placeholder="Search product, SKU, reason, order"
+        />
+        <select value={reason} onChange={(event) => setReason(event.target.value)}>
+          <option value="ALL">All reasons</option>
+          {STOCK_REASONS.map((item) => (
+            <option value={item} key={item}>{item}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+          aria-label="Date from"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
+          aria-label="Date to"
         />
       </div>
       <div className="table-wrap">
@@ -1469,7 +1655,12 @@ function InvoicePreview({ invoice, onClose }) {
   return (
     <Drawer title={`Proforma ${invoice.orderNumber}`} eyebrow="Print Preview" onClose={onClose} wide>
       <div className="drawer-actions no-print">
-        <button type="button" onClick={() => window.print()}>Print</button>
+        <button type="button" onClick={() => window.print()}>
+          <IconText icon="print">Print</IconText>
+        </button>
+        <button type="button" onClick={() => downloadInvoicePdf(invoice)}>
+          <IconText icon="download">Download PDF</IconText>
+        </button>
       </div>
       <div className="invoice-print-area">
         {(invoice.copies || ["Factory Copy", "Driver Copy", "Dealer Copy"]).map((copy) => (
@@ -1533,8 +1724,14 @@ function InvoicePreview({ invoice, onClose }) {
 function InvoicesPage({ globalSearch, onInvoice }) {
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
+  const [date, setDate] = useState("");
+  const [status, setStatus] = useState("ALL");
   const ordersQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: query || globalSearch, limit: 100 });
-  const orders = ordersQuery.data?.items || [];
+  const orders = (ordersQuery.data?.items || []).filter((order) => {
+    if (date && todayKey(order.createdAt) !== date) return false;
+    if (status !== "ALL" && String(order.status || "").toUpperCase() !== status) return false;
+    return true;
+  });
 
   return (
     <div className="factory-page">
@@ -1546,7 +1743,7 @@ function InvoicesPage({ globalSearch, onInvoice }) {
         </div>
         {ordersQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
       </div>
-      <div className="filter-row single">
+      <div className="filter-row invoice-filter-row">
         <SearchField
           value={draftQuery}
           onChange={setDraftQuery}
@@ -1557,6 +1754,15 @@ function InvoicesPage({ globalSearch, onInvoice }) {
           }}
           placeholder="Search dealer, order, invoice"
         />
+        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="ALL">All statuses</option>
+          <option value="PROCESSING">Preparing</option>
+          <option value="AWAITING_SHIPMENT">Awaiting Shipment</option>
+          <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+          <option value="DELIVERED">Delivered</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
       </div>
       <div className="order-list">
         {orders.map((order) => (
@@ -1567,9 +1773,15 @@ function InvoicesPage({ globalSearch, onInvoice }) {
             </div>
             <span>{statusLabel(order.status)}</span>
             <strong>{currency(order.totals?.total, order.totals?.currency)}</strong>
-            <button type="button" onClick={() => onInvoice(order._id)}>Preview</button>
-            <button type="button" onClick={() => onInvoice(order._id)}>Print</button>
-            <button type="button" onClick={() => onInvoice(order._id)}>Duplicate</button>
+            <button type="button" onClick={() => onInvoice(order._id)}>
+              <IconText icon="invoice">Preview</IconText>
+            </button>
+            <button type="button" onClick={() => onInvoice(order._id, "print")}>
+              <IconText icon="print">Print</IconText>
+            </button>
+            <button type="button" onClick={() => onInvoice(order._id, "download")}>
+              <IconText icon="download">PDF</IconText>
+            </button>
           </div>
         ))}
         {!orders.length ? <div className="empty-line">No invoices available.</div> : null}
@@ -1579,12 +1791,26 @@ function InvoicesPage({ globalSearch, onInvoice }) {
 }
 
 function NotificationsPage({ globalSearch }) {
+  const notificationsQuery = useGetNotificationsQuery({ days: 14, limit: 80 });
   const ordersQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: globalSearch, limit: 30 });
   const historyQuery = useGetAllStockHistoryQuery({ q: globalSearch, limit: 30 });
   const activity = makeActivity({
     orders: ordersQuery.data?.items || [],
     history: historyQuery.data?.items || [],
   });
+  const backendItems = notificationsQuery.data || [];
+  const visibleItems = backendItems.length
+    ? backendItems.map((item) => ({
+        id: item._id,
+        title: item.title,
+        meta: item.description,
+        at: item.createdAt,
+        isRead: item.isRead,
+      }))
+    : activity;
+  const unread = backendItems.length
+    ? backendItems.filter((item) => !item.isRead).length
+    : activity.length;
 
   return (
     <div className="factory-page">
@@ -1593,17 +1819,17 @@ function NotificationsPage({ globalSearch }) {
           <p>Notifications</p>
           <h1>Operational alerts</h1>
         </div>
-        <span className="unread-badge">{activity.length} unread</span>
+        <span className="unread-badge">{unread} unread</span>
       </div>
       <div className="notification-list">
-        {activity.map((item) => (
+        {visibleItems.map((item) => (
           <div className="notification-row" key={item.id}>
             <strong>{item.title}</strong>
             <span>{item.meta}</span>
             <time>{timeAgo(item.at)}</time>
           </div>
         ))}
-        {!activity.length ? <div className="empty-line">No notifications.</div> : null}
+        {!visibleItems.length ? <div className="empty-line">No notifications.</div> : null}
       </div>
     </div>
   );
@@ -1642,15 +1868,21 @@ function FactoryDashboardPage() {
   const active = sectionFromPath(location.pathname);
 
   const goTo = (key) => navigate(ROUTES[key] || ROUTES[SECTIONS.DASHBOARD]);
-  const openInvoice = async (orderId) => {
+  const openInvoice = async (orderId, action = "preview") => {
     const item = await loadInvoice(orderId).unwrap();
     setInvoice(item);
+    if (action === "download") {
+      downloadInvoicePdf(item);
+    }
+    if (action === "print") {
+      window.setTimeout(() => window.print(), 120);
+    }
   };
 
   return (
     <FactoryShell active={active}>
       {invoiceState.isFetching ? <div className="inline-loading">Loading invoice...</div> : null}
-      {[SECTIONS.DASHBOARD, SECTIONS.OVERVIEW].includes(active) ? (
+      {active === SECTIONS.OVERVIEW ? (
         <OverviewPage globalSearch={globalSearch} onNavigate={goTo} />
       ) : null}
       {active === SECTIONS.ORDERS ? (
@@ -1684,6 +1916,7 @@ function FactoryStyles() {
       .page-head span{display:block;margin-top:7px;color:var(--factory-muted);font-weight:750;line-height:1.55;}
       .page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
       .page-actions button,.drawer-actions button,.dense-table button,.invoice-row button,.quick-edit{border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:9px 13px;font-weight:900;color:var(--factory-ink);cursor:pointer;}
+      .page-actions button,.drawer-actions button,.invoice-row button,.quick-edit,.view-toggle button{display:inline-flex;align-items:center;justify-content:center;gap:7px;}
       .page-actions button:hover,.drawer-actions button:hover,.dense-table button:hover,.invoice-row button:hover{border-color:rgba(180,35,24,.22);color:var(--factory-red);}
       .drawer-actions button:last-child{background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);border-color:transparent;color:#fff;}
       .drawer-actions button.danger,.danger{background:#991b1b!important;border-color:#991b1b!important;color:#fff!important;}
@@ -1712,9 +1945,11 @@ function FactoryStyles() {
       .filter-row{display:grid;gap:10px;align-items:center;}
       .orders-filter-row{grid-template-columns:minmax(280px,1.4fr) .7fr .85fr .75fr .75fr;}
       .stock-filter-row{grid-template-columns:minmax(260px,1.5fr) .75fr .75fr .7fr .75fr auto;}
+      .history-filter-row{grid-template-columns:minmax(280px,1.4fr) .75fr .6fr .6fr;}
+      .invoice-filter-row{grid-template-columns:minmax(280px,1.4fr) .65fr .75fr;}
       .filter-row.single{grid-template-columns:1fr;}
       .factory-search{height:50px;display:flex;align-items:center;gap:10px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
-      .factory-search span{font-size:18px;font-weight:950;color:rgba(15,23,42,.42);}
+      .factory-search-icon{flex:0 0 auto;color:rgba(15,23,42,.42);}
       .factory-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);}
       .factory-clear-search{width:28px;height:28px;border-radius:999px;border:1px solid var(--factory-line);background:var(--factory-soft);color:var(--factory-muted);font-size:18px;font-weight:950;line-height:1;cursor:pointer;}
       .filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input,.stock-edit-console input{width:100%;min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;}
@@ -1723,12 +1958,13 @@ function FactoryStyles() {
       .view-toggle button{height:40px;border:0;background:transparent;border-radius:12px;padding:0 13px;font-weight:950;color:var(--factory-muted);cursor:pointer;}
       .view-toggle button.active{background:#fff;color:var(--factory-red);box-shadow:0 8px 20px rgba(15,23,42,.10);}
       .orders-board{display:grid;gap:14px;min-width:0;}
-      .order-row,.invoice-row{display:grid;grid-template-columns:1.5fr .7fr .85fr .85fr .95fr .7fr .8fr .8fr;align-items:center;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:13px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .order-row,.invoice-row{display:grid;grid-template-columns:1.45fr .65fr .82fr .82fr .9fr .65fr .76fr .76fr 28px;align-items:center;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:13px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
       .invoice-row{grid-template-columns:1.4fr .8fr .8fr auto auto auto;cursor:default;}
       .order-row:hover,.invoice-row:hover,.stock-card:hover{border-color:rgba(180,35,24,.18);box-shadow:0 12px 30px rgba(15,23,42,.08);}
       .order-main{display:grid;gap:3px;min-width:0;}
       .order-main strong,.invoice-row strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--factory-ink);}
       .order-row span,.invoice-row span{color:var(--factory-muted);font-size:13px;font-weight:750;}
+      .row-open{display:inline-flex!important;align-items:center;justify-content:center;color:rgba(15,23,42,.42);}
       .status-pill,.priority,.unread-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(15,23,42,.06);color:#475569;padding:5px 9px;font-size:11px!important;font-weight:950!important;text-transform:uppercase;white-space:nowrap;}
       .status-pill.out_for_delivery,.status-pill.awaiting_shipment,.priority.high{background:#fff7ed;color:#c2410c;}
       .status-pill.rejected,.stock-out_of_stock{background:#fef2f2!important;}
@@ -1739,10 +1975,12 @@ function FactoryStyles() {
       .stock-card{position:relative;display:grid;grid-template-columns:112px minmax(0,1fr);gap:14px;align-items:start;border:1px solid var(--factory-line);background:#fff;border-radius:18px;padding:14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
       .stock-catalog-list .stock-card{grid-template-columns:88px minmax(0,1fr) minmax(280px,.9fr) auto;align-items:center;}
       .stock-preview{height:112px;border-radius:16px;border:1px solid rgba(15,23,42,.06);background:linear-gradient(180deg,#f8fafc,#eef2f7);display:grid;place-items:center;color:rgba(15,23,42,.32);font-size:32px;font-weight:950;}
+      .stock-preview img{width:100%;height:100%;object-fit:contain;border-radius:14px;background:#fff;}
       .stock-catalog-list .stock-preview{height:78px;}
       .stock-card-copy{display:grid;gap:6px;min-width:0;}
       .stock-card-copy h3{margin:0;font-size:18px;line-height:1.15;letter-spacing:-.025em;color:var(--factory-ink);}
-      .stock-card-copy p,.stock-card-copy span{margin:0;color:var(--factory-muted);font-size:13px;font-weight:800;}
+      .stock-card-copy p,.stock-card-copy span,.stock-card-copy small{margin:0;color:var(--factory-muted);font-size:13px;font-weight:800;}
+      .stock-card-copy small{font-size:12px;color:rgba(15,23,42,.48);}
       .stock-card-numbers{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
       .stock-catalog-list .stock-card-numbers{grid-column:auto;}
       .stock-card-numbers div{border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:10px;background:#fff;}
@@ -1812,7 +2050,7 @@ function FactoryStyles() {
       @media (max-width: 980px){
         .metric-strip,.factory-overview-grid,.split-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
         .stock-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
-        .orders-filter-row,.stock-filter-row,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
+        .orders-filter-row,.stock-filter-row,.history-filter-row,.invoice-filter-row,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
         .stock-card-numbers,.stock-catalog-list .stock-card-numbers{grid-column:1 / -1;}
         .stock-step-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
         .stock-custom-adjust{grid-template-columns:1fr;}

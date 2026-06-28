@@ -18,6 +18,10 @@ const DISPATCHER_CATEGORIES = new Set([
   NOTIFICATION_CATEGORY.ASSIGNED_DEALER_ORDER,
 ]);
 
+const FACTORY_CATEGORIES = new Set([
+  NOTIFICATION_CATEGORY.FACTORY_ORDER,
+]);
+
 function normalizeRole(role = "") {
   return String(role || "")
     .trim()
@@ -45,14 +49,16 @@ function getActorUserId(user) {
 
 function getActorRole(user) {
   const role = normalizeRole(user?.role);
-  if (![ROLES.ADMIN, ROLES.DISPATCHER].includes(role)) {
-    throw new ApiError(403, "Notification access requires admin or dispatcher");
+  if (![ROLES.ADMIN, ROLES.DISPATCHER, ROLES.FACTORY].includes(role)) {
+    throw new ApiError(403, "Notification access requires an operations role");
   }
   return role;
 }
 
 function getRoleCategories(role) {
-  return role === ROLES.ADMIN ? ADMIN_CATEGORIES : DISPATCHER_CATEGORIES;
+  if (role === ROLES.ADMIN) return ADMIN_CATEGORIES;
+  if (role === ROLES.FACTORY) return FACTORY_CATEGORIES;
+  return DISPATCHER_CATEGORIES;
 }
 
 function assertCategoryForRole(category, role) {
@@ -68,7 +74,7 @@ function buildRecipientQuery({ role, userId }) {
     recipientRole: role,
   };
 
-  if (role === ROLES.ADMIN) {
+  if (role === ROLES.ADMIN || role === ROLES.FACTORY) {
     query.$or = [{ recipientUserId: null }, { recipientUserId: userId }];
     return query;
   }
@@ -191,6 +197,30 @@ export async function createDispatcherNotification({
     dealerId: toObjectId(dealerId),
     orderId: toObjectId(orderId),
     dispatcherId: toObjectId(dispatcherId),
+    metadata,
+  });
+}
+
+export async function createFactoryNotification({
+  category,
+  title,
+  description = "",
+  targetUrl = "",
+  dealerId = null,
+  orderId = null,
+  metadata = {},
+} = {}) {
+  const normalizedCategory = assertCategoryForRole(category, ROLES.FACTORY);
+
+  return Notification.create({
+    recipientRole: ROLES.FACTORY,
+    recipientUserId: null,
+    category: normalizedCategory,
+    title,
+    description,
+    targetUrl,
+    dealerId: toObjectId(dealerId),
+    orderId: toObjectId(orderId),
     metadata,
   });
 }

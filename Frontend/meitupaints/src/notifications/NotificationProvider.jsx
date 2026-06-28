@@ -17,7 +17,7 @@ function emptySummary() {
 
 function canUseNotifications(user) {
   const role = String(user?.role || "").toUpperCase();
-  return role === "ADMIN" || role === "DISPATCHER";
+  return role === "ADMIN" || role === "DISPATCHER" || role === "FACTORY";
 }
 
 export function NotificationProvider({ children }) {

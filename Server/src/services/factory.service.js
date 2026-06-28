@@ -2,6 +2,10 @@ import nodemailer from "nodemailer";
 
 import Order, { FACTORY_STAGE, ORDER_STATUS } from "../models/Order.model.js";
 import ApiError from "../utils/apiError.js";
+import {
+  createFactoryNotification,
+  NOTIFICATION_CATEGORY,
+} from "./notification.service.js";
 import { deductStockForOrder, listStock } from "./stock.service.js";
 
 let smtpTransport = null;
@@ -237,6 +241,23 @@ export async function sendOrderToFactory({ orderId, adminUser, note = "" }) {
   };
   order.factoryStage = FACTORY_STAGE.INBOX;
   await order.save();
+
+  createFactoryNotification({
+    category: NOTIFICATION_CATEGORY.FACTORY_ORDER,
+    title: `Order ${order.orderNumber || ""} sent to Factory`.trim(),
+    description: `${order.dealerSnapshot?.companyName || "A dealer"} is awaiting factory preparation.`,
+    targetUrl: `/factory/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+    dealerId: order.dealerId,
+    orderId: order._id,
+    metadata: {
+      orderNumber: order.orderNumber || "",
+      companyName: order.dealerSnapshot?.companyName || "",
+      total: order.totals?.total || 0,
+      currency: order.totals?.currency || "NPR",
+    },
+  }).catch((error) => {
+    console.warn("[factory-notification] order sent:", error.message);
+  });
 
   return order;
 }

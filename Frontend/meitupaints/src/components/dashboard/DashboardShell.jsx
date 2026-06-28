@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import NavBar from "../NavBar.jsx";
+import DashboardIcon from "./DashboardIcons.jsx";
 
 function badgeText(value) {
   return value === null || value === undefined ? "" : String(value);
@@ -8,15 +9,21 @@ function badgeText(value) {
 
 function DashboardNavItem({ item, active, onNavigate, compact = false }) {
   const badge = badgeText(item.badge);
+  const iconName = item.icon || item.iconName || "";
 
   return (
     <button
       type="button"
       className={`dashboard-nav-item ${active ? "active" : ""} ${
         compact ? "compact" : ""
-      }`}
+      } ${iconName ? "has-icon" : ""}`}
       onClick={() => onNavigate?.(item)}
     >
+      {iconName ? (
+        <span className="dashboard-nav-icon">
+          <DashboardIcon name={iconName} size={compact ? 17 : 19} />
+        </span>
+      ) : null}
       <span className="dashboard-nav-copy">
         <span className="dashboard-nav-title">{item.title}</span>
         {!compact && item.subtitle ? (
@@ -241,6 +248,26 @@ export default function DashboardShell({
           transition:background .16s ease, color .16s ease, border-color .16s ease;
         }
 
+        .dashboard-nav-item.has-icon{
+          grid-template-columns:22px minmax(0,1fr) auto;
+          padding-left:10px;
+        }
+
+        .dashboard-nav-icon{
+          width:22px;
+          height:22px;
+          border-radius:8px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          color:rgba(15,23,42,.54);
+        }
+
+        .dashboard-nav-item.active .dashboard-nav-icon{
+          color:#b42318;
+          background:rgba(180,35,24,.08);
+        }
+
         .dashboard-nav-item:hover{
           background:rgba(15,23,42,.045);
         }
@@ -416,6 +443,17 @@ export default function DashboardShell({
             padding:8px 12px;
             border:1px solid rgba(15,23,42,.08);
             background:#fff;
+          }
+
+          .dashboard-nav-item.compact.has-icon{
+            grid-template-columns:18px minmax(0,1fr) auto;
+            padding-left:10px;
+          }
+
+          .dashboard-nav-item.compact .dashboard-nav-icon{
+            width:18px;
+            height:18px;
+            border-radius:999px;
           }
 
           .dashboard-nav-item.compact.active{

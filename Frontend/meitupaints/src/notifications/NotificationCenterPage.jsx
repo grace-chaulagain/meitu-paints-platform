@@ -103,7 +103,8 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
   const refreshSummary = notifications?.refreshSummary;
   const notificationParams = useMemo(() => ({ days: 7, limit: 120 }), []);
   const role = String(user?.role || "").toUpperCase();
-  const notificationsEnabled = role === "ADMIN" || role === "DISPATCHER";
+  const notificationsEnabled =
+    role === "ADMIN" || role === "DISPATCHER" || role === "FACTORY";
 
   const {
     data: items = [],

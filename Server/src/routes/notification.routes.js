@@ -11,7 +11,7 @@ import { requireRole } from "../middlewares/requireRole.middleware.js";
 
 const router = Router();
 
-router.use(auth, requireRole("ADMIN", "DISPATCHER"));
+router.use(auth, requireRole("ADMIN", "DISPATCHER", "FACTORY"));
 
 router.get("/summary", getNotificationSummaryController);
 router.get("/", listNotificationsController);

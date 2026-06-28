@@ -58,6 +58,9 @@ function getStock(product) {
 }
 
 function stockItem(product) {
+  const images = Array.isArray(product.images) ? product.images : [];
+  const primaryImage = images.find((image) => image?.isPrimary) || images[0] || null;
+
   return {
     _id: product._id,
     productId: product._id,
@@ -67,15 +70,19 @@ function stockItem(product) {
     category: product.category || "",
     pack: product.pack || {},
     packLabel: product.pack?.label || "",
+    images,
+    primaryImage,
+    imageUrl: primaryImage?.url || "",
     isActive: product.isActive,
     stock: getStock(product),
   };
 }
 
-function buildProductQuery({ q = "", category = "" } = {}) {
+function buildProductQuery({ q = "", category = "", code = "" } = {}) {
   const query = {};
   const search = clean(q);
   const normalizedCategory = clean(category);
+  const normalizedCode = clean(code);
 
   if (search) {
     const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
@@ -84,6 +91,10 @@ function buildProductQuery({ q = "", category = "" } = {}) {
 
   if (normalizedCategory) {
     query.category = normalizedCategory;
+  }
+
+  if (normalizedCode) {
+    query.code = normalizedCode;
   }
 
   return query;
@@ -138,13 +149,14 @@ async function createStockLog({
 export async function listStock({
   q = "",
   category = "",
+  code = "",
   status = "ALL",
   page = 1,
   limit = 100,
 } = {}) {
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(200, Math.max(1, Number(limit || 100)));
-  const query = buildProductQuery({ q, category });
+  const query = buildProductQuery({ q, category, code });
 
   const products = await Product.find(query)
     .sort({ category: 1, name: 1, sku: 1 })
@@ -212,6 +224,8 @@ export async function getStockHistory({ productId, page = 1, limit = 50 }) {
 export async function listStockHistory({
   q = "",
   reason = "",
+  dateFrom = "",
+  dateTo = "",
   page = 1,
   limit = 80,
 } = {}) {
@@ -220,6 +234,8 @@ export async function listStockHistory({
   const query = {};
   const search = clean(q);
   const reasonSearch = clean(reason);
+  const from = clean(dateFrom);
+  const to = clean(dateTo);
 
   if (search) {
     const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
@@ -238,6 +254,23 @@ export async function listStockHistory({
       reasonSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
       "i",
     );
+  }
+
+  if (from || to) {
+    query.changedAt = {};
+    if (from) {
+      const parsedFrom = new Date(`${from}T00:00:00.000Z`);
+      if (!Number.isNaN(parsedFrom.getTime())) {
+        query.changedAt.$gte = parsedFrom;
+      }
+    }
+    if (to) {
+      const parsedTo = new Date(`${to}T23:59:59.999Z`);
+      if (!Number.isNaN(parsedTo.getTime())) {
+        query.changedAt.$lte = parsedTo;
+      }
+    }
+    if (!Object.keys(query.changedAt).length) delete query.changedAt;
   }
 
   const [items, total] = await Promise.all([
