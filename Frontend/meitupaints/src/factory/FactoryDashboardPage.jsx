@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import DashboardShell from "../components/dashboard/DashboardShell.jsx";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import {
   useAmendFactoryOrderMutation,
@@ -21,6 +22,7 @@ import {
 } from "../redux/api/meituApi.js";
 
 const SECTIONS = {
+  DASHBOARD: "dashboard",
   OVERVIEW: "overview",
   ORDERS: "orders",
   STOCK: "stock",
@@ -28,10 +30,12 @@ const SECTIONS = {
   STOCK_HISTORY: "stock-history",
   NOTIFICATIONS: "notifications",
   PROFILE: "profile",
+  LOGOUT: "logout",
 };
 
 const ROUTES = {
-  [SECTIONS.OVERVIEW]: "/factory/dashboard",
+  [SECTIONS.DASHBOARD]: "/factory/dashboard",
+  [SECTIONS.OVERVIEW]: "/factory/dashboard/overview",
   [SECTIONS.ORDERS]: "/factory/dashboard/orders",
   [SECTIONS.STOCK]: "/factory/dashboard/stock",
   [SECTIONS.INVOICES]: "/factory/dashboard/invoices",
@@ -40,24 +44,27 @@ const ROUTES = {
   [SECTIONS.PROFILE]: "/factory/dashboard/profile",
 };
 
-const SIDEBAR_ITEMS = [
-  { key: SECTIONS.OVERVIEW, label: "Overview" },
-  { key: SECTIONS.ORDERS, label: "Orders" },
-  { key: SECTIONS.STOCK, label: "Stock" },
-  { key: SECTIONS.INVOICES, label: "Invoices" },
-  { key: SECTIONS.STOCK_HISTORY, label: "Stock History" },
-  { key: SECTIONS.NOTIFICATIONS, label: "Notifications" },
-  { key: SECTIONS.PROFILE, label: "Profile" },
-];
-
 const ORDER_LANES = [
-  { key: "INBOX", label: "Inbox" },
+  { key: "PENDING", label: "Pending" },
   { key: "PREPARING", label: "Preparing" },
   { key: "AWAITING_SHIPMENT", label: "Awaiting Shipment" },
   { key: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
   { key: "DELIVERED", label: "Delivered" },
-  { key: "REJECTED", label: "Rejected" },
   { key: "ARCHIVE", label: "Archive" },
+];
+
+const STOCK_STATUS_OPTIONS = [
+  { value: "ALL", label: "All stock" },
+  { value: "IN_STOCK", label: "In stock" },
+  { value: "LOW_STOCK", label: "Low stock" },
+  { value: "OUT_OF_STOCK", label: "Out of stock" },
+];
+
+const SORT_OPTIONS = [
+  { value: "name", label: "Sort by name" },
+  { value: "stock-asc", label: "Lowest stock" },
+  { value: "stock-desc", label: "Highest stock" },
+  { value: "updated", label: "Recently updated" },
 ];
 
 const STOCK_REASONS = [
@@ -102,6 +109,9 @@ function todayKey(value = new Date()) {
 }
 
 function sectionFromPath(pathname = "") {
+  if (pathname === ROUTES[SECTIONS.DASHBOARD] || pathname === `${ROUTES[SECTIONS.DASHBOARD]}/`) {
+    return SECTIONS.DASHBOARD;
+  }
   if (pathname.startsWith(ROUTES[SECTIONS.ORDERS])) return SECTIONS.ORDERS;
   if (pathname.startsWith(ROUTES[SECTIONS.STOCK_HISTORY])) return SECTIONS.STOCK_HISTORY;
   if (pathname.startsWith(ROUTES[SECTIONS.STOCK])) return SECTIONS.STOCK;
@@ -114,12 +124,22 @@ function sectionFromPath(pathname = "") {
 function laneForOrder(order) {
   const status = String(order?.status || "").toUpperCase();
   if (status === "PROCESSING") return "PREPARING";
-  if (status === "AWAITING_SHIPMENT" || status === "VERIFIED") return "INBOX";
+  if (status === "AWAITING_SHIPMENT" || status === "VERIFIED") return "AWAITING_SHIPMENT";
   if (status === "OUT_FOR_DELIVERY") return "OUT_FOR_DELIVERY";
   if (status === "DELIVERED") return "DELIVERED";
-  if (status === "REJECTED") return "REJECTED";
-  if (["CLOSED", "CANCELLED"].includes(status)) return "ARCHIVE";
-  return "INBOX";
+  if (["REJECTED", "CLOSED", "CANCELLED"].includes(status)) return "ARCHIVE";
+  return "PENDING";
+}
+
+function orderMatchesLane(order, lane) {
+  const status = String(order?.status || "").toUpperCase();
+  if (lane === "PENDING") {
+    return !["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(status);
+  }
+  if (lane === "ARCHIVE") {
+    return ["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(status);
+  }
+  return laneForOrder(order) === lane;
 }
 
 function productCount(order) {
@@ -187,57 +207,130 @@ function MetricStrip({ items }) {
   );
 }
 
-function FactoryShell({ active, globalSearch, setGlobalSearch, children }) {
+function SearchField({
+  value,
+  onChange,
+  onSubmit,
+  onClear,
+  placeholder = "Search...",
+}) {
+  return (
+    <form
+      className="factory-search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.();
+      }}
+    >
+      <span aria-hidden="true">⌕</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+      {value ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={onClear}
+          className="factory-clear-search"
+        >
+          ×
+        </button>
+      ) : null}
+    </form>
+  );
+}
+
+function StatusTabs({ value, options, counts = {}, onChange }) {
+  return (
+    <div className="factory-tabs" role="tablist" aria-label="Factory status filters">
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={active ? "active" : ""}
+            key={option.key}
+            onClick={() => onChange(option.key)}
+          >
+            <span>{option.label}</span>
+            {typeof counts[option.key] === "number" ? (
+              <strong>{counts[option.key]}</strong>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FactoryShell({ active, children }) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const navGroups = [
+    {
+      label: "Factory",
+      items: [
+        {
+          key: SECTIONS.DASHBOARD,
+          title: "Factory Dashboard",
+          subtitle: "Operations home",
+        },
+      ],
+    },
+    {
+      label: "Operations",
+      items: [
+        { key: SECTIONS.OVERVIEW, title: "Overview", subtitle: "Pulse" },
+        { key: SECTIONS.ORDERS, title: "Orders", subtitle: "Shipment workflow" },
+        { key: SECTIONS.STOCK, title: "Stock", subtitle: "Inventory control" },
+        { key: SECTIONS.INVOICES, title: "Invoices", subtitle: "Proforma prints" },
+        {
+          key: SECTIONS.STOCK_HISTORY,
+          title: "Stock History",
+          subtitle: "Audit trail",
+        },
+        {
+          key: SECTIONS.NOTIFICATIONS,
+          title: "Notifications",
+          subtitle: "Alerts",
+        },
+        { key: SECTIONS.PROFILE, title: "Profile", subtitle: "Factory user" },
+      ],
+    },
+    {
+      label: "Session",
+      items: [{ key: SECTIONS.LOGOUT, title: "Logout", subtitle: "End session" }],
+    },
+  ];
+
+  const handleNavigate = (item) => {
+    if (item.key === SECTIONS.LOGOUT) {
+      logout();
+      return;
+    }
+    navigate(ROUTES[item.key] || ROUTES[SECTIONS.DASHBOARD]);
+  };
 
   return (
-    <div className="factory-workspace">
-      <aside className="factory-sidebar">
-        <div className="factory-brand">
-          <div className="factory-logo">M</div>
-          <div>
-            <strong>Meitu Factory</strong>
-            <span>Operations</span>
-          </div>
-        </div>
-        <div className="sidebar-title">Factory Dashboard</div>
-        <nav className="factory-sidebar-nav">
-          {SIDEBAR_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              className={active === item.key ? "active" : ""}
-              type="button"
-              onClick={() => navigate(ROUTES[item.key])}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="factory-sidebar-footer">
-          <span>{user?.email || user?.username || "Factory"}</span>
-          <button type="button" onClick={logout}>Logout</button>
-        </div>
-      </aside>
-      <main className="factory-main">
-        <header className="factory-topbar">
-          <div>
-            <span>Global Search</span>
-            <input
-              value={globalSearch}
-              onChange={(event) => setGlobalSearch(event.target.value)}
-              placeholder="Dealer, SKU, order, invoice, product, driver"
-            />
-          </div>
-          <div className="topbar-status">
-            <span>Staging ready</span>
-            <strong>{new Date().toLocaleDateString()}</strong>
-          </div>
-        </header>
-        <section className="factory-scroll">{children}</section>
-      </main>
+    <>
+      <DashboardShell
+        eyebrow="Meitu Operations"
+        title="Factory Dashboard"
+        accountLabel={user?.email || user?.username || "Factory"}
+        navGroups={navGroups}
+        activeKey={active}
+        onNavigate={handleNavigate}
+        priorityLabel="Factory Rule"
+        priorityText="Stock is deducted only when an order is marked out for delivery."
+      >
+        {children}
+      </DashboardShell>
       <FactoryStyles />
-    </div>
+    </>
   );
 }
 
@@ -245,16 +338,23 @@ function OverviewPage({ globalSearch, onNavigate }) {
   const dashboard = useGetFactoryDashboardQuery();
   const ordersQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: globalSearch, limit: 20 });
   const historyQuery = useGetAllStockHistoryQuery({ q: globalSearch, limit: 20 });
+  const lowStockQuery = useGetStockQuery({ status: "LOW_STOCK", limit: 8 });
   const orders = ordersQuery.data?.items || [];
   const history = historyQuery.data?.items || [];
+  const lowStockItems = lowStockQuery.data?.items || [];
   const summary = dashboard.data || {};
   const today = todayKey();
-  const todayDispatches = orders.filter(
+  const deliveredToday = orders.filter(
     (order) =>
-      order.status === "OUT_FOR_DELIVERY" &&
-      todayKey(order.factory?.outForDeliveryAt || order.updatedAt) === today,
+      order.status === "DELIVERED" &&
+      todayKey(order.factory?.deliveredAt || order.updatedAt) === today,
   ).length;
   const activity = makeActivity({ orders, history });
+  const refreshing =
+    dashboard.isFetching ||
+    ordersQuery.isFetching ||
+    historyQuery.isFetching ||
+    lowStockQuery.isFetching;
 
   const metrics = [
     {
@@ -283,8 +383,8 @@ function OverviewPage({ globalSearch, onNavigate }) {
       onClick: () => onNavigate(SECTIONS.STOCK),
     },
     {
-      label: "Today's Dispatches",
-      value: todayDispatches,
+      label: "Delivered Today",
+      value: deliveredToday || summary.orders?.deliveredToday || 0,
       onClick: () => onNavigate(SECTIONS.ORDERS),
     },
   ];
@@ -294,20 +394,65 @@ function OverviewPage({ globalSearch, onNavigate }) {
       <div className="page-head">
         <div>
           <p>Overview</p>
-          <h1>Operational control room</h1>
+          <h1>Factory operations</h1>
+          <span>
+            Live order, shipment, and inventory work queue for the Factory team.
+          </span>
         </div>
-        <button type="button" onClick={() => {
-          dashboard.refetch();
-          ordersQuery.refetch();
-          historyQuery.refetch();
-        }}>
-          {dashboard.isFetching || ordersQuery.isFetching || historyQuery.isFetching
-            ? "Updating"
-            : "Refresh"}
-        </button>
+        {refreshing ? <div className="updating-chip">Updating...</div> : null}
       </div>
       <MetricStrip items={metrics} />
-      <div className="split-grid">
+      <div className="split-grid factory-overview-grid">
+        <section className="plain-section">
+          <div className="section-head">
+            <h2>Recent Orders</h2>
+            <button type="button" onClick={() => onNavigate(SECTIONS.ORDERS)}>
+              View Orders
+            </button>
+          </div>
+          <div className="mini-list">
+            {orders.slice(0, 6).map((order) => (
+              <button
+                type="button"
+                key={order._id}
+                onClick={() => onNavigate(SECTIONS.ORDERS)}
+              >
+                <div>
+                  <strong>{order.dealerSnapshot?.companyName || "Dealer"}</strong>
+                  <span>{order.orderNumber || "Factory order"}</span>
+                </div>
+                <span className="status-pill">{statusLabel(order.status)}</span>
+              </button>
+            ))}
+            {!orders.length ? <div className="empty-line">No recent orders.</div> : null}
+          </div>
+        </section>
+        <section className="plain-section">
+          <div className="section-head">
+            <h2>Low Stock Products</h2>
+            <button type="button" onClick={() => onNavigate(SECTIONS.STOCK)}>
+              View Stock
+            </button>
+          </div>
+          <div className="mini-list warning">
+            {lowStockItems.slice(0, 6).map((item) => (
+              <button
+                type="button"
+                key={item._id || item.sku}
+                onClick={() => onNavigate(SECTIONS.STOCK)}
+              >
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.sku}</span>
+                </div>
+                <span>{item.stock?.availableQuantity || 0} available</span>
+              </button>
+            ))}
+            {!lowStockItems.length ? (
+              <div className="empty-line">No low-stock products.</div>
+            ) : null}
+          </div>
+        </section>
         <section className="plain-section">
           <div className="section-head">
             <h2>Today's Activity Timeline</h2>
@@ -606,76 +751,73 @@ function OrderDrawer({ order, onClose, onInvoice }) {
 }
 
 function OrdersPage({ globalSearch, onInvoice }) {
-  const [lane, setLane] = useState("INBOX");
+  const [lane, setLane] = useState("PENDING");
+  const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [date, setDate] = useState("");
   const [dealer, setDealer] = useState("");
   const [priority, setPriority] = useState("ALL");
+  const [sort, setSort] = useState("received-desc");
   const [selected, setSelected] = useState(null);
   const effectiveSearch = query || globalSearch;
   const listQuery = useGetFactoryOrdersQuery({
-    stage: ["AWAITING_SHIPMENT", "ARCHIVE"].includes(lane) ? "ALL" : lane,
+    stage: "ALL",
     q: effectiveSearch,
-    limit: 100,
+    limit: 200,
   });
-  const allQuery = useGetFactoryOrdersQuery({ stage: "ALL", limit: 100 });
-  const allOrders = allQuery.data?.items || [];
+  const allOrders = listQuery.data?.items || [];
   const counts = ORDER_LANES.reduce((acc, item) => {
-    acc[item.key] = allOrders.filter((order) => {
-      if (item.key === "AWAITING_SHIPMENT") {
-        return ["AWAITING_SHIPMENT", "VERIFIED"].includes(String(order.status || "").toUpperCase());
-      }
-      if (item.key === "ARCHIVE") {
-        return ["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(
-          String(order.status || "").toUpperCase(),
-        );
-      }
-      return laneForOrder(order) === item.key;
-    }).length;
+    acc[item.key] = allOrders.filter((order) => orderMatchesLane(order, item.key)).length;
     return acc;
   }, {});
-  const items = (listQuery.data?.items || []).filter((order) => {
-    const orderLane = laneForOrder(order);
-    if (lane === "AWAITING_SHIPMENT") {
-      if (!["AWAITING_SHIPMENT", "VERIFIED"].includes(String(order.status || "").toUpperCase())) return false;
-    } else if (lane === "ARCHIVE") {
-      if (!["DELIVERED", "REJECTED", "CLOSED", "CANCELLED"].includes(String(order.status || "").toUpperCase())) return false;
-    } else if (orderLane !== lane) {
-      return false;
-    }
+  const items = [...allOrders].filter((order) => {
+    if (!orderMatchesLane(order, lane)) return false;
     if (date && todayKey(order.createdAt) !== date) return false;
     if (dealer && !String(order.dealerSnapshot?.companyName || "").toLowerCase().includes(dealer.toLowerCase())) return false;
     if (priority !== "ALL" && priorityForOrder(order) !== priority) return false;
     return true;
+  }).sort((a, b) => {
+    if (sort === "total-desc") return Number(b.totals?.total || 0) - Number(a.totals?.total || 0);
+    if (sort === "total-asc") return Number(a.totals?.total || 0) - Number(b.totals?.total || 0);
+    if (sort === "dealer") {
+      return String(a.dealerSnapshot?.companyName || "").localeCompare(
+        String(b.dealerSnapshot?.companyName || ""),
+      );
+    }
+    return new Date(b.factory?.sentToFactoryAt || b.updatedAt || b.createdAt || 0) -
+      new Date(a.factory?.sentToFactoryAt || a.updatedAt || a.createdAt || 0);
   });
 
   return (
-    <div className="factory-page orders-layout">
-      <aside className="orders-lanes">
-        {ORDER_LANES.map((item) => (
-          <button
-            key={item.key}
-            className={lane === item.key ? "active" : ""}
-            type="button"
-            onClick={() => setLane(item.key)}
-          >
-            <span>{item.label}</span>
-            <strong>{counts[item.key] || 0}</strong>
-          </button>
-        ))}
-      </aside>
+    <div className="factory-page">
       <section className="orders-board">
         <div className="page-head compact">
           <div>
             <p>Orders</p>
-            <h1>Factory inbox</h1>
+            <h1>Factory order queue</h1>
+            <span>
+              Search, prepare, invoice, and dispatch factory-routed orders.
+            </span>
           </div>
-          <button type="button" onClick={listQuery.refetch}>
-            {listQuery.isFetching ? "Updating" : "Refresh"}
-          </button>
+          {listQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
         </div>
-        <div className="filter-row">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search orders" />
+        <StatusTabs
+          value={lane}
+          options={ORDER_LANES}
+          counts={counts}
+          onChange={setLane}
+        />
+        <div className="filter-row orders-filter-row">
+          <SearchField
+            value={draftQuery}
+            onChange={setDraftQuery}
+            onSubmit={() => setQuery(draftQuery.trim())}
+            onClear={() => {
+              setDraftQuery("");
+              setQuery("");
+            }}
+            placeholder="Search order number or dealer..."
+          />
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           <input value={dealer} onChange={(event) => setDealer(event.target.value)} placeholder="Dealer" />
           <select value={priority} onChange={(event) => setPriority(event.target.value)}>
@@ -684,8 +826,17 @@ function OrdersPage({ globalSearch, onInvoice }) {
             <option value="Medium">Medium</option>
             <option value="Normal">Normal</option>
           </select>
+          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            <option value="received-desc">Newest first</option>
+            <option value="dealer">Dealer name</option>
+            <option value="total-desc">Highest total</option>
+            <option value="total-asc">Lowest total</option>
+          </select>
         </div>
         <div className="order-list">
+          {listQuery.isLoading && !listQuery.data ? (
+            <div className="empty-line">Loading factory orders...</div>
+          ) : null}
           {items.map((order) => (
             <button
               key={order._id}
@@ -710,7 +861,9 @@ function OrdersPage({ globalSearch, onInvoice }) {
               <span>{timeAgo(order.factory?.sentToFactoryAt || order.updatedAt || order.createdAt)}</span>
             </button>
           ))}
-          {!items.length ? <div className="empty-line">No orders in this lane.</div> : null}
+          {!listQuery.isLoading && !items.length ? (
+            <div className="empty-line">No orders match this view.</div>
+          ) : null}
         </div>
       </section>
       {selected ? (
@@ -966,69 +1119,142 @@ function BulkImportPanel({ products }) {
 }
 
 function StockPage({ globalSearch }) {
+  const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("ALL");
+  const [family, setFamily] = useState("ALL");
   const [status, setStatus] = useState("ALL");
+  const [sort, setSort] = useState("name");
+  const [view, setView] = useState("grid");
   const [selected, setSelected] = useState(null);
   const effectiveSearch = query || globalSearch;
-  const stockQuery = useGetStockQuery({ q: effectiveSearch, category, status, limit: 150 });
-  const items = stockQuery.data?.items || [];
-  const categories = [...new Set(items.map((item) => item.category).filter(Boolean))].sort();
+  const stockQuery = useGetStockQuery({
+    q: effectiveSearch,
+    category: category === "ALL" ? "" : category,
+    status,
+    limit: 200,
+  });
+  const allStockQuery = useGetStockQuery({ limit: 200 });
+  const allItems = allStockQuery.data?.items || [];
+  const categories = [...new Set(allItems.map((item) => item.category).filter(Boolean))].sort();
+  const families = [
+    ...new Set(allItems.map((item) => item.code).filter(Boolean)),
+  ].sort();
+  const items = [...(stockQuery.data?.items || [])]
+    .filter((item) => family === "ALL" || item.code === family)
+    .sort((a, b) => {
+      if (sort === "stock-asc") {
+        return Number(a.stock?.availableQuantity || 0) - Number(b.stock?.availableQuantity || 0);
+      }
+      if (sort === "stock-desc") {
+        return Number(b.stock?.availableQuantity || 0) - Number(a.stock?.availableQuantity || 0);
+      }
+      if (sort === "updated") {
+        return new Date(b.stock?.lastUpdatedAt || 0) - new Date(a.stock?.lastUpdatedAt || 0);
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 
   return (
     <div className="factory-page">
       <div className="page-head compact">
         <div>
           <p>Stock</p>
-          <h1>Inventory rows</h1>
+          <h1>Factory stock catalog</h1>
+          <span>Search products, review available stock, and update inventory safely.</span>
         </div>
-        <button type="button" onClick={stockQuery.refetch}>
-          {stockQuery.isFetching ? "Updating" : "Refresh"}
-        </button>
+        {stockQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
       </div>
-      <div className="filter-row">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product, SKU, category" />
-        <input value={category} list="factory-categories" onChange={(event) => setCategory(event.target.value)} placeholder="Category" />
-        <datalist id="factory-categories">
-          {categories.map((item) => <option value={item} key={item} />)}
-        </datalist>
-        <select value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="ALL">All stock</option>
-          <option value="LOW_STOCK">Low Stock</option>
-          <option value="OUT_OF_STOCK">Out Of Stock</option>
-          <option value="IN_STOCK">In Stock</option>
+      <div className="filter-row stock-filter-row">
+        <SearchField
+          value={draftQuery}
+          onChange={setDraftQuery}
+          onSubmit={() => setQuery(draftQuery.trim())}
+          onClear={() => {
+            setDraftQuery("");
+            setQuery("");
+          }}
+          placeholder="Search product, SKU, category"
+        />
+        <select value={category} onChange={(event) => setCategory(event.target.value)}>
+          <option value="ALL">All categories</option>
+          {categories.map((item) => (
+            <option value={item} key={item}>{statusLabel(item)}</option>
+          ))}
         </select>
+        <select value={family} onChange={(event) => setFamily(event.target.value)}>
+          <option value="ALL">All families</option>
+          {families.map((item) => (
+            <option value={item} key={item}>{item}</option>
+          ))}
+        </select>
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          {STOCK_STATUS_OPTIONS.map((item) => (
+            <option value={item.value} key={item.value}>{item.label}</option>
+          ))}
+        </select>
+        <select value={sort} onChange={(event) => setSort(event.target.value)}>
+          {SORT_OPTIONS.map((item) => (
+            <option value={item.value} key={item.value}>{item.label}</option>
+          ))}
+        </select>
+        <div className="view-toggle">
+          <button
+            type="button"
+            className={view === "grid" ? "active" : ""}
+            onClick={() => setView("grid")}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            className={view === "list" ? "active" : ""}
+            onClick={() => setView("list")}
+          >
+            List
+          </button>
+        </div>
       </div>
-      <div className="table-wrap">
-        <table className="dense-table stock-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Variant</th>
-              <th>SKU</th>
-              <th>Current</th>
-              <th>Reserved</th>
-              <th>Available</th>
-              <th>Status</th>
-              <th>Quick Edit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item._id || item.sku} className={`stock-${String(item.stock?.status || "").toLowerCase()}`}>
-                <td><strong>{item.name}</strong></td>
-                <td>{item.packLabel || item.pack?.label || "-"}</td>
-                <td>{item.sku}</td>
-                <td>{item.stock?.currentQuantity || 0}</td>
-                <td>{item.stock?.reservedQuantity || 0}</td>
-                <td>{item.stock?.availableQuantity || 0}</td>
-                <td><span className="status-pill">{statusLabel(item.stock?.status)}</span></td>
-                <td><button type="button" onClick={() => setSelected(item)}>Edit</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!items.length ? <div className="empty-line">No stock rows found.</div> : null}
+      {stockQuery.isLoading && !stockQuery.data ? (
+        <div className="empty-line">Loading stock catalog...</div>
+      ) : null}
+      <div className={view === "grid" ? "stock-catalog-grid" : "stock-catalog-list"}>
+        {items.map((item) => (
+          <button
+            type="button"
+            key={item._id || item.sku}
+            className={`stock-card stock-${String(item.stock?.status || "").toLowerCase()}`}
+            onClick={() => setSelected(item)}
+          >
+            <div className="stock-preview">
+              <span>{String(item.name || "M").slice(0, 1)}</span>
+            </div>
+            <div className="stock-card-copy">
+              <span className="status-pill">{statusLabel(item.stock?.status)}</span>
+              <h3>{item.name}</h3>
+              <p>{item.sku}</p>
+              <span>{item.category || "Uncategorized"} · {item.packLabel || item.pack?.label || "Variant"}</span>
+            </div>
+            <div className="stock-card-numbers">
+              <div>
+                <span>Current</span>
+                <strong>{item.stock?.currentQuantity || 0}</strong>
+              </div>
+              <div>
+                <span>Reserved</span>
+                <strong>{item.stock?.reservedQuantity || 0}</strong>
+              </div>
+              <div>
+                <span>Available</span>
+                <strong>{item.stock?.availableQuantity || 0}</strong>
+              </div>
+            </div>
+            <span className="quick-edit">Edit</span>
+          </button>
+        ))}
+        {!stockQuery.isLoading && !items.length ? (
+          <div className="empty-line">No stock rows found.</div>
+        ) : null}
       </div>
       <BulkImportPanel products={items} />
       {selected ? <StockEditDrawer product={selected} onClose={() => setSelected(null)} /> : null}
@@ -1037,39 +1263,89 @@ function StockPage({ globalSearch }) {
 }
 
 function StockHistoryPage({ globalSearch }) {
+  const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const effectiveSearch = query || globalSearch;
   const historyQuery = useGetAllStockHistoryQuery({ q: effectiveSearch, limit: 120 });
   const items = historyQuery.data?.items || [];
+  const exportCsv = () => {
+    const headers = ["Date", "Product", "Old", "New", "Difference", "Reason", "Factory User"];
+    const rows = items.map((row) => [
+      compactDate(row.changedAt),
+      row.productName || row.sku || "",
+      row.previousQuantity ?? "",
+      row.newQuantity ?? "",
+      row.delta ?? "",
+      row.reason || "",
+      row.changedBy?.username || row.changedBy?.email || row.changedByRole || "",
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "factory-stock-history.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="factory-page">
       <div className="page-head compact">
         <div>
           <p>Stock History</p>
-          <h1>Audit timeline</h1>
+          <h1>Stock audit trail</h1>
+          <span>Every stock correction is recorded with reason, user, and timestamp.</span>
         </div>
-        <button type="button" onClick={historyQuery.refetch}>
-          {historyQuery.isFetching ? "Updating" : "Refresh"}
-        </button>
+        <div className="page-actions">
+          {historyQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
+          <button type="button" onClick={exportCsv}>Export CSV</button>
+          <button type="button" onClick={() => window.print()}>Export PDF</button>
+        </div>
       </div>
       <div className="filter-row single">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product, SKU, reason, order" />
+        <SearchField
+          value={draftQuery}
+          onChange={setDraftQuery}
+          onSubmit={() => setQuery(draftQuery.trim())}
+          onClear={() => {
+            setDraftQuery("");
+            setQuery("");
+          }}
+          placeholder="Search product, SKU, reason, order"
+        />
       </div>
-      <div className="audit-timeline">
-        {items.map((row) => (
-          <div key={row._id} className="audit-row">
-            <time>{compactDate(row.changedAt)}</time>
-            <strong>{row.productName || row.sku}</strong>
-            <span>{row.previousQuantity}</span>
-            <span>{row.newQuantity}</span>
-            <span className={Number(row.delta || 0) < 0 ? "negative" : "positive"}>
-              {Number(row.delta || 0) >= 0 ? `+${row.delta || 0}` : row.delta}
-            </span>
-            <span>{row.reason}</span>
-            <span>{row.changedBy?.username || row.changedBy?.email || row.changedByRole || "-"}</span>
-          </div>
-        ))}
+      <div className="table-wrap">
+        <table className="dense-table audit-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Old</th>
+              <th>New</th>
+              <th>Difference</th>
+              <th>Reason</th>
+              <th>Factory User</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => (
+              <tr key={row._id}>
+                <td>{compactDate(row.changedAt)}</td>
+                <td><strong>{row.productName || row.sku}</strong></td>
+                <td>{row.previousQuantity}</td>
+                <td>{row.newQuantity}</td>
+                <td className={Number(row.delta || 0) < 0 ? "negative" : "positive"}>
+                  {Number(row.delta || 0) >= 0 ? `+${row.delta || 0}` : row.delta}
+                </td>
+                <td>{row.reason}</td>
+                <td>{row.changedBy?.username || row.changedBy?.email || row.changedByRole || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         {!items.length ? <div className="empty-line">No stock history found.</div> : null}
       </div>
     </div>
@@ -1143,6 +1419,7 @@ function InvoicePreview({ invoice, onClose }) {
 }
 
 function InvoicesPage({ globalSearch, onInvoice }) {
+  const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const ordersQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: query || globalSearch, limit: 100 });
   const orders = ordersQuery.data?.items || [];
@@ -1152,11 +1429,22 @@ function InvoicesPage({ globalSearch, onInvoice }) {
       <div className="page-head compact">
         <div>
           <p>Proforma Invoices</p>
-          <h1>Recent invoice-ready orders</h1>
+          <h1>Factory invoice center</h1>
+          <span>Open, print, download, or duplicate proforma invoices from factory orders.</span>
         </div>
+        {ordersQuery.isFetching ? <div className="updating-chip">Updating...</div> : null}
       </div>
       <div className="filter-row single">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search dealer, order, invoice" />
+        <SearchField
+          value={draftQuery}
+          onChange={setDraftQuery}
+          onSubmit={() => setQuery(draftQuery.trim())}
+          onClear={() => {
+            setDraftQuery("");
+            setQuery("");
+          }}
+          placeholder="Search dealer, order, invoice"
+        />
       </div>
       <div className="order-list">
         {orders.map((order) => (
@@ -1236,21 +1524,21 @@ function ProfilePage() {
 function FactoryDashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [globalSearch, setGlobalSearch] = useState("");
+  const globalSearch = "";
   const [invoice, setInvoice] = useState(null);
   const [loadInvoice, invoiceState] = useLazyGetProformaInvoiceQuery();
   const active = sectionFromPath(location.pathname);
 
-  const goTo = (key) => navigate(ROUTES[key] || ROUTES.overview);
+  const goTo = (key) => navigate(ROUTES[key] || ROUTES[SECTIONS.DASHBOARD]);
   const openInvoice = async (orderId) => {
     const item = await loadInvoice(orderId).unwrap();
     setInvoice(item);
   };
 
   return (
-    <FactoryShell active={active} globalSearch={globalSearch} setGlobalSearch={setGlobalSearch}>
+    <FactoryShell active={active}>
       {invoiceState.isFetching ? <div className="inline-loading">Loading invoice...</div> : null}
-      {active === SECTIONS.OVERVIEW ? (
+      {[SECTIONS.DASHBOARD, SECTIONS.OVERVIEW].includes(active) ? (
         <OverviewPage globalSearch={globalSearch} onNavigate={goTo} />
       ) : null}
       {active === SECTIONS.ORDERS ? (
@@ -1275,109 +1563,117 @@ function FactoryDashboardPage() {
 function FactoryStyles() {
   return (
     <style>{`
-      :root{--factory-red:#c42318;--factory-ink:#111827;--factory-muted:#6b7280;--factory-line:#e5e7eb;--factory-soft:#f6f7f9;}
-      .factory-workspace{min-height:100vh;background:#f5f6f8;color:var(--factory-ink);display:grid;grid-template-columns:248px minmax(0,1fr);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
-      .factory-sidebar{position:sticky;top:0;height:100vh;background:#fff;border-right:1px solid var(--factory-line);display:flex;flex-direction:column;padding:18px 14px;z-index:20;}
-      .factory-brand{display:flex;gap:10px;align-items:center;padding:8px 8px 18px;}
-      .factory-logo{width:36px;height:36px;border-radius:10px;background:var(--factory-red);color:#fff;display:grid;place-items:center;font-weight:950;}
-      .factory-brand strong{display:block;font-size:15px;letter-spacing:.02em;}
-      .factory-brand span,.sidebar-title,.factory-sidebar-footer span,.factory-topbar span{font-size:12px;color:var(--factory-muted);font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
-      .sidebar-title{padding:8px;margin-bottom:8px;}
-      .factory-sidebar-nav{display:grid;gap:2px;}
-      .factory-sidebar-nav button,.factory-sidebar-footer button{border:0;background:transparent;text-align:left;padding:10px 12px;border-radius:8px;font-weight:850;color:#374151;cursor:pointer;}
-      .factory-sidebar-nav button:hover,.factory-sidebar-nav button.active{background:#f3f4f6;color:var(--factory-red);}
-      .factory-sidebar-footer{margin-top:auto;display:grid;gap:8px;padding:12px 8px;border-top:1px solid var(--factory-line);}
-      .factory-sidebar-footer button{background:#fff1f0;color:var(--factory-red);text-align:center;}
-      .factory-main{height:100vh;overflow:hidden;display:grid;grid-template-rows:auto 1fr;}
-      .factory-topbar{height:72px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--factory-line);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 22px;}
-      .factory-topbar>div:first-child{display:grid;gap:4px;width:min(680px,70%);}
-      .factory-topbar input,.filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input{width:100%;border:1px solid var(--factory-line);background:#fff;border-radius:9px;padding:10px 12px;font:inherit;font-weight:700;}
-      .factory-scroll{overflow:auto;padding:22px;}
-      .factory-page{display:grid;gap:16px;max-width:1440px;margin:0 auto;}
-      .page-head{display:flex;justify-content:space-between;align-items:center;gap:14px;}
-      .page-head.compact h1{font-size:26px;}
-      .page-head p{margin:0 0 4px;color:var(--factory-red);font-size:12px;text-transform:uppercase;font-weight:950;letter-spacing:.12em;}
-      .page-head h1{margin:0;font-size:34px;line-height:1.05;letter-spacing:-.02em;}
-      button{font:inherit;}
-      .page-head button,.drawer-actions button,.filter-row button,.dense-table button,.invoice-row button{border:1px solid var(--factory-line);background:#fff;border-radius:9px;padding:9px 12px;font-weight:850;cursor:pointer;}
-      .drawer-actions button:last-child,.page-head button{background:var(--factory-red);border-color:var(--factory-red);color:#fff;}
+      :root{--factory-red:#b42318;--factory-ink:#0f172a;--factory-muted:rgba(15,23,42,.58);--factory-line:rgba(15,23,42,.08);--factory-soft:#f8fafc;}
+      .factory-page{display:grid;gap:18px;max-width:1480px;margin:0 auto;color:var(--factory-ink);}
+      .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+      .page-head p{margin:0 0 5px;color:var(--factory-red);font-size:12px;text-transform:uppercase;font-weight:950;letter-spacing:.12em;}
+      .page-head h1{margin:0;font-size:clamp(28px,3vw,42px);line-height:1.03;letter-spacing:-.035em;font-weight:950;color:var(--factory-ink);}
+      .page-head.compact h1{font-size:clamp(25px,2.5vw,34px);}
+      .page-head span{display:block;margin-top:7px;color:var(--factory-muted);font-weight:750;line-height:1.55;}
+      .page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+      .page-actions button,.drawer-actions button,.dense-table button,.invoice-row button,.quick-edit{border:1px solid var(--factory-line);background:#fff;border-radius:14px;padding:9px 13px;font-weight:900;color:var(--factory-ink);cursor:pointer;}
+      .page-actions button:hover,.drawer-actions button:hover,.dense-table button:hover,.invoice-row button:hover{border-color:rgba(180,35,24,.22);color:var(--factory-red);}
+      .drawer-actions button:last-child{background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);border-color:transparent;color:#fff;}
       .drawer-actions button.danger,.danger{background:#991b1b!important;border-color:#991b1b!important;color:#fff!important;}
-      .metric-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;}
-      .metric-strip button{border:1px solid var(--factory-line);background:#fff;border-radius:10px;padding:12px;text-align:left;cursor:pointer;}
+      .updating-chip,.ready-line,.alert-line,.inline-loading{display:inline-flex;align-items:center;border-radius:999px;padding:9px 12px;background:rgba(180,35,24,.07);color:var(--factory-red);font-size:12px;font-weight:950;}
+      .metric-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;}
+      .metric-strip button{border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:15px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
       .metric-strip span{display:block;color:var(--factory-muted);font-size:12px;font-weight:850;}
-      .metric-strip strong{display:block;margin-top:6px;font-size:24px;}
-      .split-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;}
-      .plain-section,.bulk-panel{background:#fff;border:1px solid var(--factory-line);border-radius:10px;padding:16px;}
-      .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-      .section-head h2{margin:0;font-size:18px;}
-      .section-head button{border:0;background:transparent;color:var(--factory-red);font-weight:900;cursor:pointer;}
-      .timeline-list,.notification-list{display:grid;gap:8px;}
-      .timeline-item,.notification-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;padding:9px 0;border-bottom:1px solid #f0f1f3;}
+      .metric-strip strong{display:block;margin-top:7px;font-size:26px;letter-spacing:-.04em;color:var(--factory-ink);}
+      .split-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+      .factory-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+      .plain-section,.bulk-panel{background:#fff;border:1px solid var(--factory-line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;}
+      .section-head h2{margin:0;font-size:18px;letter-spacing:-.02em;color:var(--factory-ink);}
+      .section-head button{border:0;background:transparent;color:var(--factory-red);font-weight:950;cursor:pointer;}
+      .mini-list,.timeline-list,.notification-list,.order-list{display:grid;gap:8px;}
+      .mini-list button{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;border:1px solid rgba(15,23,42,.06);background:#fff;border-radius:14px;padding:12px;text-align:left;cursor:pointer;}
+      .mini-list.warning button{background:#fffbeb;}
+      .mini-list strong,.timeline-item strong,.notification-row strong{display:block;font-size:14px;color:var(--factory-ink);}
+      .mini-list span,.timeline-item span,.notification-row span{display:block;color:var(--factory-muted);font-size:13px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .timeline-item{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid rgba(15,23,42,.06);}
       .timeline-item time,.notification-row time{color:var(--factory-muted);font-size:12px;font-weight:850;}
-      .timeline-item div,.notification-row{min-width:0;}
-      .timeline-item strong,.notification-row strong{display:block;font-size:14px;}
-      .timeline-item span,.notification-row span{display:block;color:var(--factory-muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      .orders-layout{grid-template-columns:220px minmax(0,1fr);display:grid;align-items:start;}
-      .orders-lanes{position:sticky;top:0;background:#fff;border:1px solid var(--factory-line);border-radius:10px;padding:8px;display:grid;gap:2px;}
-      .orders-lanes button{border:0;background:transparent;border-radius:8px;padding:10px;display:flex;justify-content:space-between;gap:10px;cursor:pointer;font-weight:850;}
-      .orders-lanes button.active{background:#fff1f0;color:var(--factory-red);}
-      .orders-board{display:grid;gap:12px;min-width:0;}
-      .filter-row{display:grid;grid-template-columns:1.4fr .7fr .8fr .7fr;gap:8px;}
+      .factory-tabs{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:4px;border:1px solid var(--factory-line);background:rgba(241,245,249,.92);border-radius:999px;width:max-content;max-width:100%;}
+      .factory-tabs button{min-height:36px;border:1px solid transparent;background:transparent;border-radius:999px;padding:0 13px;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:950;color:var(--factory-muted);cursor:pointer;white-space:nowrap;}
+      .factory-tabs button.active{background:#fff;color:var(--factory-ink);box-shadow:0 8px 20px rgba(15,23,42,.10);}
+      .factory-tabs strong{min-width:21px;height:21px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:rgba(15,23,42,.06);color:inherit;font-size:11px;}
+      .filter-row{display:grid;gap:10px;align-items:center;}
+      .orders-filter-row{grid-template-columns:minmax(280px,1.4fr) .7fr .85fr .75fr .75fr;}
+      .stock-filter-row{grid-template-columns:minmax(260px,1.5fr) .75fr .75fr .7fr .75fr auto;}
       .filter-row.single{grid-template-columns:1fr;}
-      .order-list{display:grid;gap:6px;}
-      .order-row,.invoice-row{display:grid;grid-template-columns:1.5fr .75fr .8fr .8fr .9fr .7fr .8fr .8fr;align-items:center;gap:10px;border:1px solid var(--factory-line);background:#fff;border-radius:8px;padding:10px 12px;text-align:left;cursor:pointer;}
-      .invoice-row{grid-template-columns:1.5fr .8fr .8fr auto auto auto;cursor:default;}
-      .order-main{display:grid;gap:2px;min-width:0;}
-      .order-main strong,.invoice-row strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .factory-search{height:50px;display:flex;align-items:center;gap:10px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .factory-search span{font-size:18px;font-weight:950;color:rgba(15,23,42,.42);}
+      .factory-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);}
+      .factory-clear-search{width:28px;height:28px;border-radius:999px;border:1px solid var(--factory-line);background:var(--factory-soft);color:var(--factory-muted);font-size:18px;font-weight:950;line-height:1;cursor:pointer;}
+      .filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input{width:100%;min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;}
+      .form-grid textarea{min-height:92px;padding:12px 14px;resize:vertical;}
+      .view-toggle{height:50px;display:inline-flex;align-items:center;gap:3px;padding:4px;border-radius:16px;border:1px solid var(--factory-line);background:rgba(241,245,249,.92);}
+      .view-toggle button{height:40px;border:0;background:transparent;border-radius:12px;padding:0 13px;font-weight:950;color:var(--factory-muted);cursor:pointer;}
+      .view-toggle button.active{background:#fff;color:var(--factory-red);box-shadow:0 8px 20px rgba(15,23,42,.10);}
+      .orders-board{display:grid;gap:14px;min-width:0;}
+      .order-row,.invoice-row{display:grid;grid-template-columns:1.5fr .7fr .85fr .85fr .95fr .7fr .8fr .8fr;align-items:center;gap:12px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:13px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .invoice-row{grid-template-columns:1.4fr .8fr .8fr auto auto auto;cursor:default;}
+      .order-row:hover,.invoice-row:hover,.stock-card:hover{border-color:rgba(180,35,24,.18);box-shadow:0 12px 30px rgba(15,23,42,.08);}
+      .order-main{display:grid;gap:3px;min-width:0;}
+      .order-main strong,.invoice-row strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--factory-ink);}
       .order-row span,.invoice-row span{color:var(--factory-muted);font-size:13px;font-weight:750;}
-      .status-pill,.priority,.unread-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:#f3f4f6;color:#374151;padding:5px 8px;font-size:11px!important;font-weight:950!important;text-transform:uppercase;white-space:nowrap;}
+      .status-pill,.priority,.unread-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(15,23,42,.06);color:#475569;padding:5px 9px;font-size:11px!important;font-weight:950!important;text-transform:uppercase;white-space:nowrap;}
       .status-pill.out_for_delivery,.status-pill.awaiting_shipment,.priority.high{background:#fff7ed;color:#c2410c;}
       .status-pill.rejected,.stock-out_of_stock{background:#fef2f2!important;}
       .priority.normal{background:#ecfdf3;color:#027a48;}
       .priority.medium{background:#fff7ed;color:#c2410c;}
-      .factory-drawer-backdrop{position:fixed;inset:0;background:rgba(17,24,39,.26);z-index:1000;display:flex;justify-content:flex-end;}
-      .factory-drawer{height:100vh;width:min(520px,100vw);background:#fff;border-left:1px solid var(--factory-line);box-shadow:-20px 0 60px rgba(17,24,39,.16);overflow:auto;padding:18px;display:grid;align-content:start;gap:14px;}
-      .factory-drawer.wide{width:min(820px,100vw);}
-      .drawer-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border-bottom:1px solid var(--factory-line);padding-bottom:12px;}
-      .drawer-head span{color:var(--factory-red);font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
-      .drawer-head h2{margin:4px 0 0;font-size:24px;}
-      .icon-btn{width:34px;height:34px;border:1px solid var(--factory-line);background:#fff;border-radius:8px;font-weight:950;cursor:pointer;}
-      .drawer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
-      .drawer-actions.sticky{position:sticky;top:-18px;background:#fff;z-index:2;padding:10px 0;border-bottom:1px solid var(--factory-line);}
-      details{border:1px solid var(--factory-line);border-radius:10px;background:#fff;padding:0;}
-      summary{cursor:pointer;padding:12px 14px;font-weight:950;}
-      details>div,details>.table-wrap{padding:0 14px 14px;}
-      .checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
-      .checklist label{display:flex;gap:8px;align-items:center;background:#f9fafb;border-radius:8px;padding:9px;font-weight:850;}
-      .ready-line,.alert-line,.inline-loading{border-radius:8px;padding:10px 12px;background:#fff7ed;color:#c2410c;font-weight:850;}
-      .info-grid,.stock-change{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;}
-      .info-grid span,.stock-change span{color:var(--factory-muted);font-weight:850;}
-      .form-grid{display:grid;gap:10px;}
-      .form-grid label{display:grid;gap:5px;font-weight:850;}
-      .form-grid textarea{min-height:80px;resize:vertical;}
-      .table-wrap{overflow:auto;background:#fff;border:1px solid var(--factory-line);border-radius:10px;}
-      .dense-table{width:100%;border-collapse:collapse;font-size:14px;}
-      .dense-table th,.dense-table td{border-bottom:1px solid #f0f1f3;padding:9px 10px;text-align:left;vertical-align:middle;}
-      .dense-table th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--factory-muted);}
+      .stock-catalog-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+      .stock-catalog-list{display:grid;gap:10px;}
+      .stock-card{position:relative;display:grid;grid-template-columns:112px minmax(0,1fr);gap:14px;align-items:start;border:1px solid var(--factory-line);background:#fff;border-radius:18px;padding:14px;text-align:left;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .stock-catalog-list .stock-card{grid-template-columns:88px minmax(0,1fr) minmax(280px,.9fr) auto;align-items:center;}
+      .stock-preview{height:112px;border-radius:16px;border:1px solid rgba(15,23,42,.06);background:linear-gradient(180deg,#f8fafc,#eef2f7);display:grid;place-items:center;color:rgba(15,23,42,.32);font-size:32px;font-weight:950;}
+      .stock-catalog-list .stock-preview{height:78px;}
+      .stock-card-copy{display:grid;gap:6px;min-width:0;}
+      .stock-card-copy h3{margin:0;font-size:18px;line-height:1.15;letter-spacing:-.025em;color:var(--factory-ink);}
+      .stock-card-copy p,.stock-card-copy span{margin:0;color:var(--factory-muted);font-size:13px;font-weight:800;}
+      .stock-card-numbers{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+      .stock-catalog-list .stock-card-numbers{grid-column:auto;}
+      .stock-card-numbers div{border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:10px;background:#fff;}
+      .stock-card-numbers span{display:block;color:var(--factory-muted);font-size:11px;font-weight:950;text-transform:uppercase;letter-spacing:.06em;}
+      .stock-card-numbers strong{display:block;margin-top:5px;font-size:20px;color:var(--factory-ink);}
+      .quick-edit{justify-self:end;align-self:center;}
       .stock-low_stock{background:#fffbeb;}
       .stock-out_of_stock{background:#fff5f5;}
       .stock-in_stock{background:#fff;}
-      .stock-change{grid-template-columns:repeat(3,1fr);}
-      .stock-change>div{display:grid;gap:6px;border:1px solid var(--factory-line);border-radius:10px;padding:12px;}
-      .stock-change strong{font-size:24px;}
+      .factory-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.28);z-index:1000;display:flex;justify-content:flex-end;}
+      .factory-drawer{height:100dvh;width:min(560px,100vw);background:#fff;border-left:1px solid var(--factory-line);box-shadow:-24px 0 70px rgba(15,23,42,.18);overflow:auto;padding:18px;display:grid;align-content:start;gap:14px;}
+      .factory-drawer.wide{width:min(860px,100vw);}
+      .drawer-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border-bottom:1px solid var(--factory-line);padding-bottom:14px;}
+      .drawer-head span{color:var(--factory-red);font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.1em;}
+      .drawer-head h2{margin:4px 0 0;font-size:24px;letter-spacing:-.03em;color:var(--factory-ink);}
+      .icon-btn{width:34px;height:34px;border:1px solid var(--factory-line);background:#fff;border-radius:12px;font-weight:950;cursor:pointer;}
+      .drawer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+      .drawer-actions.sticky{position:sticky;top:-18px;background:#fff;z-index:2;padding:10px 0;border-bottom:1px solid var(--factory-line);}
+      .factory-drawer details,.factory-page details{border:1px solid var(--factory-line);border-radius:16px;background:#fff;padding:0;overflow:hidden;}
+      .factory-drawer summary,.factory-page summary{cursor:pointer;padding:13px 15px;font-weight:950;color:var(--factory-ink);}
+      .factory-drawer details>div,.factory-page details>div,.factory-drawer details>.table-wrap{padding:0 15px 15px;}
+      .checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+      .checklist label{display:flex;gap:8px;align-items:center;background:var(--factory-soft);border-radius:12px;padding:10px;font-weight:850;}
+      .info-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;}
+      .info-grid span,.stock-change span{color:var(--factory-muted);font-weight:850;}
+      .form-grid{display:grid;gap:10px;}
+      .form-grid label{display:grid;gap:6px;font-weight:850;color:var(--factory-ink);}
+      .table-wrap{overflow:auto;background:#fff;border:1px solid var(--factory-line);border-radius:16px;}
+      .dense-table{width:100%;border-collapse:collapse;font-size:14px;}
+      .dense-table th,.dense-table td{border-bottom:1px solid rgba(15,23,42,.06);padding:11px 12px;text-align:left;vertical-align:middle;}
+      .dense-table th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--factory-muted);background:rgba(248,250,252,.9);}
+      .stock-change{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+      .stock-change>div{display:grid;gap:6px;border:1px solid var(--factory-line);border-radius:16px;padding:12px;background:#fff;}
+      .stock-change strong{font-size:24px;letter-spacing:-.04em;color:var(--factory-ink);}
       .positive{color:#027a48!important;}
       .negative{color:#b42318!important;}
-      .confirm-box{display:grid;gap:10px;border:1px solid rgba(196,35,24,.22);background:#fff7f5;border-radius:10px;padding:12px;}
+      .confirm-box{display:grid;gap:10px;border:1px solid rgba(180,35,24,.22);background:#fff7f5;border-radius:16px;padding:14px;}
       .bulk-panel summary{padding:0;list-style:none;}
       .bulk-panel p{color:var(--factory-muted);font-weight:750;}
       .import-preview tr.invalid{background:#fef2f2;}
-      .audit-timeline{display:grid;gap:6px;}
-      .audit-row{display:grid;grid-template-columns:150px 1.4fr .5fr .5fr .6fr 1fr .8fr;gap:10px;align-items:center;background:#fff;border:1px solid var(--factory-line);border-radius:8px;padding:10px 12px;}
-      .audit-row time,.audit-row span{font-size:13px;color:var(--factory-muted);font-weight:750;}
       .notification-list.compact .notification-row{grid-template-columns:1fr;}
-      .notification-row{grid-template-columns:1fr 1fr 90px;background:#fff;border:1px solid var(--factory-line);border-radius:8px;padding:10px 12px;}
-      .empty-line{background:#fff;border:1px dashed #d1d5db;border-radius:10px;padding:18px;text-align:center;color:var(--factory-muted);font-weight:850;}
-      .topbar-status{display:grid;gap:4px;text-align:right;}
+      .notification-row{display:grid;grid-template-columns:1fr 1fr 90px;gap:12px;align-items:center;background:#fff;border:1px solid var(--factory-line);border-radius:14px;padding:12px;}
+      .empty-line{background:#fff;border:1px dashed rgba(15,23,42,.18);border-radius:16px;padding:18px;text-align:center;color:var(--factory-muted);font-weight:850;}
       .proforma-copy{page-break-after:always;border:1px solid #d1d5db;padding:22px;margin-bottom:18px;background:#fff;color:#111827;}
       .proforma-copy header{display:flex;justify-content:space-between;border-bottom:2px solid #111827;padding-bottom:12px;margin-bottom:12px;}
       .proforma-copy h1{margin:0;font-size:26px;letter-spacing:.08em;}
@@ -1386,24 +1682,23 @@ function FactoryStyles() {
       .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:46px;}
       .signatures span{border-top:1px solid #111827;text-align:center;padding-top:8px;}
       @media (max-width: 980px){
-        .factory-workspace{grid-template-columns:1fr;}
-        .factory-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--factory-line);}
-        .factory-sidebar-nav{grid-template-columns:repeat(3,minmax(0,1fr));}
-        .factory-main{height:auto;min-height:100vh;}
-        .factory-topbar{height:auto;align-items:stretch;flex-direction:column;}
-        .factory-topbar>div:first-child{width:100%;}
-        .metric-strip{grid-template-columns:repeat(2,minmax(0,1fr));}
-        .split-grid,.orders-layout{grid-template-columns:1fr;}
-        .orders-lanes{position:relative;grid-template-columns:repeat(2,minmax(0,1fr));}
-        .filter-row,.filter-row.single,.stock-change,.audit-row,.order-row,.invoice-row,.info-grid{grid-template-columns:1fr;}
+        .metric-strip,.factory-overview-grid,.split-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+        .stock-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+        .orders-filter-row,.stock-filter-row,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
+        .stock-card-numbers,.stock-catalog-list .stock-card-numbers{grid-column:1 / -1;}
         .factory-drawer,.factory-drawer.wide{width:100vw;}
         .checklist{grid-template-columns:1fr;}
+      }
+      @media (max-width: 640px){
+        .metric-strip,.factory-overview-grid,.split-grid,.stock-catalog-grid,.stock-card,.stock-card-numbers{grid-template-columns:1fr;}
+        .stock-preview{height:92px;}
+        .factory-tabs{border-radius:16px;width:100%;}
       }
       @media print{
         body *{visibility:hidden!important;}
         .invoice-print-area,.invoice-print-area *{visibility:visible!important;}
         .invoice-print-area{position:absolute;inset:0;background:#fff;}
-        .no-print,.factory-sidebar,.factory-topbar,.drawer-head,.drawer-actions{display:none!important;}
+        .no-print,.drawer-head,.drawer-actions{display:none!important;}
         .factory-drawer-backdrop,.factory-drawer{position:static!important;display:block!important;box-shadow:none!important;padding:0!important;overflow:visible!important;width:100%!important;}
       }
     `}</style>
