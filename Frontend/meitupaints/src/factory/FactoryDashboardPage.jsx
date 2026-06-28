@@ -880,6 +880,8 @@ function OrdersPage({ globalSearch, onInvoice }) {
 function StockEditDrawer({ product, onClose }) {
   const [newStock, setNewStock] = useState(product?.stock?.currentQuantity || 0);
   const [threshold, setThreshold] = useState(product?.stock?.lowStockThreshold || 0);
+  const [editMode, setEditMode] = useState("quick");
+  const [customDelta, setCustomDelta] = useState(1);
   const [reason, setReason] = useState("Manual Count");
   const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -892,15 +894,40 @@ function StockEditDrawer({ product, onClose }) {
   const current = Number(product?.stock?.currentQuantity || 0);
   const next = Number(newStock || 0);
   const delta = next - current;
+  const thresholdChanged = Number(threshold) !== Number(product?.stock?.lowStockThreshold || 0);
+  const hasChange = delta !== 0 || thresholdChanged;
+  const saving = stockState.isLoading || thresholdState.isLoading;
+
+  const applyDelta = (amount) => {
+    setConfirming(false);
+    setNewStock((value) => Math.max(0, Number(value || 0) + Number(amount || 0)));
+  };
+
+  const resetStock = () => {
+    setConfirming(false);
+    setNewStock(current);
+    setThreshold(product?.stock?.lowStockThreshold || 0);
+    setCustomDelta(1);
+  };
 
   const save = async () => {
     setError("");
+    if (!hasChange) {
+      setError("No stock or threshold changes to save.");
+      return;
+    }
+    if (!Number.isFinite(next) || next < 0) {
+      setError("Stock cannot be negative.");
+      return;
+    }
     try {
-      await updateStock({
-        productId: product.productId || product._id,
-        payload: { newQuantity: next, reason, note },
-      }).unwrap();
-      if (Number(threshold) !== Number(product?.stock?.lowStockThreshold || 0)) {
+      if (delta !== 0) {
+        await updateStock({
+          productId: product.productId || product._id,
+          payload: { newQuantity: next, reason, note },
+        }).unwrap();
+      }
+      if (thresholdChanged) {
         await updateThreshold({
           productId: product.productId || product._id,
           payload: { lowStockThreshold: Number(threshold), reason, note },
@@ -923,13 +950,86 @@ function StockEditDrawer({ product, onClose }) {
         </div>
         <div>
           <span>New Stock</span>
-          <input type="number" min="0" value={newStock} onChange={(event) => setNewStock(event.target.value)} />
+          <strong>{next}</strong>
         </div>
         <div>
           <span>Difference</span>
           <strong className={delta < 0 ? "negative" : "positive"}>{delta >= 0 ? `+${delta}` : delta}</strong>
         </div>
       </div>
+      <section className="stock-edit-console">
+        <div className="stock-edit-head">
+          <div>
+            <strong>Edit stock</strong>
+            <span>Use quick controls for receiving stock, or switch to exact count after a manual count.</span>
+          </div>
+          <div className="stock-edit-mode" aria-label="Stock edit mode">
+            <button
+              type="button"
+              className={editMode === "quick" ? "active" : ""}
+              onClick={() => setEditMode("quick")}
+            >
+              Quick
+            </button>
+            <button
+              type="button"
+              className={editMode === "exact" ? "active" : ""}
+              onClick={() => setEditMode("exact")}
+            >
+              Exact
+            </button>
+          </div>
+        </div>
+        {editMode === "quick" ? (
+          <>
+            <div className="stock-step-grid" aria-label="Quick stock adjustments">
+              {[-10, -5, -1, 1, 5, 10].map((amount) => (
+                <button
+                  type="button"
+                  key={amount}
+                  className={amount < 0 ? "minus" : "plus"}
+                  onClick={() => applyDelta(amount)}
+                >
+                  {amount > 0 ? `+${amount}` : amount}
+                </button>
+              ))}
+            </div>
+            <div className="stock-custom-adjust">
+              <label>
+                Custom add/remove
+                <input
+                  type="number"
+                  min="1"
+                  value={customDelta}
+                  onChange={(event) => setCustomDelta(event.target.value)}
+                />
+              </label>
+              <button type="button" onClick={() => applyDelta(-Number(customDelta || 0))}>
+                Remove
+              </button>
+              <button type="button" onClick={() => applyDelta(Number(customDelta || 0))}>
+                Add
+              </button>
+            </div>
+          </>
+        ) : (
+          <label className="exact-stock-input">
+            Exact stock count
+            <input
+              type="number"
+              min="0"
+              value={newStock}
+              onChange={(event) => {
+                setConfirming(false);
+                setNewStock(event.target.value);
+              }}
+            />
+          </label>
+        )}
+        <button type="button" className="stock-reset-btn" onClick={resetStock}>
+          Reset to current stock
+        </button>
+      </section>
       <div className="form-grid">
         <label>
           Reason
@@ -941,7 +1041,15 @@ function StockEditDrawer({ product, onClose }) {
         </label>
         <label>
           Low Stock Threshold
-          <input type="number" min="0" value={threshold} onChange={(event) => setThreshold(event.target.value)} />
+          <input
+            type="number"
+            min="0"
+            value={threshold}
+            onChange={(event) => {
+              setConfirming(false);
+              setThreshold(event.target.value);
+            }}
+          />
         </label>
         <label>
           Notes
@@ -956,18 +1064,22 @@ function StockEditDrawer({ product, onClose }) {
           <strong>
             You are about to change {product.name} stock from {current} to {next}.
           </strong>
+          <span>Difference: {delta >= 0 ? `+${delta}` : delta}</span>
+          <span>Threshold: {thresholdChanged ? `${product?.stock?.lowStockThreshold || 0} → ${threshold}` : "No threshold change"}</span>
           <span>Reason: {reason}</span>
           <div className="drawer-actions">
             <button type="button" onClick={() => setConfirming(false)}>Back</button>
-            <button type="button" onClick={save} disabled={stockState.isLoading || thresholdState.isLoading}>
-              Confirm Save
+            <button type="button" onClick={save} disabled={saving || !hasChange}>
+              {saving ? "Saving..." : "Confirm Save"}
             </button>
           </div>
         </div>
       ) : (
         <div className="drawer-actions">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" onClick={() => setConfirming(true)}>Review Change</button>
+          <button type="button" onClick={() => setConfirming(true)} disabled={!hasChange}>
+            Review Change
+          </button>
         </div>
       )}
       {error ? <div className="alert-line">{error}</div> : null}
@@ -1605,7 +1717,7 @@ function FactoryStyles() {
       .factory-search span{font-size:18px;font-weight:950;color:rgba(15,23,42,.42);}
       .factory-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);}
       .factory-clear-search{width:28px;height:28px;border-radius:999px;border:1px solid var(--factory-line);background:var(--factory-soft);color:var(--factory-muted);font-size:18px;font-weight:950;line-height:1;cursor:pointer;}
-      .filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input{width:100%;min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;}
+      .filter-row input,.filter-row select,.form-grid input,.form-grid select,.form-grid textarea,.stock-change input,.stock-edit-console input{width:100%;min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font:inherit;font-size:14px;font-weight:800;color:var(--factory-ink);outline:0;}
       .form-grid textarea{min-height:92px;padding:12px 14px;resize:vertical;}
       .view-toggle{height:50px;display:inline-flex;align-items:center;gap:3px;padding:4px;border-radius:16px;border:1px solid var(--factory-line);background:rgba(241,245,249,.92);}
       .view-toggle button{height:40px;border:0;background:transparent;border-radius:12px;padding:0 13px;font-weight:950;color:var(--factory-muted);cursor:pointer;}
@@ -1665,6 +1777,22 @@ function FactoryStyles() {
       .stock-change{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
       .stock-change>div{display:grid;gap:6px;border:1px solid var(--factory-line);border-radius:16px;padding:12px;background:#fff;}
       .stock-change strong{font-size:24px;letter-spacing:-.04em;color:var(--factory-ink);}
+      .stock-edit-console{display:grid;gap:13px;border:1px solid rgba(15,23,42,.08);background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);border-radius:18px;padding:14px;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .stock-edit-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+      .stock-edit-head strong{display:block;font-size:16px;font-weight:950;color:var(--factory-ink);letter-spacing:-.02em;}
+      .stock-edit-head span{display:block;margin-top:4px;font-size:12px;font-weight:750;line-height:1.45;color:var(--factory-muted);}
+      .stock-edit-mode{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto;padding:4px;border:1px solid var(--factory-line);border-radius:999px;background:rgba(241,245,249,.92);}
+      .stock-edit-mode button{height:34px;border:0;background:transparent;border-radius:999px;padding:0 12px;font-size:12px;font-weight:950;color:var(--factory-muted);cursor:pointer;}
+      .stock-edit-mode button.active{background:#fff;color:var(--factory-red);box-shadow:0 8px 20px rgba(15,23,42,.10);}
+      .stock-step-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;}
+      .stock-step-grid button{min-height:44px;border:1px solid var(--factory-line);border-radius:14px;background:#fff;font-size:14px;font-weight:950;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.04);}
+      .stock-step-grid button.plus{background:rgba(236,253,243,.86);color:#027a48;border-color:rgba(2,122,72,.16);}
+      .stock-step-grid button.minus{background:rgba(254,242,242,.86);color:#b42318;border-color:rgba(180,35,24,.16);}
+      .stock-custom-adjust{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:end;}
+      .stock-custom-adjust label,.exact-stock-input{display:grid;gap:6px;font-size:12px;font-weight:950;letter-spacing:.04em;text-transform:uppercase;color:var(--factory-muted);}
+      .stock-custom-adjust button,.stock-reset-btn{min-height:50px;border:1px solid var(--factory-line);background:#fff;border-radius:16px;padding:0 14px;font-weight:950;color:var(--factory-ink);cursor:pointer;}
+      .stock-custom-adjust button:last-child{background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);border-color:transparent;color:#fff;}
+      .stock-reset-btn{justify-self:start;min-height:40px;background:transparent;color:var(--factory-muted);}
       .positive{color:#027a48!important;}
       .negative{color:#b42318!important;}
       .confirm-box{display:grid;gap:10px;border:1px solid rgba(180,35,24,.22);background:#fff7f5;border-radius:16px;padding:14px;}
@@ -1686,6 +1814,9 @@ function FactoryStyles() {
         .stock-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
         .orders-filter-row,.stock-filter-row,.filter-row.single,.stock-change,.order-row,.invoice-row,.info-grid,.stock-catalog-list .stock-card{grid-template-columns:1fr;}
         .stock-card-numbers,.stock-catalog-list .stock-card-numbers{grid-column:1 / -1;}
+        .stock-step-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+        .stock-custom-adjust{grid-template-columns:1fr;}
+        .stock-edit-head{display:grid;}
         .factory-drawer,.factory-drawer.wide{width:100vw;}
         .checklist{grid-template-columns:1fr;}
       }
