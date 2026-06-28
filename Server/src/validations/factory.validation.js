@@ -29,6 +29,7 @@ export const factoryShipmentBodySchema = z
   .object({
     driverName: z.string().trim().min(2).max(160),
     driverPhone: z.string().trim().min(5).max(80),
+    vehicleNumber: optionalTrimmedString(80),
     remarks: optionalTrimmedString(1000),
   })
   .strict();

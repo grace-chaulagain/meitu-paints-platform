@@ -807,6 +807,12 @@ export const meituApi = createApi({
       ],
     }),
 
+    getAllStockHistory: builder.query({
+      query: (params = {}) => ({ url: "/api/stock/history", params }),
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      providesTags: () => [listTag("StockHistory"), listTag("StockAdjustment")],
+    }),
+
     updateStockQuantity: builder.mutation({
       query: ({ productId, payload }) => ({
         url: `/api/stock/${productId}`,
@@ -846,6 +852,20 @@ export const meituApi = createApi({
               { type: "StockHistory", id: arg.productId },
             ]
           : []),
+      ],
+    }),
+
+    bulkUpdateStock: builder.mutation({
+      query: (payload) => ({
+        url: "/api/stock/bulk",
+        method: "PATCH",
+        data: payload,
+      }),
+      invalidatesTags: () => [
+        listTag("Stock"),
+        listTag("StockHistory"),
+        listTag("StockAdjustment"),
+        listTag("FactoryDashboard"),
       ],
     }),
 
@@ -1033,8 +1053,10 @@ export const {
   useGetStockQuery,
   useGetStockDetailQuery,
   useGetStockHistoryQuery,
+  useGetAllStockHistoryQuery,
   useUpdateStockQuantityMutation,
   useUpdateStockThresholdMutation,
+  useBulkUpdateStockMutation,
   useGetFactoryOrdersQuery,
   useGetFactoryOrderQuery,
   useStartFactoryOrderPreparingMutation,

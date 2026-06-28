@@ -33,6 +33,7 @@ export const markOutForDeliveryController = asyncHandler(async (req, res) => {
     factoryUser: req.user,
     driverName: req.body.driverName,
     driverPhone: req.body.driverPhone,
+    vehicleNumber: req.body.vehicleNumber || "",
     remarks: req.body.remarks || "",
   });
   res.status(200).json({

@@ -209,6 +209,58 @@ export async function getStockHistory({ productId, page = 1, limit = 50 }) {
   };
 }
 
+export async function listStockHistory({
+  q = "",
+  reason = "",
+  page = 1,
+  limit = 80,
+} = {}) {
+  const pageNumber = Math.max(1, Number(page || 1));
+  const limitNumber = Math.min(200, Math.max(1, Number(limit || 80)));
+  const query = {};
+  const search = clean(q);
+  const reasonSearch = clean(reason);
+
+  if (search) {
+    const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    query.$or = [
+      { sku: rx },
+      { code: rx },
+      { productName: rx },
+      { category: rx },
+      { orderNumber: rx },
+      { reason: rx },
+    ];
+  }
+
+  if (reasonSearch) {
+    query.reason = new RegExp(
+      reasonSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
+  }
+
+  const [items, total] = await Promise.all([
+    StockAdjustmentLog.find(query)
+      .sort({ changedAt: -1 })
+      .skip((pageNumber - 1) * limitNumber)
+      .limit(limitNumber)
+      .populate({ path: "changedBy", select: "username email role" })
+      .lean(),
+    StockAdjustmentLog.countDocuments(query),
+  ]);
+
+  return {
+    items,
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      pages: Math.max(1, Math.ceil(total / limitNumber)),
+    },
+  };
+}
+
 export async function updateStockQuantity({
   productId,
   newQuantity,
@@ -295,6 +347,61 @@ export async function updateStockThreshold({
   });
 
   return stockItem(product.toObject());
+}
+
+export async function bulkUpdateStockQuantity({
+  changes = [],
+  reason,
+  note = "",
+  actorUser,
+}) {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    throw new ApiError(400, "At least one stock change is required");
+  }
+  if (!clean(reason)) {
+    throw new ApiError(400, "Bulk stock update reason is required");
+  }
+
+  const items = [];
+  const errors = [];
+
+  for (const change of changes) {
+    try {
+      const query = change.productId
+        ? { _id: change.productId }
+        : { sku: clean(change.sku) };
+      const product = await Product.findOne(query).lean();
+      if (!product) {
+        errors.push({
+          sku: change.sku || "",
+          productId: change.productId || "",
+          message: "Product not found",
+        });
+        continue;
+      }
+
+      const item = await updateStockQuantity({
+        productId: product._id,
+        newQuantity: change.newQuantity,
+        reason,
+        note,
+        actorUser,
+      });
+      items.push(item);
+    } catch (error) {
+      errors.push({
+        sku: change.sku || "",
+        productId: change.productId || "",
+        message: error?.message || "Update failed",
+      });
+    }
+  }
+
+  if (errors.length && items.length === 0) {
+    throw new ApiError(400, "No stock rows were updated", { errors });
+  }
+
+  return { items, errors };
 }
 
 export async function deductStockForOrder({ order, actorUser }) {

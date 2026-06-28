@@ -1,8 +1,10 @@
 import { Router } from "express";
 
 import {
+  bulkUpdateStockController,
   getStockDetailController,
   getStockHistoryController,
+  listStockHistoryController,
   listStockController,
   updateStockQuantityController,
   updateStockThresholdController,
@@ -18,6 +20,7 @@ import {
   stockHistoryQuerySchema,
   stockListQuerySchema,
   stockProductParamsSchema,
+  bulkStockUpdateBodySchema,
   updateStockBodySchema,
   updateStockThresholdBodySchema,
 } from "../validations/stock.validation.js";
@@ -27,6 +30,16 @@ const router = Router();
 router.use(auth, requireRole("FACTORY", "ADMIN"));
 
 router.get("/", validateQuery(stockListQuerySchema), listStockController);
+router.get(
+  "/history",
+  validateQuery(stockHistoryQuerySchema),
+  listStockHistoryController,
+);
+router.patch(
+  "/bulk",
+  validateBody(bulkStockUpdateBodySchema),
+  bulkUpdateStockController,
+);
 router.get(
   "/:productId",
   validateParams(stockProductParamsSchema),

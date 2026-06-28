@@ -21,6 +21,11 @@ export const getStockHistoryController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, ...out });
 });
 
+export const listStockHistoryController = asyncHandler(async (req, res) => {
+  const out = await stockService.listStockHistory(req.query || {});
+  res.status(200).json({ ok: true, ...out });
+});
+
 export const updateStockQuantityController = asyncHandler(async (req, res) => {
   const item = await stockService.updateStockQuantity({
     productId: req.params.productId,
@@ -50,5 +55,20 @@ export const updateStockThresholdController = asyncHandler(async (req, res) => {
     ok: true,
     message: "Low stock threshold updated successfully.",
     item,
+  });
+});
+
+export const bulkUpdateStockController = asyncHandler(async (req, res) => {
+  const out = await stockService.bulkUpdateStockQuantity({
+    changes: req.body.changes,
+    reason: req.body.reason,
+    note: req.body.note || "",
+    actorUser: req.user,
+  });
+
+  res.status(200).json({
+    ok: true,
+    message: "Bulk stock update processed.",
+    ...out,
   });
 });

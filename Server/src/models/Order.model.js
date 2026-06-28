@@ -408,6 +408,7 @@ const OrderSchema = new mongoose.Schema(
       },
       driverName: { type: String, default: "", trim: true },
       driverPhone: { type: String, default: "", trim: true },
+      vehicleNumber: { type: String, default: "", trim: true },
       remarks: { type: String, default: "", trim: true },
     },
 

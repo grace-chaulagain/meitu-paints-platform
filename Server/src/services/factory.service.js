@@ -338,6 +338,7 @@ export async function markOutForDelivery({
   factoryUser,
   driverName,
   driverPhone,
+  vehicleNumber = "",
   remarks = "",
 }) {
   requireActor(factoryUser, "FACTORY");
@@ -360,6 +361,7 @@ export async function markOutForDelivery({
     outForDeliveryBy: actorId(factoryUser),
     driverName: clean(driverName),
     driverPhone: clean(driverPhone),
+    vehicleNumber: clean(vehicleNumber),
     remarks: clean(remarks),
   };
   order.stockDeduction = {
@@ -466,6 +468,7 @@ export async function getProformaInvoice({ orderId }) {
     driver: {
       name: order.factory?.driverName || "",
       phone: order.factory?.driverPhone || "",
+      vehicleNumber: order.factory?.vehicleNumber || "",
     },
     remarks: order.factory?.remarks || "",
     items: order.items || [],
