@@ -11,6 +11,7 @@ import {
   setAccessToken,
   clearAccessToken,
   registerAuthHandlers,
+  onExternalAccessTokenUpdate,
 } from "../api/client.js";
 import { useDispatch } from "react-redux";
 import { loginSuccess, logout as logoutAction } from "../redux/userSlice.js";
@@ -265,6 +266,18 @@ export function AuthProvider({ children }) {
     };
   }, [clearAuthState, refresh]);
 
+  // Another tab may refresh the shared session on our behalf (see
+  // onExternalAccessTokenUpdate in api/client.js, which coordinates refreshes
+  // across tabs to avoid racing the single-use rotating refresh token).
+  // Adopt its result here so our own proactive-refresh timer below
+  // reschedules against the synced expiry instead of firing again on this
+  // tab's now-stale schedule.
+  useEffect(() => {
+    return onExternalAccessTokenUpdate((token) => {
+      if (token) setToken(token);
+    });
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
@@ -327,17 +340,40 @@ export function AuthProvider({ children }) {
       0,
     );
 
-    const timer = window.setTimeout(async () => {
+    let cancelled = false;
+    let retryTimer = null;
+
+    // A transient failure here (a network blip, a momentary 500) shouldn't be
+    // the difference between staying signed in and a forced logout - only a
+    // genuinely terminal failure (refresh token actually expired/revoked)
+    // should end the session. Non-terminal failures get a few short retries
+    // instead of silently giving up until the next unrelated API call
+    // happens to trigger the axios interceptor's reactive refresh.
+    async function attemptRefresh(retriesLeft) {
       try {
         await refresh();
       } catch (error) {
+        if (cancelled) return;
         if (isTerminalRefreshFailure(error)) {
           clearAuthState({ expired: true });
+          return;
+        }
+        if (retriesLeft > 0) {
+          retryTimer = window.setTimeout(
+            () => attemptRefresh(retriesLeft - 1),
+            15 * 1000,
+          );
         }
       }
-    }, delay);
+    }
 
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => attemptRefresh(3), delay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (retryTimer) window.clearTimeout(retryTimer);
+    };
   }, [accessToken, clearAuthState, refresh, user]);
 
   const value = useMemo(

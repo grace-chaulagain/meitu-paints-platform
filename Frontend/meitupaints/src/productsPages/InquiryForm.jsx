@@ -1,19 +1,51 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import NavBar from "../components/NavBar";
 
 const INQUIRY_ENDPOINT = (import.meta.env.VITE_INQUIRY_ENDPOINT || "").trim();
 
+const quickTopics = [
+  "Product recommendation",
+  "Color selection",
+  "Texture consultation",
+  "Dealer support",
+];
+
+function ArrowIcon({ size = 17 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5 12h13" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 3 20 6v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3Z" />
+      <path d="m8.5 12 2.4 2.4 4.8-5" />
+    </svg>
+  );
+}
+
 const InquiryForm = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [pageReady, setPageReady] = useState(false);
 
   const prefillSubject = useMemo(() => {
     const fromState = location?.state?.defaultSubject;
-    if (typeof fromState === "string" && fromState.trim())
+    if (typeof fromState === "string" && fromState.trim()) {
       return fromState.trim();
+    }
 
-    // Optional fallback: /inquiry?subject=...
     try {
       const sp = new URLSearchParams(location?.search || "");
       const qs = sp.get("subject");
@@ -37,16 +69,15 @@ const InquiryForm = () => {
   const [sent, setSent] = useState(false);
   const [errMsg, setErrMsg] = useState("");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setPageReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (!prefillSubject) return;
 
     setForm((prev) => {
-      // Don’t overwrite if user already typed something
       if (prev.subject && prev.subject.trim().length > 0) return prev;
       return { ...prev, subject: prefillSubject };
     });
@@ -66,6 +97,11 @@ const InquiryForm = () => {
     [form],
   );
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
   async function postToAppsScript(data) {
     if (!INQUIRY_ENDPOINT) {
       throw new Error("Inquiry endpoint is not configured.");
@@ -73,7 +109,7 @@ const InquiryForm = () => {
 
     await fetch(INQUIRY_ENDPOINT, {
       method: "POST",
-      body: JSON.stringify(data), // send as text/plain
+      body: JSON.stringify(data),
     });
 
     return true;
@@ -106,788 +142,688 @@ const InquiryForm = () => {
     }
   };
 
+  const applyTopic = (topic) => {
+    setForm((prev) => ({
+      ...prev,
+      subject: prev.subject?.trim() ? prev.subject : topic,
+    }));
+  };
+
   return (
     <>
       <NavBar />
-
-      <section className="inq-page">
-        {/* Fixed ambient (never blocks scroll) */}
-        <div className="inq-ambient" aria-hidden="true">
-          <div className="inq-aurora a1" />
-          <div className="inq-aurora a2" />
-          <div className="inq-aurora a3" />
-          <div className="inq-grid" />
-          <div className="inq-noise" />
-          <div className="inq-vignette" />
-        </div>
-
-        <div className="container py-6 inq-content">
-          {/* Header */}
-          <div className="inq-header">
-            <div className="inq-title">
-              <span className="context-pill">
-                <span className="pill-dot" aria-hidden="true" />
-                Inquiry
-              </span>
-
-              <h1 className="headline">
-                Let’s talk about your{" "}
-                <span className="headline-accent">project</span>
-              </h1>
-
-              <p className="subline">
-                Expert guidance, product recommendations, and transparent
-                support tailored to your needs.
-              </p>
-            </div>
-
-            <button className="secondary-action" onClick={() => navigate(-1)}>
-              <span className="btn-icon" aria-hidden="true">
-                ←
-              </span>
+      <main className={`apple-inquiry-page ${pageReady ? "is-ready" : ""}`}>
+        <section className="inquiry-form-section load-section" id="inquiry-form">
+          <div className="inquiry-form-intro">
+            <button
+              type="button"
+              className="inquiry-back"
+              onClick={() => navigate(-1)}
+            >
+              <span aria-hidden="true">‹</span>
               Back
             </button>
-          </div>
+            <p>Inquiry</p>
+            <h2>Send a clear request.</h2>
+            <span>
+              Fill the form first. Add a topic if useful, then include product,
+              shade, texture, quantity, or location details in the message.
+            </span>
 
-          {/* Grid */}
-          <div className="row g-5 align-items-stretch">
-            {/* Left */}
-            <div className="col-lg-5 order-2 order-lg-1">
-              <div className="info-panel inq-card">
-                <div className="card-top">
-                  <div className="icon-chip" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" className="chip-svg">
-                      <path
-                        d="M12 2l1.5 5.3L19 9l-5.5 1.7L12 16l-1.5-5.3L5 9l5.5-1.7L12 2z"
-                        fill="currentColor"
-                        opacity=".9"
-                      />
-                    </svg>
-                  </div>
-                  <h3>Why reach out?</h3>
-                </div>
-
-                <p>
-                  Whether you’re planning a residential project or managing a
-                  large commercial application, our specialists help you choose
-                  the right system not just the right product.
-                </p>
-
-                <ul className="info-points">
-                  <li>Professional product consultation</li>
-                  <li>Surface & system recommendations</li>
-                  <li>Transparent pricing guidance</li>
-                  <li>Fast and reliable response</li>
-                </ul>
-
-                <div className="divider" aria-hidden="true" />
-
-                <div className="trust-stack">
-                  <div className="trust-badge">
-                    <span className="badge-dot" aria-hidden="true" />
-                    Private by default
-                  </div>
-                  <div className="trust-note">
-                    Your information is private and will never be shared.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right */}
-            <div className="col-lg-7 order-1 order-lg-2">
-              <form className="form-panel inq-card" onSubmit={handleSubmit}>
-                <div className="form-head">
-                  <div>
-                    <h3 className="form-title">Send an inquiry</h3>
-                    <p className="form-sub">
-                      We usually respond within{" "}
-                      <strong className="accent">1 business day</strong>.
-                    </p>
-                  </div>
-
-                  <div
-                    className={`status-chip ${sent ? "ok" : ""} ${
-                      sending ? "busy" : ""
-                    }`}
-                    aria-live="polite"
-                  >
-                    {sending ? "Submitting…" : sent ? "Sent ✓" : "Ready"}
-                  </div>
-                </div>
-
-                <div className="form-grid">
-                  <div className="field">
-                    <label>Full name</label>
-                    <input
-                      type="text"
-                      name="name"
-                      placeholder="Your full name"
-                      value={form.name}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>Email address</label>
-                    <input
-                      type="email"
-                      name="email"
-                      placeholder="you@example.com"
-                      value={form.email}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>Phone number</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      placeholder="98XXXXXXXX"
-                      value={form.phone}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>Subject</label>
-                    <input
-                      type="text"
-                      name="subject"
-                      placeholder="Product inquiry, pricing, guidance"
-                      value={form.subject}
-                      onChange={handleChange}
-                    />
-                  </div>
-
-                  <div className="field full">
-                    <label>Your message</label>
-                    <textarea
-                      rows="6"
-                      name="message"
-                      placeholder="Tell us about your project…"
-                      value={form.message}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="field full">
-                    <button
-                      type="submit"
-                      className={`primary-action w-100 ${
-                        sending ? "is-loading" : ""
-                      }`}
-                      disabled={sending}
-                    >
-                      <span className="btn-shine" aria-hidden="true" />
-                      <span className="btn-content">
-                        {sending ? "Submitting…" : "Submit inquiry"}
-                        <span className="btn-arrow" aria-hidden="true">
-                          →
-                        </span>
-                      </span>
-                    </button>
-
-                    {errMsg ? (
-                      <div className="form-error" role="alert">
-                        {errMsg}
-                      </div>
-                    ) : null}
-
-                    <div className="form-foot">
-                      <span className="foot-muted">
-                        By submitting, you agree to be contacted about your
-                        inquiry.
-                      </span>
-                      <Link to="/support" className="tiny-link">
-                        Help & Support <span aria-hidden="true">→</span>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </form>
-
-              <div className="mini-cards">
-                <div className="mini-card">
-                  <div className="mini-top">
-                    <span className="mini-dot" aria-hidden="true" />
-                    System matching
-                  </div>
-                  <p>
-                    Tell us your surface type and location we’ll recommend the
-                    correct primer + topcoat combo.
-                  </p>
-                </div>
-
-                <div className="mini-card">
-                  <div className="mini-top">
-                    <span className="mini-dot" aria-hidden="true" />
-                    Shade guidance
-                  </div>
-                  <p>
-                    Need help with color? We’ll guide you through undertones,
-                    lighting, and finish selection.
-                  </p>
-                </div>
-
-                <div className="mini-card">
-                  <div className="mini-top">
-                    <span className="mini-dot" aria-hidden="true" />
-                    Dealer network
-                  </div>
-                  <p>
-                    We’ll connect you to a nearby dealer and installer support
-                    when needed.
-                  </p>
-                </div>
-              </div>
+            <div className="topic-cloud" aria-label="Inquiry topic shortcuts">
+              {quickTopics.map((topic) => (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => applyTopic(topic)}
+                >
+                  {topic}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
-      </section><style>{`
-        :root{
-          --red:#c1121f;
-          --red2:#e11d2e;
-          --black:#0b0b0c;
 
-          --ink70:rgba(11,11,12,.7);
-          --ink55:rgba(11,11,12,.55);
+          <form className="inquiry-form-card" onSubmit={handleSubmit}>
+            <div className="form-status-row">
+              <div>
+                <p>Send inquiry</p>
+                <h3>Request details</h3>
+              </div>
+              <span
+                className={`inquiry-status ${sending ? "busy" : ""} ${
+                  sent ? "sent" : ""
+                }`}
+                aria-live="polite"
+              >
+                {sending ? "Sending" : sent ? "Sent" : "Ready"}
+              </span>
+            </div>
 
-          --glass:rgba(255,255,255,.72);
-          --line:rgba(0,0,0,.10);
+            <div className="inquiry-fields">
+              <label>
+                <span>Full name</span>
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Your full name"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          --shadow1: 0 28px 60px rgba(0,0,0,.12);
-          --shadow2: 0 40px 110px rgba(0,0,0,.18);
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
 
-          --easeOut:cubic-bezier(.22,.61,.36,1);
+              <label>
+                <span>Phone</span>
+                <input
+                  type="tel"
+                  name="phone"
+                  placeholder="98XXXXXXXX"
+                  value={form.phone}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Subject</span>
+                <input
+                  type="text"
+                  name="subject"
+                  placeholder="Product, color, texture, or pricing"
+                  value={form.subject}
+                  onChange={handleChange}
+                />
+              </label>
+
+              <label className="wide">
+                <span>Message</span>
+                <textarea
+                  rows="7"
+                  name="message"
+                  placeholder="Tell us what you need and include any relevant product, shade, texture, quantity, or location details."
+                  value={form.message}
+                  onChange={handleChange}
+                  required
+                />
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              className="inquiry-submit"
+              disabled={sending}
+            >
+              <span>{sending ? "Submitting" : "Submit inquiry"}</span>
+              {sending ? <i aria-hidden="true" /> : <ArrowIcon />}
+            </button>
+
+            {errMsg ? (
+              <div className="inquiry-error" role="alert">
+                {errMsg}
+              </div>
+            ) : null}
+
+            <div className="form-footer-note">
+              <span>By submitting, you agree to be contacted about this inquiry.</span>
+              <Link to="/support">
+                Help and support <ArrowIcon size={14} />
+              </Link>
+            </div>
+          </form>
+        </section>
+
+        <section className="inquiry-top load-section">
+          <div className="inquiry-copy">
+            <p>Before submitting</p>
+            <h1>Better details help us answer faster.</h1>
+            <span>
+              Keep the request practical. Product, color code, texture code,
+              surface type, quantity, project area, and city are the most useful
+              details.
+            </span>
+            <div className="inquiry-actions">
+              <Link to="/support" className="inquiry-link">
+                Support <ArrowIcon />
+              </Link>
+            </div>
+          </div>
+
+          <aside className="inquiry-guide">
+            <h2>What to include</h2>
+            <ul>
+              <li>Product, color code, texture code, or surface type.</li>
+              <li>Quantity, room size, or project area if pricing is needed.</li>
+              <li>City or dealer area if you need local support.</li>
+            </ul>
+            <div className="privacy-note">
+              <ShieldIcon />
+              <div>
+                <strong>Private by default.</strong>
+                <small>Your details are used only for Meitu follow-up.</small>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+
+      <style>{`
+        .apple-inquiry-page{
+          min-height:100vh;
+          background:#f5f5f7;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-text, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
         }
 
-        html, body { height:auto; }
-        body { overflow-x:hidden; }
-
-        .inq-page{
-          position:relative;
-          overflow:visible;
-          isolation:isolate;
-          background:
-            radial-gradient(900px 420px at 15% 10%, rgba(193,18,31,.10), transparent 60%),
-            radial-gradient(700px 420px at 85% 30%, rgba(0,0,0,.06), transparent 55%),
-            #fff;
+        .apple-inquiry-page svg{
+          width:1em;
+          height:1em;
+          fill:none;
+          stroke:currentColor;
+          stroke-width:2;
+          stroke-linecap:round;
+          stroke-linejoin:round;
         }
 
-        .inq-content{ position:relative; z-index:2; }
-        .py-6{ padding:4.75rem 0; }
-
-        .inq-ambient{
-          position:fixed;
-          inset:0;
-          z-index:0;
-          pointer-events:none;
-        }
-
-        .inq-aurora{
-          position:absolute;
-          width:720px;
-          height:520px;
-          border-radius:999px;
-          filter: blur(44px);
-          opacity:.55;
-          mix-blend-mode:multiply;
-          transform: translate3d(0,0,0);
-        }
-
-        .inq-aurora.a1{
-          left:-120px; top:-120px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(225,29,46,.35), transparent 60%),
-            radial-gradient(circle at 70% 70%, rgba(193,18,31,.28), transparent 62%);
-          animation: float1 10s var(--easeOut) infinite alternate;
-        }
-
-        .inq-aurora.a2{
-          right:-180px; top:120px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(0,0,0,.14), transparent 62%),
-            radial-gradient(circle at 70% 70%, rgba(193,18,31,.22), transparent 64%);
-          animation: float2 12s var(--easeOut) infinite alternate;
-        }
-
-        .inq-aurora.a3{
-          left:20%; bottom:-260px;
-          width:820px; height:620px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(193,18,31,.18), transparent 65%),
-            radial-gradient(circle at 70% 70%, rgba(0,0,0,.10), transparent 65%);
-          animation: float3 14s var(--easeOut) infinite alternate;
-        }
-
-        .inq-grid{
-          position:absolute;
-          inset:-2px;
-          background:
-            linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px);
-          background-size:72px 72px;
-          opacity:.08;
-          mask-image: radial-gradient(closest-side at 50% 10%, #000 40%, transparent 72%);
-        }
-
-        .inq-noise{
-          position:absolute;
-          inset:0;
-          opacity:.06;
-          background-image:url("noisetexture/2.svg");
-          background-size: 420px 420px;
-          mix-blend-mode:multiply;
-        }
-
-        .inq-vignette{
-          position:absolute;
-          inset:-2px;
-          background: radial-gradient(closest-side at 50% 10%, transparent 45%, rgba(0,0,0,.06) 90%);
-          opacity:.9;
-        }
-
-        @keyframes float1{
-          from{ transform: translate3d(0,0,0) scale(1); }
-          to{ transform: translate3d(34px, 18px,0) scale(1.05); }
-        }
-        @keyframes float2{
-          from{ transform: translate3d(0,0,0) scale(1); }
-          to{ transform: translate3d(-26px, 24px,0) scale(1.04); }
-        }
-        @keyframes float3{
-          from{ transform: translate3d(0,0,0) scale(1); }
-          to{ transform: translate3d(22px, -18px,0) scale(1.03); }
-        }
-
-        .inq-header{
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:20px;
-          margin-bottom:22px;
-        }
-
-        .context-pill{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:10px 18px;
-          border-radius:999px;
-          border:1px solid rgba(193,18,31,.35);
-          background:rgba(255,255,255,.60);
-          color:var(--red);
-          font-size:12px;
-          font-weight:700;
-          letter-spacing:.08em;
-          text-transform:uppercase;
-          backdrop-filter: blur(14px);
-          box-shadow: 0 18px 40px rgba(0,0,0,.08);
-        }
-
-        .pill-dot{
-          width:8px;height:8px;border-radius:999px;
-          background: linear-gradient(180deg, var(--red2), var(--red));
-          box-shadow:0 0 0 6px rgba(193,18,31,.12);
-        }
-
-        .headline{
-          font-size:42px;
-          font-weight:520;
-          letter-spacing:-.7px;
-          color:var(--black);
-          margin:10px 0 0;
-        }
-
-        .headline-accent{
-          background: linear-gradient(180deg, var(--red2), var(--red));
-          -webkit-background-clip:text;
-          background-clip:text;
-          color:transparent;
-        }
-
-        .subline{
-          font-size:17px;
-          color:var(--ink70);
-          max-width:640px;
-          margin-top:8px;
-        }
-
-        .inq-links{
-          display:flex;
-          gap:12px;
-          flex-wrap:wrap;
-          margin-top:18px;
-        }
-
-        .link-pill{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:12px 18px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.12);
-          background:rgba(255,255,255,.78);
-          backdrop-filter: blur(14px);
+        .apple-inquiry-page a{
           text-decoration:none;
-          color:var(--black);
-          font-weight:650;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-          box-shadow:0 18px 46px rgba(0,0,0,.10);
-        }
-        .link-pill:hover{
-          transform: translateY(-1px);
-          box-shadow:0 26px 70px rgba(0,0,0,.14);
-          border-color: rgba(193,18,31,.18);
-        }
-        .link-pill:active{ transform: translateY(0px); }
-        .link-pill.ghost{ background: rgba(255,255,255,.55); }
-
-        .inq-card{
-          background:rgba(255,255,255,.72);
-          border-radius:28px;
-          padding:28px 32px 18px;
-          border:1px solid rgba(0,0,0,.08);
-          box-shadow: var(--shadow1);
-          backdrop-filter: blur(16px);
-          height:auto;
-          position:relative;
-          overflow:hidden;
         }
 
-        .inq-card::before{
-          content:"";
-          position:absolute;
-          inset:-120px -140px auto auto;
-          width:240px;
-          height:240px;
-          background: radial-gradient(circle, rgba(193,18,31,.18), transparent 60%);
-          filter: blur(2px);
-          opacity:.9;
-          pointer-events:none;
+        .load-section{
+          opacity:0;
+          transform:translateY(18px);
+          transition:
+            opacity .46s cubic-bezier(.22,.61,.36,1),
+            transform .46s cubic-bezier(.22,.61,.36,1);
+          will-change:opacity, transform;
         }
 
-        .card-top{
-          display:flex;
-          align-items:center;
-          gap:14px;
-          margin-bottom:12px;
+        .apple-inquiry-page.is-ready .load-section{
+          opacity:1;
+          transform:translateY(0);
         }
 
-        .icon-chip{
-          width:44px;height:44px;
-          border-radius:14px;
+        .apple-inquiry-page.is-ready .load-section:nth-of-type(2){
+          transition-delay:.08s;
+        }
+
+        .inquiry-top,
+        .inquiry-form-section{
+          width:min(1080px, calc(100vw - 40px));
+          margin:0 auto;
+        }
+
+        .inquiry-top{
+          margin-top:clamp(90px, 18vh, 190px);
+          padding:0 0 76px;
           display:grid;
-          place-items:center;
-          color:var(--red);
-          background: linear-gradient(180deg, rgba(193,18,31,.14), rgba(193,18,31,.06));
-          border:1px solid rgba(193,18,31,.22);
-          box-shadow:0 18px 44px rgba(193,18,31,.14);
+          grid-template-columns:minmax(0,1fr) 360px;
+          gap:22px;
+          align-items:start;
         }
 
-        .chip-svg{ width:22px;height:22px; }
-
-        .info-panel h3{ font-size:20px; font-weight:650; margin:0; }
-        .info-panel p{
-          font-size:16px;
-          color:var(--ink70);
-          margin-bottom:16px;
-          line-height:1.6;
+        .inquiry-copy > p,
+        .inquiry-form-intro > p,
+        .form-status-row p{
+          margin:22px 0 8px;
+          color:#707070;
+          font-size:12px;
+          line-height:1.33;
+          font-weight:600;
+          text-transform:uppercase;
+          letter-spacing:-.003em;
         }
 
-        .info-points{
-          list-style:none;
-          padding:0;
-          margin:0 0 16px 0;
-        }
-        .info-points li{
-          margin-bottom:10px;
-          padding-left:26px;
-          position:relative;
-          color:var(--ink70);
-        }
-        .info-points li::before{
-          content:"✔";
-          position:absolute;
-          left:0;
-          color:var(--red);
+        .inquiry-form-intro > .inquiry-back + p{
+          margin-top:34px;
         }
 
-        .divider{
-          height:1px;
-          background: linear-gradient(to right, transparent, rgba(0,0,0,.14), transparent);
-          margin:14px 0 12px;
-        }
-
-        .trust-stack{display:grid; gap:8px;}
-        .trust-badge{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          width:max-content;
-          padding:10px 14px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.10);
-          background: rgba(255,255,255,.68);
+        .inquiry-copy h1{
+          max-width:700px;
+          margin:0;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-display, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+          font-size:clamp(44px, 7vw, 76px);
+          line-height:1.04;
+          letter-spacing:-1.4px;
           font-weight:700;
-          font-size:13px;
-          color:var(--black);
-        }
-        .badge-dot{
-          width:8px;height:8px;border-radius:999px;
-          background: var(--red);
-          box-shadow:0 0 0 6px rgba(193,18,31,.10);
-        }
-        .trust-note{ font-size:14px; color:var(--ink55); }
-
-        .form-head{
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:16px;
-          margin-bottom:12px;
         }
 
-        .form-title{ margin:0; font-size:18px; font-weight:700; }
-        .form-sub{ margin:6px 0 0; font-size:14px; color:var(--ink55); }
-        .accent{ color: var(--red); }
-
-        .status-chip{
-          padding:10px 14px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.12);
-          background: rgba(255,255,255,.66);
-          font-weight:750;
-          font-size:13px;
-          color:var(--black);
-          box-shadow:0 14px 40px rgba(0,0,0,.10);
-        }
-        .status-chip.busy{
-          border-color: rgba(193,18,31,.22);
-          box-shadow:0 16px 44px rgba(193,18,31,.14);
-        }
-        .status-chip.ok{
-          border-color: rgba(193,18,31,.30);
-          background: rgba(193,18,31,.06);
-          color: var(--red);
+        .inquiry-top .inquiry-copy h1{
+          max-width:560px;
+          font-size:clamp(30px, 4vw, 44px);
+          letter-spacing:-.7px;
+          line-height:1.1;
         }
 
-        .form-grid{
-          display:grid;
-          grid-template-columns:repeat(2,1fr);
-          gap:18px;
-        }
-        .field{display:flex; flex-direction:column;}
-        .field.full{grid-column:1/-1;}
-        .field label{
-          font-size:14px;
-          font-weight:650;
-          margin-bottom:8px;
-          color:var(--black);
-        }
-
-        .field input,
-        .field textarea{
-          width:100%;
-          padding:12px 14px;
-          border-radius:16px;
-          border:1px solid var(--line);
-          font-size:15px;
-          background: rgba(255,255,255,.82);
-          transition: border 160ms ease, box-shadow 160ms ease, background 160ms ease;
-        }
-        .field input:focus,
-        .field textarea:focus{
-          outline:none;
-          border-color: rgba(193,18,31,.55);
-          box-shadow: 0 0 0 4px rgba(193,18,31,.12);
-          background:#fff;
-        }
-
-        .primary-action{
-          position:relative;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          padding:14px 28px;
-          border-radius:999px;
-          background: linear-gradient(180deg, var(--red2), var(--red));
-          color:#fff;
-          font-weight:750;
-          border:none;
-          cursor:pointer;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, filter 160ms ease;
-          box-shadow: 0 22px 60px rgba(193,18,31,.32), inset 0 1px 0 rgba(255,255,255,.22);
-          overflow:hidden;
-        }
-        .primary-action:hover{
-          transform: translateY(-1px);
-          box-shadow: 0 30px 90px rgba(193,18,31,.40), inset 0 1px 0 rgba(255,255,255,.22);
-          filter:saturate(1.03);
-        }
-        .primary-action:active{ transform: translateY(0px); }
-        .primary-action:disabled{
-          opacity:.75;
-          cursor:not-allowed;
-          transform:none !important;
-        }
-
-        .btn-content{
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          gap:10px;
-          position:relative;
-          z-index:2;
-        }
-        .btn-arrow{ transition: transform 160ms var(--easeOut); }
-        .primary-action:hover .btn-arrow{ transform: translateX(2px); }
-
-        .btn-shine{
-          position:absolute;
-          inset:-2px;
-          background:
-            radial-gradient(500px 120px at 20% 40%, rgba(255,255,255,.28), transparent 60%),
-            radial-gradient(500px 120px at 80% 60%, rgba(255,255,255,.16), transparent 60%);
-          opacity:.6;
-          z-index:1;
-        }
-
-        .secondary-action{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:14px 22px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.18);
-          background:rgba(255,255,255,.72);
-          backdrop-filter: blur(14px);
-          font-weight:750;
-          cursor:pointer;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-          box-shadow:0 18px 50px rgba(0,0,0,.10);
-        }
-        .secondary-action:hover{
-          transform: translateY(-1px);
-          border-color: rgba(0,0,0,.32);
-          box-shadow:0 26px 72px rgba(0,0,0,.14);
-        }
-
-        .form-foot{
+        .inquiry-copy > span,
+        .inquiry-form-intro > span{
+          display:block;
+          max-width:620px;
           margin-top:14px;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-          flex-wrap:wrap;
+          color:#707070;
+          font-size:18px;
+          line-height:1.45;
         }
-        .foot-muted{ font-size:12px; color: var(--ink55); }
 
-        .tiny-link{
+        .inquiry-back{
+          height:32px;
+          display:inline-flex;
+          align-items:center;
+          gap:7px;
+          padding:0;
+          border:0;
+          background:transparent;
+          color:#0066cc;
+          font-size:14px;
+          font-weight:400;
+          cursor:pointer;
+          letter-spacing:-.04px;
+        }
+
+        .inquiry-back span{
+          width:22px;
+          height:22px;
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:rgba(210,210,215,.64);
+          color:#1d1d1f;
+          font-size:22px;
+          line-height:.82;
+          padding-bottom:2px;
+          transition:background-color .18s ease, transform .18s ease;
+        }
+
+        .inquiry-back:hover span{
+          background:#e8e8ed;
+          transform:translateX(-1px);
+        }
+
+        .inquiry-actions{
+          display:flex;
+          flex-wrap:wrap;
+          align-items:center;
+          gap:18px;
+          margin-top:24px;
+        }
+
+        .inquiry-pill,
+        .inquiry-link{
           display:inline-flex;
           align-items:center;
           gap:8px;
-          padding:10px 14px;
+          color:#0066cc;
+          font-size:17px;
+          line-height:1.24;
+          font-weight:400;
+        }
+
+        .inquiry-pill.primary{
+          min-height:42px;
+          padding:0 18px;
           border-radius:999px;
-          border:1px solid rgba(0,0,0,.10);
-          background: rgba(255,255,255,.66);
-          text-decoration:none;
-          color: var(--black);
-          font-weight:700;
+          background:#0071e3;
+          color:#fff;
+        }
+
+        .inquiry-guide,
+        .inquiry-form-card,
+        .privacy-note{
+          background:#fff;
+          border:1px solid #e8e8ed;
+          border-radius:28px;
+          box-shadow:none;
+        }
+
+        .inquiry-guide{
+          padding:22px;
+        }
+
+        .inquiry-guide h2{
+          margin:0;
+          color:#1d1d1f;
+          font-size:20px;
+          line-height:1.2;
+          font-weight:600;
+          letter-spacing:-.2px;
+        }
+
+        .inquiry-guide ul{
+          margin:14px 0 0;
+          padding-left:18px;
+          color:#707070;
+          font-size:14px;
+          line-height:1.5;
+        }
+
+        .inquiry-guide li + li{
+          margin-top:8px;
+        }
+
+        .privacy-note{
+          display:flex;
+          gap:12px;
+          align-items:flex-start;
+          margin-top:18px;
+          padding:14px;
+          background:#f5f5f7;
+        }
+
+        .privacy-note svg{
+          flex:0 0 20px;
+          color:#1d1d1f;
+        }
+
+        .privacy-note strong{
+          display:block;
+          color:#1d1d1f;
+          font-size:14px;
+          line-height:1.25;
+          font-weight:600;
+        }
+
+        .privacy-note small{
+          display:block;
+          margin-top:3px;
+          color:#707070;
           font-size:12px;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-          box-shadow:0 14px 40px rgba(0,0,0,.10);
-        }
-        .tiny-link:hover{
-          transform: translateY(-1px);
-          border-color: rgba(193,18,31,.18);
-          box-shadow:0 18px 52px rgba(0,0,0,.12);
+          line-height:1.35;
         }
 
-        .form-error{
-          margin-top:12px;
-          padding:12px 14px;
-          border-radius:16px;
-          border:1px solid rgba(193,18,31,.28);
-          background: rgba(193,18,31,.06);
-          color: rgba(11,11,12,.78);
-          font-weight:650;
-          font-size:13px;
-        }
-
-        .mini-cards{
-          margin-top:14px;
+        .inquiry-form-section{
           display:grid;
-          grid-template-columns:repeat(3,1fr);
+          grid-template-columns:320px minmax(0,1fr);
+          gap:22px;
+          align-items:start;
+          padding:56px 0 34px;
+        }
+
+        .inquiry-form-intro{
+          position:sticky;
+          top:70px;
+          padding-top:6px;
+        }
+
+        .inquiry-form-intro > p{
+          margin-top:0;
+        }
+
+        .inquiry-form-intro h2{
+          margin:0;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-display, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+          font-size:34px;
+          line-height:1.1;
+          letter-spacing:-.5px;
+          font-weight:700;
+        }
+
+        .inquiry-form-intro > span{
+          font-size:15px;
+        }
+
+        .topic-cloud{
+          display:flex;
+          flex-wrap:wrap;
+          gap:9px;
+          margin-top:20px;
+        }
+
+        .topic-cloud button{
+          min-height:36px;
+          padding:0 13px;
+          border:0;
+          border-radius:999px;
+          background:rgba(210,210,215,.64);
+          color:rgba(0,0,0,.72);
+          font:inherit;
+          font-size:14px;
+          font-weight:500;
+          cursor:pointer;
+        }
+
+        .topic-cloud button:hover{
+          background:#fff;
+        }
+
+        .inquiry-form-card{
+          padding:28px;
+        }
+
+        .form-status-row{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:18px;
+          margin-bottom:22px;
+        }
+
+        .form-status-row p{
+          margin:0 0 6px;
+        }
+
+        .form-status-row h3{
+          margin:0;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-display, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+          font-size:28px;
+          line-height:1.14;
+          letter-spacing:-.36px;
+          font-weight:700;
+        }
+
+        .inquiry-status{
+          min-height:34px;
+          display:inline-flex;
+          align-items:center;
+          padding:0 13px;
+          border-radius:999px;
+          background:#f5f5f7;
+          color:#707070;
+          font-size:13px;
+          font-weight:600;
+        }
+
+        .inquiry-status.busy{
+          color:#1d1d1f;
+        }
+
+        .inquiry-status.sent{
+          color:#0066cc;
+        }
+
+        .inquiry-fields{
+          display:grid;
+          grid-template-columns:repeat(2, minmax(0,1fr));
           gap:14px;
         }
 
-        .mini-card{
-          background: rgba(255,255,255,.70);
-          border:1px solid rgba(0,0,0,.08);
-          border-radius:22px;
-          padding:14px 16px 12px;
-          box-shadow:0 18px 44px rgba(0,0,0,.10);
-          backdrop-filter: blur(14px);
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-        }
-        .mini-card:hover{
-          transform: translateY(-1px);
-          box-shadow:0 26px 70px rgba(0,0,0,.12);
-          border-color: rgba(193,18,31,.12);
+        .inquiry-fields label{
+          display:grid;
+          gap:8px;
         }
 
-        .mini-top{
-          display:flex;
-          align-items:center;
-          gap:10px;
-          font-weight:800;
-          font-size:12px;
-          letter-spacing:.12em;
-          text-transform:uppercase;
-          color: rgba(11,11,12,.70);
-          margin-bottom:10px;
-        }
-        .mini-dot{
-          width:8px;height:8px;border-radius:999px;
-          background: var(--red);
-          box-shadow:0 0 0 6px rgba(193,18,31,.10);
+        .inquiry-fields label.wide{
+          grid-column:1 / -1;
         }
 
-        .mini-card p{
-          margin:0;
+        .inquiry-fields label span{
+          color:#474747;
           font-size:13px;
-          line-height:1.6;
-          color: var(--ink70);
+          font-weight:600;
         }
 
-        @media(max-width:992px){
-          .headline{font-size:34px;}
-          .inq-header{flex-direction:column; align-items:flex-start;}
-          .mini-cards{grid-template-columns:1fr;}
+        .inquiry-fields input,
+        .inquiry-fields textarea{
+          width:100%;
+          border:1px solid #e8e8ed;
+          border-radius:18px;
+          background:#f5f5f7;
+          color:#1d1d1f;
+          padding:14px 15px;
+          font:inherit;
+          font-size:15px;
+          line-height:1.4;
+          outline:none;
+          box-shadow:none;
+          transition:border-color .18s ease, background-color .18s ease;
+          -webkit-appearance:none;
+          appearance:none;
         }
 
-        @media(max-width:768px){
-          .form-grid{grid-template-columns:1fr;}
-          .inq-card{padding:20px 18px 14px;}
-          .py-6{padding:3.75rem 0;}
+        .inquiry-fields textarea{
+          resize:vertical;
+          min-height:164px;
+        }
+
+        .inquiry-fields input::placeholder,
+        .inquiry-fields textarea::placeholder{
+          color:#8a8a8e;
+        }
+
+        .inquiry-fields input:focus,
+        .inquiry-fields textarea:focus{
+          border-color:#1d1d1f;
+          background:#fff;
+        }
+
+        .inquiry-submit{
+          width:100%;
+          min-height:48px;
+          margin-top:18px;
+          border:0;
+          border-radius:999px;
+          background:#0071e3;
+          color:#fff;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          gap:10px;
+          font-size:17px;
+          font-weight:400;
+          cursor:pointer;
+        }
+
+        .inquiry-submit:disabled{
+          cursor:not-allowed;
+          opacity:.82;
+        }
+
+        .inquiry-submit i{
+          width:16px;
+          height:16px;
+          border-radius:999px;
+          border:2px solid rgba(255,255,255,.42);
+          border-top-color:#fff;
+          animation:spin .8s linear infinite;
+        }
+
+        .inquiry-error{
+          margin-top:14px;
+          padding:13px 14px;
+          border-radius:18px;
+          background:#fff4f4;
+          color:#b64400;
+          font-size:14px;
+          line-height:1.35;
+        }
+
+        .form-footer-note{
+          display:flex;
+          justify-content:space-between;
+          gap:14px;
+          flex-wrap:wrap;
+          margin-top:16px;
+          color:#707070;
+          font-size:12px;
+          line-height:1.35;
+        }
+
+        .form-footer-note a{
+          display:inline-flex;
+          align-items:center;
+          gap:5px;
+          color:#0066cc;
+          font-weight:500;
+        }
+
+        @keyframes spin{
+          to{ transform:rotate(360deg); }
+        }
+
+        @media (max-width:900px){
+          .inquiry-top,
+          .inquiry-form-section{
+            grid-template-columns:1fr;
+          }
+
+          .inquiry-form-intro{
+            position:relative;
+            top:auto;
+          }
+        }
+
+        @media (max-width:640px){
+          .inquiry-top,
+          .inquiry-form-section{
+            width:min(100vw - 28px, 1080px);
+          }
+
+          .inquiry-top{
+            margin-top:70px;
+            padding-bottom:56px;
+          }
+
+          .inquiry-form-section{
+            padding-top:34px;
+          }
+
+          .inquiry-copy h1{
+            font-size:42px;
+            letter-spacing:-.8px;
+          }
+
+          .inquiry-copy > span{
+            font-size:17px;
+          }
+
+          .inquiry-form-card,
+          .inquiry-guide{
+            border-radius:24px;
+            padding:22px;
+          }
+
+          .inquiry-fields{
+            grid-template-columns:1fr;
+          }
+
+          .form-status-row{
+            flex-direction:column;
+          }
         }
 
         @media (prefers-reduced-motion: reduce){
-          .inq-aurora{animation:none;}
-          .link-pill,
-          .mini-card,
-          .primary-action,
-          .secondary-action,
-          .field input,
-          .field textarea{
+          .load-section{
+            opacity:1 !important;
+            transform:none !important;
             transition:none !important;
+          }
+
+          .inquiry-submit i{
+            animation:none !important;
           }
         }
       `}</style>

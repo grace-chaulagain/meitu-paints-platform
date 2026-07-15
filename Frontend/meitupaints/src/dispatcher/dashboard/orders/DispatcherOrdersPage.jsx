@@ -1,349 +1,47 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
 import {
   useAmendDispatcherOrderMutation,
+  useDispatchDispatcherOrderMutation,
   useGetDispatcherOrderQuery,
   useGetDispatcherOrdersQuery,
   useRejectDispatcherOrderMutation,
   useVerifyDispatcherOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import {
+  DashboardUIStyles,
+  EmptyState,
+  GhostButton,
+  Pill,
+  PrimaryButton,
+  SearchField,
+  SectionHeader,
+  SegmentedControl,
+  Surface,
+} from "../../../components/dashboard/DashboardUI.jsx";
+import { groupOrdersByDay } from "../../../utils/orderDayGrouping.js";
 
 const VIEW_FILTERS = [
   { key: "PENDING", label: "Pending" },
-  { key: "VERIFIED", label: "Recently Verified" },
-  { key: "REJECTED", label: "Recently Rejected" },
+  { key: "VERIFIED", label: "Verified" },
+  { key: "REJECTED", label: "Rejected" },
   { key: "ARCHIVE", label: "Archive" },
 ];
 
-function GlassCard({ children, style = {}, ...rest }) {
-  return (
-    <div
-      {...rest}
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle, action = null }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.58)",
-            }}
-          >
-            {subtitle}
-          </div>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function MetricCard({ label, value, helper = "", accent = false }) {
-  return (
-    <div
-      style={{
-        borderRadius: 20,
-        padding: "16px 18px",
-        background: accent ? "rgba(180,35,24,.06)" : "rgba(248,250,252,.95)",
-        border: accent
-          ? "1px solid rgba(180,35,24,.12)"
-          : "1px solid rgba(15,23,42,.06)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.46)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 30,
-          fontWeight: 950,
-          letterSpacing: "-0.04em",
-          color: accent ? "#b42318" : "#0f172a",
-        }}
-      >
-        {value}
-      </div>
-      {helper ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.54)",
-          }}
-        >
-          {helper}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SearchInput({ value, onChange }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        height: 50,
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        padding: "0 14px",
-      }}
-    >
-      <span style={{ fontWeight: 900, color: "rgba(15,23,42,.42)" }}>⌕</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search order number, dealer, phone, payment..."
-        style={{
-          width: "100%",
-          border: "none",
-          outline: "none",
-          background: "transparent",
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#0f172a",
-        }}
-      />
-    </div>
-  );
-}
-
-function FilterPill({ active, children, onClick, count }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        height: 42,
-        padding: "0 14px",
-        borderRadius: 999,
-        border: active
-          ? "1px solid rgba(180,35,24,.16)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: active
-          ? "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)"
-          : "#fff",
-        color: active ? "#fff" : "#0f172a",
-        fontWeight: 900,
-        fontSize: 13,
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-      }}
-    >
-      <span>{children}</span>
-      {typeof count === "number" ? (
-        <span
-          style={{
-            minWidth: 22,
-            height: 22,
-            padding: "0 6px",
-            borderRadius: 999,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: active ? "rgba(255,255,255,.18)" : "rgba(15,23,42,.06)",
-            color: active ? "#fff" : "#0f172a",
-            fontSize: 11,
-            fontWeight: 900,
-          }}
-        >
-          {count}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function ActionButton({
-  children,
-  onClick,
-  danger = false,
-  subtle = false,
-  disabled = false,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick?.(e);
-      }}
-      disabled={disabled}
-      style={{
-        height: 40,
-        padding: "0 14px",
-        borderRadius: 14,
-        border: danger
-          ? "1px solid rgba(180,35,24,.14)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: danger
-          ? "rgba(180,35,24,.06)"
-          : subtle
-            ? "#fff"
-            : "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)",
-        color: danger ? "#b42318" : subtle ? "#0f172a" : "#fff",
-        fontWeight: 900,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatusBadge({ status }) {
-  const normalized = String(status || "").toUpperCase();
-
-  const tone =
-    normalized === "VERIFIED"
-      ? {
-          bg: "rgba(22,163,74,.08)",
-          color: "#15803d",
-          border: "1px solid rgba(22,163,74,.12)",
-        }
-      : normalized === "REJECTED"
-        ? {
-            bg: "rgba(180,35,24,.08)",
-            color: "#b42318",
-            border: "1px solid rgba(180,35,24,.12)",
-          }
-        : normalized === "ARCHIVED"
-          ? {
-              bg: "rgba(15,23,42,.08)",
-              color: "#334155",
-              border: "1px solid rgba(15,23,42,.12)",
-            }
-          : {
-              bg: "rgba(245,158,11,.10)",
-              color: "#b45309",
-              border: "1px solid rgba(245,158,11,.16)",
-            };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        height: 28,
-        padding: "0 10px",
-        borderRadius: 999,
-        background: tone.bg,
-        color: tone.color,
-        border: tone.border,
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: ".04em",
-      }}
-    >
-      {status || "—"}
-    </span>
-  );
-}
-
-function DetailItem({ label, value }) {
-  return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.44)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 14,
-          lineHeight: 1.65,
-          fontWeight: 800,
-          color: "#0f172a",
-          wordBreak: "break-word",
-        }}
-      >
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
-
-function Label({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 900,
-        letterSpacing: ".08em",
-        textTransform: "uppercase",
-        color: "rgba(15,23,42,.44)",
-      }}
-    >
-      {children}
-    </div>
-  );
+function statusTone(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "VERIFIED" || normalized === "DISPATCHED") return "positive";
+  if (normalized === "REJECTED") return "critical";
+  if (normalized === "ARCHIVED") return "neutral";
+  return "caution";
 }
 
 function normalizeStatus(status) {
-  const s = String(status || "")
-    .trim()
-    .toUpperCase();
+  const s = String(status || "").trim().toUpperCase();
   if (s === "ARCHIVE") return "ARCHIVED";
   return s;
 }
@@ -360,40 +58,26 @@ function formatRelativeTime(value) {
   const diffSeconds = Math.max(1, Math.floor((Date.now() - then) / 1000));
   if (diffSeconds < 60) return "Placed just now";
 
-  const units = [
-    ["year", 31536000],
-    ["month", 2592000],
-    ["day", 86400],
-    ["hour", 3600],
-    ["minute", 60],
-  ];
-
+  const units = [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]];
   for (const [unit, seconds] of units) {
     const valueCount = Math.floor(diffSeconds / seconds);
-    if (valueCount >= 1) {
-      return `Placed ${valueCount} ${unit}${valueCount > 1 ? "s" : ""} ago`;
-    }
+    if (valueCount >= 1) return `Placed ${valueCount} ${unit}${valueCount > 1 ? "s" : ""} ago`;
   }
-
   return "Placed just now";
 }
 
 function getItemName(item) {
   return item?.name || item?.nameSnapshot || "";
 }
-
 function getItemSku(item) {
   return item?.sku || item?.skuSnapshot || item?.code || "";
 }
-
 function getItemPack(item) {
   return item?.packLabel || item?.variantLabel || item?.unit || item?.uom || "";
 }
-
 function getItemQty(item) {
   return Number(item?.quantity ?? item?.qty ?? 0);
 }
-
 function getItemRate(item) {
   return Number(item?.unitPrice ?? item?.rate ?? 0);
 }
@@ -413,7 +97,6 @@ function buildPayloadItems(items = []) {
     const quantity = Number(item.quantity || 0);
     const rate = Number(item.rate || 0);
     const amount = quantity * rate;
-
     return {
       sku: String(item.sku || "").trim(),
       name: String(item.name || "").trim(),
@@ -429,6 +112,62 @@ function buildPayloadItems(items = []) {
   });
 }
 
+function CardLabel({ icon, children }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <DashboardIcon name={icon} size={14} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)" }} />
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DetailItem({ label, value }) {
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, fontWeight: 500, color: "var(--color-ink, #1d1d1f)", wordBreak: "break-word" }}>
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+function fieldInputStyle() {
+  return {
+    width: "100%",
+    height: 38,
+    borderRadius: 10,
+    border: "none",
+    background: "var(--color-fog, #f5f5f7)",
+    padding: "0 12px",
+    fontSize: 13.5,
+    fontWeight: 500,
+    color: "var(--color-ink, #1d1d1f)",
+    outline: "none",
+  };
+}
+
+function fieldTextareaStyle() {
+  return { ...fieldInputStyle(), height: "auto", padding: 12, resize: "vertical" };
+}
+
+function CloseButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Close"
+      style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center" }}
+    >
+      <DashboardIcon name="close" size={14} strokeWidth={2} />
+    </button>
+  );
+}
+
 function OrdersRow({ item, selected, onSelect }) {
   const dealer = item?.dealerId || item?.dealerSnapshot || {};
   const orderTotal = item?.totals?.total || 0;
@@ -438,202 +177,49 @@ function OrdersRow({ item, selected, onSelect }) {
     <button
       type="button"
       onClick={() => onSelect(item)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        border: selected
-          ? "1px solid rgba(180,35,24,.16)"
-          : "1px solid rgba(15,23,42,.06)",
-        background: selected ? "rgba(180,35,24,.04)" : "#fff",
-        borderRadius: 20,
-        padding: 18,
-        cursor: "pointer",
-      }}
+      className={`dash-list-row dash-selectable-row ${selected ? "is-selected" : ""}`}
+      style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "13px 16px", display: "flex", alignItems: "center", gap: 14 }}
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1fr) auto",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 17,
-                fontWeight: 950,
-                letterSpacing: "-0.02em",
-                color: "#0f172a",
-              }}
-            >
-              {item.orderNumber || "Unnamed Order"}
-            </div>
-            <StatusBadge status={normalizeStatus(item.status)} />
-          </div>
-
-          <div
-            style={{
-              marginTop: 6,
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.56)",
-            }}
-          >
-            {dealer?.companyName ? <span>{dealer.companyName}</span> : null}
-            {dealer?.companyName && dealer?.contactName ? <span>•</span> : null}
-            {dealer?.contactName ? <span>{dealer.contactName}</span> : null}
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.56)",
-            }}
-          >
-            <span>{dealer?.phone || "No phone"}</span>
-            <span>•</span>
-            <span>{money(orderTotal, currency)}</span>
-            <span>•</span>
-            <span>{formatRelativeTime(item.createdAt)}</span>
-          </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>{item.orderNumber || "Unnamed Order"}</span>
+          <Pill tone={statusTone(item.status)} size="small">{normalizeStatus(item.status)}</Pill>
         </div>
-
-        <div
-          style={{
-            justifySelf: "end",
-            textAlign: "right",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "rgba(15,23,42,.52)",
-          }}
-        >
-          {Array.isArray(item.items) ? `${item.items.length} items` : "—"}
+        <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+          {dealer?.companyName || "Unknown dealer"}
+          {dealer?.contactName ? ` · ${dealer.contactName}` : ""}
         </div>
+        <div style={{ marginTop: 3, fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+          {dealer?.phone || "No phone"} · {money(orderTotal, currency)} · {formatRelativeTime(item.createdAt)}
+        </div>
+      </div>
+      <div style={{ flex: "0 0 auto", fontSize: 12, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>
+        {Array.isArray(item.items) ? `${item.items.length} items` : "—"}
       </div>
     </button>
   );
 }
 
-function LoadingState() {
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {Array.from({ length: 6 }).map((_, index) => (
-        <GlassCard key={index} style={{ padding: 18 }}>
-          <div
-            style={{
-              height: 86,
-              borderRadius: 18,
-              background:
-                "linear-gradient(90deg, rgba(241,245,249,.9), rgba(248,250,252,1), rgba(241,245,249,.9))",
-            }}
-          />
-        </GlassCard>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ onReset, archiveMode }) {
-  return (
-    <GlassCard style={{ padding: 26 }}>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        {archiveMode ? "No handled orders found" : "No pending orders found"}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          maxWidth: 620,
-          fontSize: 14,
-          lineHeight: 1.7,
-          fontWeight: 700,
-          color: "rgba(15,23,42,.56)",
-        }}
-      >
-        Try adjusting the search filters to review dispatcher order records.
-      </div>
-      <div style={{ marginTop: 18 }}>
-        <ActionButton subtle onClick={onReset}>
-          Clear filters
-        </ActionButton>
-      </div>
-    </GlassCard>
-  );
-}
-
 function OrderItemsTable({ items = [] }) {
-  if (!items.length) {
-    return (
-      <div
-        style={{
-          padding: 16,
-          borderRadius: 18,
-          border: "1px solid rgba(15,23,42,.06)",
-          background: "#fff",
-          color: "rgba(15,23,42,.56)",
-          fontWeight: 800,
-        }}
-      >
-        No items found.
-      </div>
-    );
-  }
+  if (!items.length) return <EmptyState icon="package" title="No items found" />;
 
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        border: "1px solid rgba(15,23,42,.06)",
-        background: "#fff",
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ borderRadius: 14, border: "1px solid rgba(0,0,0,.06)", overflow: "hidden" }}>
       <div style={{ overflowX: "auto" }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-          }}
-        >
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ background: "rgba(15,23,42,.03)" }}>
+            <tr style={{ background: "var(--color-fog, #f5f5f7)" }}>
               {["Item", "Pack", "Qty", "Rate", "Amount"].map((head) => (
                 <th
                   key={head}
                   style={{
-                    textAlign:
-                      head === "Qty" || head === "Rate" || head === "Amount"
-                        ? "right"
-                        : "left",
-                    padding: "12px 14px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    letterSpacing: ".08em",
+                    textAlign: head === "Item" || head === "Pack" ? "left" : "right",
+                    padding: "10px 14px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: ".04em",
                     textTransform: "uppercase",
-                    color: "rgba(15,23,42,.52)",
+                    color: "var(--color-graphite, #707070)",
                   }}
                 >
                   {head}
@@ -643,72 +229,21 @@ function OrderItemsTable({ items = [] }) {
           </thead>
           <tbody>
             {items.map((item, index) => (
-              <tr
-                key={`${item.sku || item.code || item.name}-${index}`}
-                style={{ borderTop: "1px solid rgba(15,23,42,.06)" }}
-              >
-                <td style={{ padding: "12px 14px", verticalAlign: "top" }}>
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      color: "#0f172a",
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {item.name || item.nameSnapshot || "—"}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "rgba(15,23,42,.52)",
-                    }}
-                  >
-                    {item.sku || item.skuSnapshot || item.code || ""}
-                  </div>
+              <tr key={`${item.sku || item.code || item.name}-${index}`} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
+                <td style={{ padding: "10px 14px", verticalAlign: "top" }}>
+                  <div style={{ fontWeight: 600, color: "var(--color-ink, #1d1d1f)", fontSize: 13 }}>{item.name || item.nameSnapshot || "—"}</div>
+                  <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>{item.sku || item.skuSnapshot || item.code || ""}</div>
                 </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                  }}
-                >
-                  {item.packLabel ||
-                    item.variantLabel ||
-                    item.unit ||
-                    item.uom ||
-                    "—"}
+                <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
+                  {item.packLabel || item.variantLabel || item.unit || item.uom || "—"}
                 </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                  }}
-                >
+                <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>
                   {Number(item.quantity ?? item.qty ?? 0).toLocaleString()}
                 </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                  }}
-                >
+                <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                   {Number(item.unitPrice ?? item.rate ?? 0).toLocaleString()}
                 </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                  }}
-                >
+                <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>
                   {Number(item.lineTotal ?? item.amount ?? 0).toLocaleString()}
                 </td>
               </tr>
@@ -720,663 +255,279 @@ function OrderItemsTable({ items = [] }) {
   );
 }
 
-function ModalShell({ open, onClose, children, maxWidth = 1120 }) {
-  if (!open) return null;
+const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
+
+function ModalOverlay({ open, onClose, children, maxWidth = 1080 }) {
+  const shouldReduceMotion = useReducedMotion();
+  const scale = shouldReduceMotion ? 1 : 0.95;
+  const fast = shouldReduceMotion ? 0.001 : 0.16;
+  const slow = shouldReduceMotion ? 0.001 : 0.22;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1400,
-        background: "rgba(15,23,42,.38)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 28,
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <GlassCard
-        style={{
-          width: `min(${maxWidth}px, 100%)`,
-          maxHeight: "92vh",
-          overflow: "auto",
-        }}
-      >
-        {children}
-      </GlassCard>
-    </div>
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: fast, ease: "easeOut" }}
+          style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 28 }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) onClose();
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale }}
+            transition={{ duration: slow, ease: MODAL_EASE_OUT }}
+            style={{ transformOrigin: "center", width: `min(${maxWidth}px, 100%)` }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Surface style={{ width: "100%", maxHeight: "92vh", overflow: "auto" }} padding={22}>
+              {children}
+            </Surface>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
 function AmendOrderModal({ open, order, saving, onClose, onSave }) {
-  const [items, setItems] = useState(() =>
-    buildEditableItems(order?.items || []),
-  );
+  const [items, setItems] = useState(() => buildEditableItems(order?.items || []));
   const [dealerNote, setDealerNote] = useState(order?.dealerNote || "");
   const [internalNote, setInternalNote] = useState(order?.internalNote || "");
-  const [reviewNote, setReviewNote] = useState(
-    order?.review?.reviewNote || "",
-  );
+  const [reviewNote, setReviewNote] = useState(order?.review?.reviewNote || "");
   const [error, setError] = useState("");
 
   if (!open || !order) return null;
 
-  const subtotal = items.reduce((sum, item) => {
-    const quantity = Number(item.quantity || 0);
-    const rate = Number(item.rate || 0);
-    return sum + quantity * rate;
-  }, 0);
+  const subtotal = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.rate || 0), 0);
 
   function updateItem(index, key, value) {
     setItems((current) =>
-      current.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              [key]:
-                key === "quantity" || key === "rate"
-                  ? Number(value || 0)
-                  : value,
-            }
-          : item,
-      ),
+      current.map((item, i) => (i === index ? { ...item, [key]: key === "quantity" || key === "rate" ? Number(value || 0) : value } : item)),
     );
   }
-
   function addItem() {
-    setItems((current) => [
-      ...current,
-      { name: "", sku: "", pack: "", quantity: 1, rate: 0 },
-    ]);
+    setItems((current) => [...current, { name: "", sku: "", pack: "", quantity: 1, rate: 0 }]);
   }
-
   function removeItem(index) {
     setItems((current) => current.filter((_, i) => i !== index));
   }
 
   return (
-    <ModalShell open={open} onClose={onClose} maxWidth={1240}>
-      <div style={{ padding: 24 }}>
-        <SectionHeader
-          title={`Amend ${order.orderNumber || "Order"}`}
-          subtitle="Revise items and notes before dispatcher verification."
-          action={
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: "1px solid rgba(15,23,42,.08)",
-                background: "#fff",
-                fontSize: 20,
-                fontWeight: 900,
-                cursor: "pointer",
-                color: "#0f172a",
-              }}
-            >
-              ×
-            </button>
-          }
-        />
+    <ModalOverlay open={open} onClose={onClose} maxWidth={1180}>
+      <SectionHeader
+        eyebrow="Amend"
+        icon="edit"
+        title={order.orderNumber || "Order"}
+        subtitle="Revise items and notes before verification."
+        action={<CloseButton onClick={onClose} />}
+      />
 
-        <div style={{ marginTop: 20, display: "grid", gap: 18 }}>
-          <GlassCard style={{ padding: 18, background: "#fff" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <Label>Order Items</Label>
-              <ActionButton subtle onClick={addItem}>
-                Add Item
-              </ActionButton>
-            </div>
+      <div style={{ marginTop: 18, display: "grid", gap: 16 }}>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <CardLabel icon="package">Order Items</CardLabel>
+            <GhostButton icon="plus" onClick={addItem}>Add Item</GhostButton>
+          </div>
 
-            <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-              {items.map((item, index) => {
-                const amount =
-                  Number(item.quantity || 0) * Number(item.rate || 0);
-
-                return (
-                  <div
-                    key={`${item.sku}-${index}`}
-                    style={{
-                      borderRadius: 18,
-                      border: "1px solid rgba(15,23,42,.08)",
-                      background: "rgba(248,250,252,.9)",
-                      padding: 14,
-                      display: "grid",
-                      gap: 12,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "minmax(0, 1.4fr) minmax(140px, .7fr) auto",
-                        gap: 12,
-                        alignItems: "center",
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <Label>Item Name</Label>
-                        <input
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(index, "name", e.target.value)
-                          }
-                          placeholder="Product name"
-                          style={fieldStyle}
-                        />
-                      </div>
-
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <Label>SKU</Label>
-                        <input
-                          value={item.sku}
-                          onChange={(e) =>
-                            updateItem(index, "sku", e.target.value)
-                          }
-                          placeholder="SKU"
-                          style={fieldStyle}
-                        />
-                      </div>
-
-                      <ActionButton
-                        danger
-                        subtle
-                        onClick={() => removeItem(index)}
-                      >
-                        Remove
-                      </ActionButton>
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            {items.map((item, index) => {
+              const amount = Number(item.quantity || 0) * Number(item.rate || 0);
+              return (
+                <div key={`${item.sku}-${index}`} style={{ borderRadius: 14, background: "var(--color-fog, #f5f5f7)", padding: 14, display: "grid", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(120px, .7fr) auto", gap: 10, alignItems: "end" }}>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Item Name</div>
+                      <input value={item.name} onChange={(e) => updateItem(index, "name", e.target.value)} placeholder="Product name" style={fieldInputStyle()} />
                     </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>SKU</div>
+                      <input value={item.sku} onChange={(e) => updateItem(index, "sku", e.target.value)} placeholder="SKU" style={fieldInputStyle()} />
+                    </div>
+                    <GhostButton danger icon="trash" onClick={() => removeItem(index)}>Remove</GhostButton>
+                  </div>
 
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "minmax(120px, .8fr) minmax(120px, .6fr) minmax(120px, .6fr) minmax(120px, .7fr)",
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <Label>Pack</Label>
-                        <input
-                          value={item.pack}
-                          onChange={(e) =>
-                            updateItem(index, "pack", e.target.value)
-                          }
-                          placeholder="20L / 10L / unit"
-                          style={fieldStyle}
-                        />
-                      </div>
-
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <Label>Quantity</Label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateItem(index, "quantity", e.target.value)
-                          }
-                          style={fieldStyle}
-                        />
-                      </div>
-
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <Label>Rate</Label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.rate}
-                          onChange={(e) =>
-                            updateItem(index, "rate", e.target.value)
-                          }
-                          style={fieldStyle}
-                        />
-                      </div>
-
-                      <div
-                        style={{
-                          borderRadius: 16,
-                          border: "1px solid rgba(15,23,42,.08)",
-                          background: "#fff",
-                          padding: 14,
-                          display: "grid",
-                          alignContent: "center",
-                        }}
-                      >
-                        <Label>Amount</Label>
-                        <div
-                          style={{
-                            marginTop: 8,
-                            fontSize: 15,
-                            fontWeight: 900,
-                            color: "#0f172a",
-                          }}
-                        >
-                          {Number(amount).toLocaleString()}
-                        </div>
-                      </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(100px, 1fr))", gap: 10 }}>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Pack</div>
+                      <input value={item.pack} onChange={(e) => updateItem(index, "pack", e.target.value)} placeholder="20L / 10L / unit" style={fieldInputStyle()} />
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Quantity</div>
+                      <input type="number" min="0" value={item.quantity} onChange={(e) => updateItem(index, "quantity", e.target.value)} style={fieldInputStyle()} />
+                    </div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Rate</div>
+                      <input type="number" min="0" value={item.rate} onChange={(e) => updateItem(index, "rate", e.target.value)} style={fieldInputStyle()} />
+                    </div>
+                    <div style={{ borderRadius: 10, background: "var(--color-snow, #fff)", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.08)", padding: "8px 10px", display: "grid", alignContent: "center" }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Amount</div>
+                      <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{Number(amount).toLocaleString()}</div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            <div
-              style={{
-                marginTop: 16,
-                display: "flex",
-                justifyContent: "flex-end",
-              }}
-            >
-              <div
-                style={{
-                  minWidth: 220,
-                  borderRadius: 18,
-                  border: "1px solid rgba(180,35,24,.12)",
-                  background: "rgba(180,35,24,.05)",
-                  padding: 16,
-                }}
-              >
-                <Label>Recalculated Total</Label>
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 24,
-                    fontWeight: 950,
-                    color: "#b42318",
-                    letterSpacing: "-0.03em",
-                  }}
-                >
-                  NPR {Number(subtotal).toLocaleString()}
                 </div>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ minWidth: 200, borderRadius: 14, background: "rgba(0,113,227,.06)", border: "1px solid rgba(0,113,227,.14)", padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>Recalculated Total</div>
+              <div style={{ marginTop: 6, fontSize: 22, fontWeight: 700, color: "var(--color-azure, #0071e3)", letterSpacing: "-0.02em" }}>
+                NPR {Number(subtotal).toLocaleString()}
               </div>
             </div>
-          </GlassCard>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 16,
-            }}
-          >
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Dealer Note</Label>
-              <textarea
-                rows={5}
-                value={dealerNote}
-                onChange={(e) => setDealerNote(e.target.value)}
-                placeholder="Dealer-facing note"
-                style={{
-                  ...fieldStyle,
-                  height: "auto",
-                  padding: 14,
-                  resize: "vertical",
-                }}
-              />
-            </GlassCard>
-
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Internal Note</Label>
-              <textarea
-                rows={5}
-                value={internalNote}
-                onChange={(e) => setInternalNote(e.target.value)}
-                placeholder="Internal operations note"
-                style={{
-                  ...fieldStyle,
-                  height: "auto",
-                  padding: 14,
-                  resize: "vertical",
-                }}
-              />
-            </GlassCard>
-          </div>
-
-          <GlassCard style={{ padding: 18, background: "#fff" }}>
-            <Label>Dispatcher Amendment Note</Label>
-            <textarea
-              rows={4}
-              value={reviewNote}
-              onChange={(e) => setReviewNote(e.target.value)}
-              placeholder="Explain the changes made before verification..."
-              style={{
-                ...fieldStyle,
-                height: "auto",
-                padding: 14,
-                resize: "vertical",
-              }}
-            />
-          </GlassCard>
-
-          {error ? (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: 16,
-                background: "rgba(180,35,24,.08)",
-                color: "#b42318",
-                border: "1px solid rgba(180,35,24,.14)",
-                fontWeight: 800,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <ActionButton subtle onClick={onClose} disabled={saving}>
-              Cancel
-            </ActionButton>
-            <ActionButton
-              onClick={() => {
-                if (!items.length) {
-                  setError("At least one order item is required.");
-                  return;
-                }
-
-                const hasInvalidItem = items.some(
-                  (item) =>
-                    !String(item.name || "").trim() ||
-                    Number(item.quantity || 0) <= 0 ||
-                    Number(item.rate || 0) < 0,
-                );
-
-                if (hasInvalidItem) {
-                  setError(
-                    "Every item must have a name, quantity greater than 0, and a valid rate.",
-                  );
-                  return;
-                }
-
-                setError("");
-                onSave({
-                  items: buildPayloadItems(items),
-                  dealerNote: dealerNote.trim(),
-                  internalNote: internalNote.trim(),
-                  reviewNote: reviewNote.trim(),
-                  subtotal,
-                });
-              }}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Amendment"}
-            </ActionButton>
           </div>
         </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div>
+            <CardLabel icon="user">Dealer Note</CardLabel>
+            <textarea rows={4} value={dealerNote} onChange={(e) => setDealerNote(e.target.value)} placeholder="Dealer-facing note" style={{ ...fieldTextareaStyle(), marginTop: 10 }} />
+          </div>
+          <div>
+            <CardLabel icon="edit">Internal Note</CardLabel>
+            <textarea rows={4} value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="Internal operations note" style={{ ...fieldTextareaStyle(), marginTop: 10 }} />
+          </div>
+        </div>
+
+        <div>
+          <CardLabel icon="edit">Dispatcher Amendment Note</CardLabel>
+          <textarea rows={3} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Explain the changes made before verification…" style={{ ...fieldTextareaStyle(), marginTop: 10 }} />
+        </div>
+
+        {error ? (
+          <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>{error}</div>
+        ) : null}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <GhostButton onClick={onClose} disabled={saving}>Cancel</GhostButton>
+          <PrimaryButton
+            icon="checkmark"
+            disabled={saving}
+            onClick={() => {
+              if (!items.length) {
+                setError("At least one order item is required.");
+                return;
+              }
+              const hasInvalidItem = items.some((item) => !String(item.name || "").trim() || Number(item.quantity || 0) <= 0 || Number(item.rate || 0) < 0);
+              if (hasInvalidItem) {
+                setError("Every item must have a name, quantity greater than 0, and a valid rate.");
+                return;
+              }
+              setError("");
+              onSave({ items: buildPayloadItems(items), dealerNote: dealerNote.trim(), internalNote: internalNote.trim(), reviewNote: reviewNote.trim(), subtotal });
+            }}
+          >
+            {saving ? "Saving…" : "Save Amendment"}
+          </PrimaryButton>
+        </div>
       </div>
-    </ModalShell>
+    </ModalOverlay>
   );
 }
 
-const fieldStyle = {
-  width: "100%",
-  height: 48,
-  borderRadius: 16,
-  border: "1px solid rgba(15,23,42,.08)",
-  background: "#fff",
-  padding: "0 14px",
-  fontSize: 14,
-  fontWeight: 700,
-  color: "#0f172a",
-  outline: "none",
-};
-
-function DispatcherOrderModal({
-  open,
-  order,
-  busyAction,
-  onClose,
-  onVerify,
-  onReject,
-  onAmend,
-  onDownloadPdf,
-}) {
-  const [reviewNote, setReviewNote] = useState(
-    order?.review?.reviewNote || "",
-  );
+function DispatcherOrderModal({ open, order, busyAction, onClose, onVerify, onReject, onAmend, onDownloadPdf, onDispatch }) {
+  const [reviewNote, setReviewNote] = useState(order?.review?.reviewNote || "");
 
   if (!open || !order) return null;
 
   const normalizedStatus = normalizeStatus(order.status);
   const canAct = normalizedStatus === "SUBMITTED";
-  const canDownloadPdf =
-    normalizedStatus === "VERIFIED" || normalizedStatus === "ARCHIVED";
+  const canFulfill = normalizedStatus === "VERIFIED";
+  const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED" || normalizedStatus === "ARCHIVED";
   const dealer = order?.dealerId || order?.dealerSnapshot || {};
   const actionKeyPrefix = order?._id || "order";
 
   return (
-    <ModalShell open={open} onClose={onClose}>
-      <div style={{ padding: 24 }}>
-        <SectionHeader
-          title={order.orderNumber || "Order Detail"}
-          subtitle="Review the assigned dealer order and make a dispatcher decision."
-          action={
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <ActionButton
-                subtle
-                onClick={() => onDownloadPdf(order)}
-                disabled={!canDownloadPdf}
-              >
-                Download PDF
-              </ActionButton>
+    <ModalOverlay open={open} onClose={onClose} maxWidth={1080}>
+      <SectionHeader
+        eyebrow="Order"
+        icon="orders"
+        title={order.orderNumber || "Order Detail"}
+        subtitle="Review the assigned dealer order and make a dispatcher decision."
+        action={
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <GhostButton icon="download" onClick={() => onDownloadPdf(order)} disabled={!canDownloadPdf}>PDF</GhostButton>
+            <CloseButton onClick={onClose} />
+          </div>
+        }
+      />
 
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  border: "1px solid rgba(15,23,42,.08)",
-                  background: "#fff",
-                  fontSize: 20,
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  color: "#0f172a",
-                }}
-              >
-                ×
-              </button>
-            </div>
-          }
-        />
+      <div style={{ marginTop: 14 }}>
+        <Pill tone={statusTone(normalizedStatus)} size="small">{normalizedStatus}</Pill>
+      </div>
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <StatusBadge status={normalizedStatus} />
+      {!canDownloadPdf ? (
+        <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", fontSize: 13, fontWeight: 500 }}>
+          PDF download becomes available after the order is verified.
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(300px,.9fr)", gap: 18 }}>
+        <div>
+          <CardLabel icon="package">Order Items</CardLabel>
+          <div style={{ marginTop: 10 }}>
+            <OrderItemsTable items={order.items || []} />
+          </div>
         </div>
 
-        {!canDownloadPdf ? (
-          <div
-            style={{
-              marginTop: 14,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: "rgba(15,23,42,.04)",
-              color: "rgba(15,23,42,.62)",
-              border: "1px solid rgba(15,23,42,.08)",
-              fontWeight: 800,
-              lineHeight: 1.6,
-            }}
-          >
-            PDF download becomes available after the order is verified or
-            archived.
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            marginTop: 22,
-            display: "grid",
-            gridTemplateColumns: "minmax(0,1fr) minmax(320px,.9fr)",
-            gap: 18,
-          }}
-        >
-          <GlassCard style={{ padding: 18, background: "#fff" }}>
-            <Label>Order Items</Label>
-            <div style={{ marginTop: 10 }}>
-              <OrderItemsTable items={order.items || []} />
+        <div style={{ display: "grid", gap: 16 }}>
+          <div>
+            <CardLabel icon="store">Dealer Context</CardLabel>
+            <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+              <DetailItem label="Dealer" value={dealer?.companyName} />
+              <DetailItem label="Contact" value={dealer?.contactName} />
+              <DetailItem label="Phone" value={dealer?.phone} />
+              <DetailItem label="Total" value={money(order?.totals?.total, order?.totals?.currency || "NPR")} />
+              <DetailItem label="Payment Method" value={order?.payment?.method} />
+              <DetailItem label="Dealer Note" value={order?.dealerNote} />
+              <DetailItem label="Internal Note" value={order?.internalNote} />
+              <DetailItem label="Submitted" value={order?.createdAt ? new Date(order.createdAt).toLocaleString() : "—"} />
             </div>
-          </GlassCard>
+          </div>
 
-          <div style={{ display: "grid", gap: 18 }}>
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Dealer Context</Label>
-              <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
-                <DetailItem label="Dealer" value={dealer?.companyName} />
-                <DetailItem label="Contact" value={dealer?.contactName} />
-                <DetailItem label="Phone" value={dealer?.phone} />
-                <DetailItem label="Email" value={dealer?.email} />
-                <DetailItem label="Address" value={dealer?.address} />
-                <DetailItem
-                  label="Total"
-                  value={money(
-                    order?.totals?.total,
-                    order?.totals?.currency || "NPR",
-                  )}
-                />
-                <DetailItem
-                  label="Payment Method"
-                  value={order?.payment?.method}
-                />
-                <DetailItem
-                  label="Payment Reference"
-                  value={
-                    order?.payment?.reference || order?.payment?.referenceNo
-                  }
-                />
-                <DetailItem label="Dealer Note" value={order?.dealerNote} />
-                <DetailItem label="Internal Note" value={order?.internalNote} />
-                <DetailItem
-                  label="Submitted"
-                  value={
-                    order?.createdAt
-                      ? new Date(order.createdAt).toLocaleString()
-                      : "—"
-                  }
-                />
+          <div>
+            <CardLabel icon="edit">Dispatcher Review Note</CardLabel>
+            <textarea
+              rows={3}
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              placeholder="Add a verification or rejection note…"
+              style={{ ...fieldTextareaStyle(), marginTop: 10 }}
+            />
+
+            {canAct ? (
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <GhostButton icon="edit" onClick={() => onAmend(order)} disabled={busyAction === `amend-${actionKeyPrefix}`}>
+                  {busyAction === `amend-${actionKeyPrefix}` ? "Opening…" : "Amend"}
+                </GhostButton>
+                <PrimaryButton icon="checkmark" onClick={() => onVerify(order, reviewNote)} disabled={busyAction === `verify-${actionKeyPrefix}`}>
+                  {busyAction === `verify-${actionKeyPrefix}` ? "Verifying…" : "Verify"}
+                </PrimaryButton>
+                <GhostButton danger icon="reject" onClick={() => onReject(order, reviewNote)} disabled={busyAction === `reject-${actionKeyPrefix}`}>
+                  {busyAction === `reject-${actionKeyPrefix}` ? "Rejecting…" : "Reject"}
+                </GhostButton>
               </div>
-            </GlassCard>
-
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Dispatcher Review Note</Label>
-              <textarea
-                rows={4}
-                value={reviewNote}
-                onChange={(e) => setReviewNote(e.target.value)}
-                placeholder="Add a verification or rejection note for this order..."
-                style={{
-                  marginTop: 12,
-                  width: "100%",
-                  borderRadius: 16,
-                  border: "1px solid rgba(15,23,42,.08)",
-                  background: "#fff",
-                  padding: 14,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  outline: "none",
-                  resize: "vertical",
-                }}
-              />
-
-              {canAct ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <ActionButton
-                    subtle
-                    onClick={() => onAmend(order)}
-                    disabled={busyAction === `amend-${actionKeyPrefix}`}
-                  >
-                    {busyAction === `amend-${actionKeyPrefix}`
-                      ? "Opening..."
-                      : "Amend"}
-                  </ActionButton>
-
-                  <ActionButton
-                    onClick={() => onVerify(order, reviewNote)}
-                    disabled={busyAction === `verify-${actionKeyPrefix}`}
-                  >
-                    {busyAction === `verify-${actionKeyPrefix}`
-                      ? "Verifying..."
-                      : "Verify"}
-                  </ActionButton>
-
-                  <ActionButton
-                    danger
-                    onClick={() => onReject(order, reviewNote)}
-                    disabled={busyAction === `reject-${actionKeyPrefix}`}
-                  >
-                    {busyAction === `reject-${actionKeyPrefix}`
-                      ? "Rejecting..."
-                      : "Reject"}
-                  </ActionButton>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: "14px 16px",
-                    borderRadius: 16,
-                    background: "rgba(15,23,42,.04)",
-                    color: "rgba(15,23,42,.62)",
-                    border: "1px solid rgba(15,23,42,.08)",
-                    fontWeight: 800,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  This order is already finalized and can no longer be acted on
-                  from the dispatcher workspace.
-                </div>
-              )}
-            </GlassCard>
+            ) : canFulfill ? (
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <PrimaryButton icon="checkmark" onClick={() => onDispatch(order, reviewNote)} disabled={busyAction === `dispatch-${actionKeyPrefix}`}>
+                  {busyAction === `dispatch-${actionKeyPrefix}` ? "Dispatching…" : "Dispatch (deducts your stock)"}
+                </PrimaryButton>
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", fontSize: 13, fontWeight: 500 }}>
+                This order is already finalized and can no longer be acted on from the dispatcher workspace.
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </ModalShell>
+    </ModalOverlay>
   );
 }
 
@@ -1391,18 +542,11 @@ export default function DispatcherOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [amendOrder, setAmendOrder] = useState(null);
 
-  const queryOrderId = useMemo(() => {
-    return new URLSearchParams(location.search || "").get("orderId") || "";
-  }, [location.search]);
+  const queryOrderId = useMemo(() => new URLSearchParams(location.search || "").get("orderId") || "", [location.search]);
 
   const clearOrderQuery = useCallback(() => {
     if (!queryOrderId) return;
-    navigate(
-      {
-        pathname: location.pathname,
-      },
-      { replace: true },
-    );
+    navigate({ pathname: location.pathname }, { replace: true });
   }, [location.pathname, navigate, queryOrderId]);
 
   const openOrderPreview = useCallback(
@@ -1420,12 +564,14 @@ export default function DispatcherOrdersPage() {
   }, [busyAction, clearOrderQuery]);
 
   const orderParams = useMemo(() => {
-    const params = {};
+    const params = { limit: 100 };
     if (committedSearch.trim()) params.q = committedSearch.trim();
 
     if (viewMode === "ARCHIVE") {
       params.archive = true;
-    } else if (viewMode === "VERIFIED" || viewMode === "REJECTED") {
+    } else if (viewMode === "VERIFIED") {
+      params.status = "VERIFIED";
+    } else if (viewMode === "REJECTED") {
       params.status = viewMode;
     } else {
       params.status = "SUBMITTED";
@@ -1435,66 +581,39 @@ export default function DispatcherOrdersPage() {
   }, [committedSearch, viewMode]);
 
   const ordersQuery = useGetDispatcherOrdersQuery(orderParams);
-  const orderDetailQuery = useGetDispatcherOrderQuery(queryOrderId, {
-    skip: !queryOrderId,
-  });
+  const orderDetailQuery = useGetDispatcherOrderQuery(queryOrderId, { skip: !queryOrderId });
   const [verifyDispatcherOrder] = useVerifyDispatcherOrderMutation();
   const [rejectDispatcherOrder] = useRejectDispatcherOrderMutation();
   const [amendDispatcherOrder] = useAmendDispatcherOrderMutation();
+  const [dispatchDispatcherOrder] = useDispatchDispatcherOrderMutation();
 
   const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
   const loading = ordersQuery.isLoading && orders.length === 0;
-  const isRefreshing =
-    !loading && (ordersQuery.isFetching || orderDetailQuery.isFetching);
+  const isRefreshing = !loading && (ordersQuery.isFetching || orderDetailQuery.isFetching);
   const queryError = ordersQuery.error || orderDetailQuery.error;
-  const error =
-    actionError ||
-    (queryError
-      ? getQueryErrorMessage(queryError, "Failed to load assigned orders.")
-      : "");
+  const error = actionError || (queryError ? getQueryErrorMessage(queryError, "Failed to load assigned orders.") : "");
 
   const selectedOrderView = useMemo(() => {
     if (queryOrderId) {
-      return (
-        orderDetailQuery.data?.item ||
-        orders.find((item) => item._id === queryOrderId) ||
-        null
-      );
+      return orderDetailQuery.data?.item || orders.find((item) => item._id === queryOrderId) || null;
     }
-
     if (!selectedOrder?._id) return null;
-    return (
-      orders.find((item) => item._id === selectedOrder._id) || selectedOrder
-    );
+    return orders.find((item) => item._id === selectedOrder._id) || selectedOrder;
   }, [orderDetailQuery.data, orders, queryOrderId, selectedOrder]);
 
-  const countsByFilter = useMemo(() => {
-    return {
-      PENDING:
-        viewMode === "PENDING"
-          ? orders.filter((o) => normalizeStatus(o.status) === "SUBMITTED")
-              .length
-          : undefined,
-      VERIFIED:
-        viewMode === "VERIFIED"
-          ? orders.filter((o) => normalizeStatus(o.status) === "VERIFIED")
-              .length
-          : undefined,
-      REJECTED:
-        viewMode === "REJECTED"
-          ? orders.filter((o) => normalizeStatus(o.status) === "REJECTED")
-              .length
-          : undefined,
-      ARCHIVE:
-        viewMode === "ARCHIVE"
-          ? orders.filter((o) =>
-              ["VERIFIED", "REJECTED", "ARCHIVED"].includes(
-                normalizeStatus(o.status),
-              ),
-            ).length
-          : undefined,
-    };
-  }, [orders, viewMode]);
+  const countsByFilter = useMemo(
+    () => ({
+      PENDING: viewMode === "PENDING" ? orders.filter((o) => normalizeStatus(o.status) === "SUBMITTED").length : undefined,
+      VERIFIED: viewMode === "VERIFIED" ? orders.filter((o) => normalizeStatus(o.status) === "VERIFIED").length : undefined,
+      REJECTED: viewMode === "REJECTED" ? orders.filter((o) => normalizeStatus(o.status) === "REJECTED").length : undefined,
+      ARCHIVE: viewMode === "ARCHIVE" ? orders.filter((o) => ["VERIFIED", "REJECTED", "ARCHIVED"].includes(normalizeStatus(o.status))).length : undefined,
+    }),
+    [orders, viewMode],
+  );
+
+  const segmentOptions = VIEW_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
+
+  const groupedOrders = useMemo(() => groupOrdersByDay(orders), [orders]);
 
   function refetchOrders() {
     ordersQuery.refetch();
@@ -1527,12 +646,8 @@ export default function DispatcherOrdersPage() {
 
   async function handleVerify(order, reviewNote) {
     const success = await runAction(`verify-${order._id}`, () =>
-      verifyDispatcherOrder({
-        orderId: order._id,
-        payload: { reviewNote: String(reviewNote || "").trim() },
-      }).unwrap(),
+      verifyDispatcherOrder({ orderId: order._id, payload: { reviewNote: String(reviewNote || "").trim() } }).unwrap(),
     );
-
     if (success) {
       setSelectedOrder(null);
       clearOrderQuery();
@@ -1541,12 +656,18 @@ export default function DispatcherOrdersPage() {
 
   async function handleReject(order, reviewNote) {
     const success = await runAction(`reject-${order._id}`, () =>
-      rejectDispatcherOrder({
-        orderId: order._id,
-        payload: { reviewNote: String(reviewNote || "").trim() },
-      }).unwrap(),
+      rejectDispatcherOrder({ orderId: order._id, payload: { reviewNote: String(reviewNote || "").trim() } }).unwrap(),
     );
+    if (success) {
+      setSelectedOrder(null);
+      clearOrderQuery();
+    }
+  }
 
+  async function handleDispatch(order, note) {
+    const success = await runAction(`dispatch-${order._id}`, () =>
+      dispatchDispatcherOrder({ orderId: order._id, payload: { note: String(note || "").trim() } }).unwrap(),
+    );
     if (success) {
       setSelectedOrder(null);
       clearOrderQuery();
@@ -1587,118 +708,85 @@ export default function DispatcherOrdersPage() {
     const dealer = order?.dealerId || order?.dealerSnapshot || {};
     downloadOrderSummaryPdf({
       order,
-      dealer: {
-        companyName: dealer?.companyName || "",
-        contactName: dealer?.contactName || "",
-        email: dealer?.email || "",
-        phone: dealer?.phone || "",
-        address: dealer?.address || "",
-      },
+      dealer: { companyName: dealer?.companyName || "", contactName: dealer?.contactName || "", email: dealer?.email || "", phone: dealer?.phone || "", address: dealer?.address || "" },
     });
   }
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <GlassCard style={{ padding: 18 }}>
+    <div style={{ display: "grid", gap: 16 }}>
+      <DashboardUIStyles />
+
+      <Surface padding={22} className="dash-fade-up">
         <SectionHeader
+          icon="orders"
           title="Dispatcher Orders"
-          subtitle="Review, amend, process, and download summaries for the dealer orders assigned to your dispatcher account."
-          action={
-            <ActionButton subtle onClick={refetchOrders}>
-              Refresh
-            </ActionButton>
-          }
+          subtitle={isRefreshing ? "Updating…" : "Review, amend, process, and download summaries for your assigned dealer orders."}
+          action={<GhostButton icon="refresh" onClick={refetchOrders}>Refresh</GhostButton>}
         />
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
-            gap: 12,
-            alignItems: "center",
-          }}
-        >
-          <SearchInput value={search} onChange={setSearch} />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {VIEW_FILTERS.map((filter) => (
-              <FilterPill
-                key={filter.key}
-                active={viewMode === filter.key}
-                onClick={() => setViewMode(filter.key)}
-                count={countsByFilter[filter.key]}
-              >
-                {filter.label}
-              </FilterPill>
-            ))}
+        <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: "1 1 260px", maxWidth: 380 }}>
+            <SearchField value={search} onChange={setSearch} onSubmit={applySearch} placeholder="Search order number, dealer, phone, payment…" />
           </div>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          <ActionButton subtle onClick={applySearch}>
-            Apply Search
-          </ActionButton>
+          <GhostButton onClick={applySearch}>Search</GhostButton>
+          <SegmentedControl options={segmentOptions} value={viewMode} onChange={setViewMode} />
         </div>
 
         {error ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: "rgba(180,35,24,.08)",
-              color: "#b42318",
-              border: "1px solid rgba(180,35,24,.14)",
-              fontWeight: 800,
-            }}
-          >
-            {error}
-          </div>
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>{error}</div>
         ) : null}
-
-        {isRefreshing ? (
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: 12,
-              fontWeight: 900,
-              color: "rgba(15,23,42,.46)",
-            }}
-          >
-            Updating orders...
-          </div>
-        ) : null}
-      </GlassCard>
+      </Surface>
 
       {loading ? (
-        <LoadingState />
+        <Surface padding={18}>
+          <div style={{ height: 260, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
+        </Surface>
       ) : orders.length === 0 ? (
-        <EmptyState
-          archiveMode={viewMode === "ARCHIVE"}
-          onReset={resetFilters}
-        />
+        <div style={{ display: "grid", gap: 12 }}>
+          <EmptyState icon="orders" title={viewMode === "ARCHIVE" ? "No handled orders found" : "No pending orders found"} subtitle="Try adjusting the search or status filter." />
+          <div style={{ justifySelf: "center" }}>
+            <GhostButton onClick={resetFilters}>Clear filters</GhostButton>
+          </div>
+        </div>
       ) : (
-        <div style={{ display: "grid", gap: 14 }}>
-          {orders.map((item) => (
-            <OrdersRow
-              key={item._id}
-              item={item}
-              selected={selectedOrderView?._id === item._id}
-              onSelect={openOrderPreview}
-            />
+        <div className="dispatcher-order-timeline dash-fade-up">
+          {groupedOrders.map((group) => (
+            <div key={group.key} className="dispatcher-order-timeline-day">
+              <div className="dispatcher-order-timeline-day-header">
+                <span className="dispatcher-order-timeline-day-marker" aria-hidden="true" />
+                <div className="dispatcher-order-timeline-day-label">
+                  {group.relativeLabel ? (
+                    <>
+                      <strong>{group.relativeLabel}</strong>
+                      <span className="dispatcher-order-timeline-day-sep">•</span>
+                      <span>{group.dateText}</span>
+                    </>
+                  ) : (
+                    <strong>{group.dateText}</strong>
+                  )}
+                </div>
+              </div>
+              <div style={{ marginLeft: 46 }}>
+                <Surface padding={0}>
+                  {group.orders.map((item) => (
+                    <OrdersRow key={item._id} item={item} selected={selectedOrderView?._id === item._id} onSelect={openOrderPreview} />
+                  ))}
+                </Surface>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
       <DispatcherOrderModal
-        key={selectedOrderView?._id || "closed"}
+        key={selectedOrderView?._id || "order-modal-closed"}
         open={Boolean(selectedOrderView)}
         order={selectedOrderView}
         busyAction={busyAction}
         onClose={closeOrderPreview}
         onVerify={handleVerify}
         onReject={handleReject}
+        onDispatch={handleDispatch}
         onAmend={(order) => {
           setSelectedOrder(null);
           clearOrderQuery();
@@ -1708,7 +796,7 @@ export default function DispatcherOrdersPage() {
       />
 
       <AmendOrderModal
-        key={amendOrder?._id || "closed"}
+        key={amendOrder?._id || "amend-modal-closed"}
         open={Boolean(amendOrder)}
         order={amendOrder}
         saving={busyAction === `amend-${amendOrder?._id}`}
@@ -1717,6 +805,40 @@ export default function DispatcherOrdersPage() {
         }}
         onSave={handleSaveAmendment}
       />
+
+      <style>{`
+        .dispatcher-order-timeline{ position:relative; display:grid; gap:22px; }
+        .dispatcher-order-timeline::before{
+          content:"";
+          position:absolute;
+          left:15px;
+          top:4px;
+          bottom:4px;
+          width:2px;
+          background:linear-gradient(180deg, rgba(0,113,227,.24), rgba(29,29,31,.09));
+        }
+        .dispatcher-order-timeline-day{ position:relative; display:grid; gap:10px; }
+        .dispatcher-order-timeline-day-header{ position:relative; display:grid; grid-template-columns:32px 1fr; align-items:center; column-gap:14px; }
+        .dispatcher-order-timeline-day-label{ display:flex; align-items:center; font-size:12.5px; color:var(--color-graphite, #707070); white-space:nowrap; }
+        .dispatcher-order-timeline-day-label strong{ font-size:13px; font-weight:700; color:var(--color-ink, #1d1d1f); }
+        .dispatcher-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
+        .dispatcher-order-timeline-day-marker{
+          position:relative;
+          z-index:1;
+          justify-self:center;
+          width:13px;
+          height:13px;
+          border-radius:999px;
+          background:#fff;
+          border:2px solid rgba(0,113,227,.82);
+          flex-shrink:0;
+          box-shadow:0 0 0 4px #fff;
+        }
+        @media (max-width:560px){
+          .dispatcher-order-timeline::before{ left:11px; }
+          .dispatcher-order-timeline-day-header{ grid-template-columns:24px 1fr; column-gap:10px; }
+        }
+      `}</style>
     </div>
   );
 }

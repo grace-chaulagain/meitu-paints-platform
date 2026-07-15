@@ -70,11 +70,13 @@ function orderMutationTags(orderId) {
     listTag("DispatcherOrder"),
     listTag("AdminDealerOrder"),
     listTag("DispatcherDealerOrder"),
+    listTag("DispatcherReplenishmentOrder"),
     listTag("FactoryOrder"),
     listTag("FactoryInvoice"),
     listTag("Stock"),
     listTag("StockHistory"),
     listTag("StockAdjustment"),
+    listTag("DispatcherStock"),
     listTag("DealerProfile"),
     listTag("Dashboard"),
     listTag("AdminDashboard"),
@@ -161,6 +163,7 @@ export const meituApi = createApi({
     "StockHistory",
     "StockAdjustment",
     "FactoryOrder",
+    "FactoryDealer",
     "FactoryDashboard",
     "FactoryInvoice",
     "ProformaInvoice",
@@ -171,6 +174,23 @@ export const meituApi = createApi({
     "Report",
     "Insight",
     "AdminInsight",
+    "DispatcherStock",
+    "DispatcherCatalog",
+    "DispatcherReplenishmentOrder",
+    "DealerInventory",
+    "DealerInventoryMovement",
+    "DealerSale",
+    "AdminSale",
+    "DealerPayment",
+    "DealerOrderOutstanding",
+    "Painter",
+    "Coupon",
+    "CouponBatch",
+    "CouponRedemption",
+    "CouponAttempt",
+    "CouponSettlement",
+    "DealerPainterSearch",
+    "PointsCatalogProduct",
   ],
   keepUnusedDataFor: 60,
   endpoints: (builder) => ({
@@ -365,6 +385,13 @@ export const meituApi = createApi({
       ],
     }),
 
+    getDealerOrder: builder.query({
+      query: (orderId) => ({ url: `/api/dealer/orders/${orderId}` }),
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      transformResponse: (response) => getItem(response) || response,
+      providesTags: (_result, _error, orderId) => [{ type: "DealerOrder", id: orderId }],
+    }),
+
     createDealerOrder: builder.mutation({
       query: (payload) => ({
         url: "/api/orders",
@@ -372,6 +399,208 @@ export const meituApi = createApi({
         data: payload,
       }),
       invalidatesTags: () => orderMutationTags(),
+    }),
+
+    getMyOrderOutstanding: builder.query({
+      query: (orderId) => ({ url: `/api/dealer/orders/${orderId}/outstanding` }),
+      providesTags: (_response, _error, orderId) => [
+        { type: "DealerOrderOutstanding", id: orderId },
+      ],
+    }),
+
+    getMyPayments: builder.query({
+      query: (params = {}) => ({ url: "/api/dealer/payments", params }),
+      providesTags: (response) => [
+        ...listResponseTags("DealerPayment", response),
+        listTag("DealerPayment"),
+      ],
+    }),
+
+    submitMyPayment: builder.mutation({
+      query: ({ orderId, ...payload }) => ({
+        url: `/api/dealer/orders/${orderId}/payments`,
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("DealerPayment"),
+        { type: "DealerOrderOutstanding", id: arg?.orderId },
+        listTag("DealerOrder"),
+      ],
+    }),
+
+    getDealerInventory: builder.query({
+      query: (params = {}) => ({ url: "/api/dealer/inventory", params }),
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("DealerInventory", response),
+        listTag("DealerInventory"),
+      ],
+    }),
+
+    getDealerInventoryItem: builder.query({
+      query: (productId) => ({ url: `/api/dealer/inventory/${productId}` }),
+      keepUnusedDataFor: STOCK_CACHE_SECONDS,
+      transformResponse: (response) => getItem(response) || response,
+      providesTags: (_result, _error, productId) => [{ type: "DealerInventory", id: productId }],
+    }),
+
+    getDealerInventoryMovements: builder.query({
+      query: ({ productId, ...params } = {}) => ({
+        url: `/api/dealer/inventory/${productId}/movements`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [
+        listTag("DealerInventoryMovement"),
+        { type: "DealerInventoryMovement", id: arg?.productId },
+      ],
+    }),
+
+    getDealerInventoryHistory: builder.query({
+      query: (params = {}) => ({ url: "/api/dealer/inventory/history", params }),
+      providesTags: () => [listTag("DealerInventoryMovement")],
+    }),
+
+    getPainterSales: builder.query({
+      query: ({ painterId, ...params }) => ({ url: `/api/admin/painters/${painterId}/sales`, params }),
+      providesTags: (_response, _error, arg) => [{ type: "Painter", id: `${arg?.painterId}:sales` }],
+    }),
+
+    getDealerSales: builder.query({
+      query: (params = {}) => ({ url: "/api/dealer/sales", params }),
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("DealerSale", response),
+        listTag("DealerSale"),
+      ],
+    }),
+
+    getDealerSale: builder.query({
+      query: (saleId) => ({ url: `/api/dealer/sales/${saleId}` }),
+      transformResponse: getItem,
+      providesTags: (_response, _error, saleId) => [{ type: "DealerSale", id: saleId }],
+    }),
+
+    createDealerSale: builder.mutation({
+      query: (payload) => ({ url: "/api/dealer/sales", method: "POST", data: payload }),
+      transformResponse: getItem,
+      invalidatesTags: () => [
+        listTag("DealerSale"),
+        listTag("DealerInventory"),
+        listTag("DealerInventoryMovement"),
+      ],
+    }),
+
+    voidDealerSale: builder.mutation({
+      query: ({ saleId, reason }) => ({
+        url: `/api/dealer/sales/${saleId}/void`,
+        method: "POST",
+        data: { reason },
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("DealerSale"),
+        { type: "DealerSale", id: arg?.saleId },
+        listTag("DealerInventory"),
+        listTag("DealerInventoryMovement"),
+      ],
+    }),
+
+    getCouponPreview: builder.query({
+      query: (token) => ({ url: `/api/dealer/coupons/${token}` }),
+      transformResponse: getItem,
+      providesTags: (_response, _error, token) => [{ type: "Coupon", id: token }],
+    }),
+
+    redeemCoupon: builder.mutation({
+      query: ({ token, painterType, painterId }) => ({
+        url: `/api/dealer/coupons/${token}/redeem`,
+        method: "POST",
+        data: { painterType, painterId: painterId || null },
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => [{ type: "Coupon", id: arg?.token }],
+    }),
+
+    generateCoupons: builder.mutation({
+      query: (payload) => ({ url: "/api/admin/coupons/generate", method: "POST", data: payload }),
+      invalidatesTags: () => [listTag("Coupon")],
+    }),
+
+    getAdminCoupons: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons", params }),
+      providesTags: (response) => [
+        ...listResponseTags("Coupon", response),
+        listTag("Coupon"),
+      ],
+    }),
+
+    getAdminCouponBatches: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons/batches", params }),
+      providesTags: () => [listTag("CouponBatch")],
+    }),
+
+    getCouponRedemptionHistory: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons/redemptions", params }),
+      providesTags: (response) => [
+        ...listResponseTags("CouponRedemption", response),
+        listTag("CouponRedemption"),
+      ],
+    }),
+
+    getRewardSettings: builder.query({
+      query: () => ({ url: "/api/admin/coupons/settings" }),
+      transformResponse: getItem,
+      providesTags: () => [{ type: "Coupon", id: "SETTINGS" }],
+    }),
+
+    updateRewardSettings: builder.mutation({
+      query: (payload) => ({ url: "/api/admin/coupons/settings", method: "PATCH", data: payload }),
+      transformResponse: getItem,
+      invalidatesTags: () => [{ type: "Coupon", id: "SETTINGS" }],
+    }),
+
+    deleteCoupon: builder.mutation({
+      query: (couponId) => ({ url: `/api/admin/coupons/${couponId}`, method: "DELETE" }),
+      invalidatesTags: (_result, _error, couponId) => [listTag("Coupon"), listTag("CouponBatch"), { type: "Coupon", id: couponId }],
+    }),
+
+    deleteCouponBatch: builder.mutation({
+      query: (batchId) => ({ url: `/api/admin/coupons/batches/${batchId}`, method: "DELETE" }),
+      invalidatesTags: () => [listTag("Coupon"), listTag("CouponBatch")],
+    }),
+
+    deleteCouponBatches: builder.mutation({
+      query: (batchIds) => ({ url: "/api/admin/coupons/batches", method: "DELETE", data: { batchIds } }),
+      invalidatesTags: () => [listTag("Coupon"), listTag("CouponBatch")],
+    }),
+
+    getCouponAttempts: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons/attempts", params }),
+      providesTags: (response) => [
+        ...listResponseTags("CouponAttempt", response),
+        listTag("CouponAttempt"),
+      ],
+    }),
+
+    getSettlementReport: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons/settlement-report", params }),
+      providesTags: () => [listTag("CouponSettlement")],
+    }),
+
+    getAdminSales: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/sales", params }),
+      keepUnusedDataFor: ORDER_CACHE_SECONDS,
+      providesTags: (response) => [
+        ...listResponseTags("AdminSale", response),
+        listTag("AdminSale"),
+      ],
+    }),
+
+    getAdminSale: builder.query({
+      query: (saleId) => ({ url: `/api/admin/sales/${saleId}` }),
+      transformResponse: getItem,
+      providesTags: (_response, _error, saleId) => [{ type: "AdminSale", id: saleId }],
     }),
 
     getAdminOrders: builder.query({
@@ -532,6 +761,57 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
     }),
 
+    dispatchDispatcherOrder: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/dispatchers/me/orders/${orderId}/dispatch`,
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    getMyDispatcherStock: builder.query({
+      query: (params = {}) => ({ url: "/api/dispatchers/me/stock", params }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: [listTag("DispatcherStock")],
+    }),
+
+    getDispatcherReplenishmentCatalog: builder.query({
+      query: (params = {}) => ({
+        url: "/api/dispatchers/me/replenishment-catalog",
+        params,
+      }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: [listTag("DispatcherCatalog")],
+    }),
+
+    getDispatcherReplenishmentOrders: builder.query({
+      query: (params = {}) => ({
+        url: "/api/dispatchers/me/replenishment-orders",
+        params,
+      }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: (response) => listResponseTags("DispatcherReplenishmentOrder", response),
+    }),
+
+    getDispatcherReplenishmentOrder: builder.query({
+      query: (orderId) => ({ url: `/api/dispatchers/me/replenishment-orders/${orderId}` }),
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (response, _error, orderId) => [
+        ...itemResponseTags("DispatcherReplenishmentOrder", response),
+        { type: "DispatcherReplenishmentOrder", id: orderId },
+      ],
+    }),
+
+    createDispatcherReplenishmentOrder: builder.mutation({
+      query: (payload) => ({
+        url: "/api/dispatchers/me/replenishment-orders",
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: () => orderMutationTags(),
+    }),
+
     getAdminDealers: builder.query({
       query: (params = {}) => ({ url: "/api/admin/dealers", params }),
       keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
@@ -556,6 +836,30 @@ export const meituApi = createApi({
         listTag("Insight"),
         { type: "DealerProfile", id: dealerId },
         { type: "Dealer", id: dealerId },
+      ],
+    }),
+
+    getAdminDealerInventory: builder.query({
+      query: (arg) => {
+        const { dealerId, from, to } = typeof arg === "string" ? { dealerId: arg } : arg || {};
+        return {
+          url: `/api/admin/dealers/${dealerId}/inventory`,
+          params: { limit: 200, ...(from ? { from } : {}), ...(to ? { to } : {}) },
+        };
+      },
+      providesTags: (response, _error, arg) => {
+        const dealerId = typeof arg === "string" ? arg : arg?.dealerId;
+        return [...listResponseTags("DealerInventory", response), { type: "DealerInventory", id: dealerId }];
+      },
+    }),
+
+    getAdminDealerInventoryMovements: builder.query({
+      query: ({ dealerId, productId, ...params }) => ({
+        url: `/api/admin/dealers/${dealerId}/inventory/${productId}/movements`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [
+        { type: "DealerInventoryMovement", id: `${arg?.dealerId}:${arg?.productId}` },
       ],
     }),
 
@@ -632,6 +936,17 @@ export const meituApi = createApi({
       query: (params = {}) => ({ url: "/api/admin/dealer-applications", params }),
       keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
       providesTags: (response) => listResponseTags("DealerApplication", response),
+    }),
+
+    getAdminDealerApplication: builder.query({
+      query: (applicationId) => ({
+        url: `/api/admin/dealer-applications/${applicationId}`,
+      }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: (response, _error, applicationId) => [
+        ...itemResponseTags("DealerApplication", response),
+        { type: "DealerApplication", id: applicationId },
+      ],
     }),
 
     approveDealerApplication: builder.mutation({
@@ -714,12 +1029,100 @@ export const meituApi = createApi({
       ],
     }),
 
+    getAdminDispatcherStock: builder.query({
+      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/stock` }),
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (_response, _error, dispatcherId) => [
+        listTag("DispatcherStock"),
+        { type: "DispatcherStock", id: dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherAnalytics: builder.query({
+      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/analytics` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (_response, _error, dispatcherId) => [
+        listTag("Dispatcher"),
+        { type: "Dispatcher", id: dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherOwnOrders: builder.query({
+      query: ({ dispatcherId, ...params }) => ({
+        url: `/api/admin/dispatchers/${dispatcherId}/own-orders`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [
+        { type: "DispatcherOwnOrder", id: arg?.dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherFulfilledOrders: builder.query({
+      query: ({ dispatcherId, ...params }) => ({
+        url: `/api/admin/dispatchers/${dispatcherId}/fulfilled-orders`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [
+        { type: "DispatcherFulfilledOrder", id: arg?.dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherDealerStats: builder.query({
+      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/dealer-stats` }),
+      providesTags: (_response, _error, dispatcherId) => [
+        { type: "DispatcherDealerStats", id: dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherProductSummary: builder.query({
+      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/product-summary` }),
+      providesTags: (_response, _error, dispatcherId) => [
+        { type: "DispatcherProductSummary", id: dispatcherId },
+      ],
+    }),
+
+    getAdminDispatcherProductMovements: builder.query({
+      query: ({ dispatcherId, productId }) => ({
+        url: `/api/admin/dispatchers/${dispatcherId}/products/${productId}/movements`,
+      }),
+      providesTags: (_response, _error, arg) => [
+        { type: "DispatcherProductMovement", id: `${arg?.dispatcherId}:${arg?.productId}` },
+      ],
+    }),
+
     resendDispatcherSetupEmail: builder.mutation({
       query: (dispatcherUserId) => ({
         url: `/api/admin/dispatchers/${dispatcherUserId}/resend-setup-email`,
         method: "POST",
       }),
       invalidatesTags: () => [listTag("Dispatcher")],
+    }),
+
+    getDispatcherPricingSummary: builder.query({
+      query: () => ({ url: "/api/admin/dispatchers/pricing-summary" }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: () => [listTag("DispatcherPricing")],
+    }),
+
+    getDispatcherPricing: builder.query({
+      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/pricing` }),
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (_response, _error, dispatcherId) => [
+        { type: "DispatcherPricing", id: dispatcherId },
+      ],
+    }),
+
+    updateDispatcherPricing: builder.mutation({
+      query: ({ dispatcherId, payload }) => ({
+        url: `/api/admin/dispatchers/${dispatcherId}/pricing`,
+        method: "PUT",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("DispatcherPricing"),
+        { type: "DispatcherPricing", id: arg?.dispatcherId },
+      ],
     }),
 
     approveDispatcher: builder.mutation({
@@ -789,6 +1192,15 @@ export const meituApi = createApi({
       query: (params = {}) => ({ url: "/api/dispatchers/me/dealers", params }),
       keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
       providesTags: (response) => listResponseTags("DispatcherDealer", response),
+    }),
+
+    getDispatcherDealer: builder.query({
+      query: (dealerId) => ({ url: `/api/dispatchers/me/dealers/${dealerId}` }),
+      keepUnusedDataFor: PROFILE_CACHE_SECONDS,
+      providesTags: (response, _error, dealerId) => [
+        ...itemResponseTags("DispatcherDealer", response),
+        { type: "DispatcherDealer", id: dealerId },
+      ],
     }),
 
     getFactoryDashboard: builder.query({
@@ -897,21 +1309,20 @@ export const meituApi = createApi({
       providesTags: (response) => listResponseTags("FactoryOrder", response),
     }),
 
+    // Full verified-dealer directory, for the Invoice Center's Dealer filter
+    // dropdown - mirrors useGetVerifiedDispatchersQuery's shape/usage on the
+    // admin orders page (no pagination, populated once, cached).
+    getFactoryDealers: builder.query({
+      query: () => ({ url: "/api/factory/dealers" }),
+      keepUnusedDataFor: FACTORY_CACHE_SECONDS,
+      providesTags: (response) => listResponseTags("FactoryDealer", response),
+    }),
+
     getFactoryOrder: builder.query({
       query: (orderId) => ({ url: `/api/factory/orders/${orderId}` }),
       transformResponse: getItem,
       keepUnusedDataFor: FACTORY_CACHE_SECONDS,
       providesTags: (response) => itemResponseTags("FactoryOrder", response),
-    }),
-
-    startFactoryOrderPreparing: builder.mutation({
-      query: ({ orderId, payload = {} }) => ({
-        url: `/api/factory/orders/${orderId}/start-preparing`,
-        method: "POST",
-        data: payload,
-      }),
-      transformResponse: getItem,
-      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
     }),
 
     markFactoryOrderOutForDelivery: builder.mutation({
@@ -971,14 +1382,13 @@ export const meituApi = createApi({
       ],
     }),
 
-    sendAdminOrderToFactory: builder.mutation({
-      query: ({ orderId, payload = {} }) => ({
-        url: `/api/admin/orders/${orderId}/send-to-factory`,
+    issueFactoryInvoice: builder.mutation({
+      query: (orderId) => ({
+        url: `/api/factory/orders/${orderId}/invoice`,
         method: "POST",
-        data: payload,
       }),
       transformResponse: getItem,
-      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+      invalidatesTags: () => [listTag("FactoryOrder")],
     }),
 
     getAdminOrderStatementReport: builder.query({
@@ -1007,6 +1417,138 @@ export const meituApi = createApi({
       keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
       providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
     }),
+
+    getAdminPointsCatalogProducts: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/points-catalog-products", params }),
+      providesTags: (response) => listResponseTags("PointsCatalogProduct", response),
+    }),
+
+    getAdminPointsCatalogProduct: builder.query({
+      query: (productId) => ({ url: `/api/admin/points-catalog-products/${productId}` }),
+      providesTags: (_response, _error, productId) => [{ type: "PointsCatalogProduct", id: productId }],
+    }),
+
+    createPointsCatalogProduct: builder.mutation({
+      query: (payload) => ({
+        url: "/api/admin/points-catalog-products",
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: () => [listTag("PointsCatalogProduct")],
+    }),
+
+    updatePointsCatalogProduct: builder.mutation({
+      query: ({ productId, payload }) => ({
+        url: `/api/admin/points-catalog-products/${productId}`,
+        method: "PATCH",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [listTag("PointsCatalogProduct"), { type: "PointsCatalogProduct", id: arg?.productId }],
+    }),
+
+    deletePointsCatalogProduct: builder.mutation({
+      query: (productId) => ({
+        url: `/api/admin/points-catalog-products/${productId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, productId) => [listTag("PointsCatalogProduct"), { type: "PointsCatalogProduct", id: productId }],
+    }),
+
+    getAdminPainters: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/painters", params }),
+      providesTags: (response) => listResponseTags("Painter", response),
+    }),
+
+    getAdminPainter: builder.query({
+      query: (painterId) => ({ url: `/api/admin/painters/${painterId}` }),
+      providesTags: (_response, _error, painterId) => [{ type: "Painter", id: painterId }],
+    }),
+
+    createPainter: builder.mutation({
+      query: (payload) => ({
+        url: "/api/admin/painters",
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: () => [listTag("Painter")],
+    }),
+
+    updatePainter: builder.mutation({
+      query: ({ painterId, payload }) => ({
+        url: `/api/admin/painters/${painterId}`,
+        method: "PATCH",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [listTag("Painter"), { type: "Painter", id: arg?.painterId }],
+    }),
+
+    deletePainter: builder.mutation({
+      query: (painterId) => ({
+        url: `/api/admin/painters/${painterId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, painterId) => [listTag("Painter"), { type: "Painter", id: painterId }],
+    }),
+
+    promotePainterToTtp: builder.mutation({
+      query: ({ painterId, payload }) => ({
+        url: `/api/admin/painters/${painterId}/promote`,
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => [listTag("Painter"), { type: "Painter", id: arg?.painterId }],
+    }),
+
+    getPainterPoints: builder.query({
+      query: ({ painterId, ...params }) => ({ url: `/api/admin/painters/${painterId}/points`, params }),
+      providesTags: (_response, _error, arg) => [{ type: "Painter", id: `${arg?.painterId}:points` }],
+    }),
+
+    // Returns a fresh, short-lived Cloudinary download URL each call - never
+    // cached/tagged, since a stale cached URL would just expire and 401.
+    // Always triggered lazily (useLazyGetPainterIdCardUrlQuery) from a
+    // button click, not rendered eagerly.
+    getPainterIdCardUrl: builder.query({
+      query: (painterId) => ({ url: `/api/admin/painters/${painterId}/id-card` }),
+    }),
+
+    // The exact template artwork, unmodified - fetched once (lazily, on
+    // first use of the photo-adjustment modal) and reused as the preview
+    // backdrop so the "final card" preview is backed by the real design,
+    // not a hand-recreated approximation. Same asset for every painter, so
+    // RTK Query's default caching means this only ever hits the network once
+    // per session.
+    getPainterIdCardTemplate: builder.query({
+      query: () => ({ url: "/api/admin/painters/id-card-template" }),
+    }),
+
+    // Regenerates the ID card with a headshot composited in. The photo is
+    // never persisted server-side (see painter.service.js's comment) - it's
+    // only ever this one multipart upload, used once to render the PDF.
+    regeneratePainterIdCardWithPhoto: builder.mutation({
+      query: ({ painterId, photoBlob }) => {
+        const formData = new FormData();
+        formData.append("photo", photoBlob, "photo.jpg");
+        return {
+          url: `/api/admin/painters/${painterId}/id-card`,
+          method: "POST",
+          data: formData,
+          headers: { "Content-Type": "multipart/form-data" },
+        };
+      },
+      invalidatesTags: (_result, _error, arg) => [{ type: "Painter", id: arg?.painterId }],
+    }),
+
+    searchPainters: builder.query({
+      query: (params) => ({ url: "/api/dealer/painters/search", params }),
+      providesTags: () => [listTag("DealerPainterSearch")],
+    }),
+
+    registerRtpPainter: builder.mutation({
+      query: (payload) => ({ url: "/api/dealer/painters", method: "POST", data: payload }),
+      transformResponse: getItem,
+      invalidatesTags: () => [listTag("DealerPainterSearch")],
+    }),
   }),
 });
 
@@ -1029,7 +1571,34 @@ export const {
   useUploadAdminFamilyImageMutation,
   useDeleteAdminFamilyImageMutation,
   useGetDealerOrdersQuery,
+  useGetDealerOrderQuery,
   useCreateDealerOrderMutation,
+  useGetMyOrderOutstandingQuery,
+  useGetMyPaymentsQuery,
+  useSubmitMyPaymentMutation,
+  useGetDealerInventoryQuery,
+  useGetDealerInventoryItemQuery,
+  useGetDealerInventoryMovementsQuery,
+  useGetDealerInventoryHistoryQuery,
+  useGetDealerSalesQuery,
+  useGetDealerSaleQuery,
+  useCreateDealerSaleMutation,
+  useVoidDealerSaleMutation,
+  useGetCouponPreviewQuery,
+  useRedeemCouponMutation,
+  useGenerateCouponsMutation,
+  useGetAdminCouponsQuery,
+  useGetAdminCouponBatchesQuery,
+  useGetCouponRedemptionHistoryQuery,
+  useGetRewardSettingsQuery,
+  useUpdateRewardSettingsMutation,
+  useDeleteCouponMutation,
+  useDeleteCouponBatchMutation,
+  useDeleteCouponBatchesMutation,
+  useGetCouponAttemptsQuery,
+  useGetSettlementReportQuery,
+  useGetAdminSalesQuery,
+  useGetAdminSaleQuery,
   useGetAdminOrdersQuery,
   useGetAdminOrderQuery,
   useGetAdminOrderStockCheckQuery,
@@ -1046,9 +1615,17 @@ export const {
   useVerifyDispatcherOrderMutation,
   useRejectDispatcherOrderMutation,
   useAmendDispatcherOrderMutation,
+  useDispatchDispatcherOrderMutation,
+  useGetMyDispatcherStockQuery,
+  useGetDispatcherReplenishmentCatalogQuery,
+  useGetDispatcherReplenishmentOrdersQuery,
+  useGetDispatcherReplenishmentOrderQuery,
+  useCreateDispatcherReplenishmentOrderMutation,
   useGetAdminDealersQuery,
   useGetAdminDealerQuery,
   useGetAdminDealerAnalyticsQuery,
+  useGetAdminDealerInventoryQuery,
+  useGetAdminDealerInventoryMovementsQuery,
   useUpdateAdminDealerMutation,
   useUpdateAdminDealerStatusMutation,
   useDeleteAdminDealerMutation,
@@ -1058,6 +1635,7 @@ export const {
   useAssignDispatcherToDealerMutation,
   useUnassignDispatcherFromDealerMutation,
   useGetAdminDealerApplicationsQuery,
+  useGetAdminDealerApplicationQuery,
   useApproveDealerApplicationMutation,
   useRejectDealerApplicationMutation,
   useDeleteDealerApplicationMutation,
@@ -1065,7 +1643,17 @@ export const {
   useGetAdminDispatcherApplicationsQuery,
   useGetVerifiedDispatchersQuery,
   useGetAdminDispatcherQuery,
+  useGetAdminDispatcherStockQuery,
+  useGetAdminDispatcherAnalyticsQuery,
+  useGetAdminDispatcherOwnOrdersQuery,
+  useGetAdminDispatcherFulfilledOrdersQuery,
+  useGetAdminDispatcherDealerStatsQuery,
+  useGetAdminDispatcherProductSummaryQuery,
+  useGetAdminDispatcherProductMovementsQuery,
   useResendDispatcherSetupEmailMutation,
+  useGetDispatcherPricingSummaryQuery,
+  useGetDispatcherPricingQuery,
+  useUpdateDispatcherPricingMutation,
   useApproveDispatcherMutation,
   useRejectDispatcherMutation,
   useSetAdminDispatcherActiveMutation,
@@ -1074,6 +1662,7 @@ export const {
   useUndoAdminDispatcherDeletionMutation,
   useGetMyDispatcherProfileQuery,
   useGetDispatcherDealersQuery,
+  useGetDispatcherDealerQuery,
   useGetFactoryDashboardQuery,
   useGetStockQuery,
   useGetStockDetailQuery,
@@ -1083,16 +1672,35 @@ export const {
   useUpdateStockThresholdMutation,
   useBulkUpdateStockMutation,
   useGetFactoryOrdersQuery,
+  useGetFactoryDealersQuery,
   useGetFactoryOrderQuery,
-  useStartFactoryOrderPreparingMutation,
   useMarkFactoryOrderOutForDeliveryMutation,
   useMarkFactoryOrderDeliveredMutation,
   useRejectFactoryOrderMutation,
   useAmendFactoryOrderMutation,
   useGetProformaInvoiceQuery,
   useLazyGetProformaInvoiceQuery,
-  useSendAdminOrderToFactoryMutation,
+  useIssueFactoryInvoiceMutation,
   useLazyGetAdminOrderStatementReportQuery,
   useLazyGetDealerOrderStatementReportQuery,
   useGetAdminInsightsQuery,
+  useGetAdminPointsCatalogProductsQuery,
+  useGetAdminPointsCatalogProductQuery,
+  useCreatePointsCatalogProductMutation,
+  useUpdatePointsCatalogProductMutation,
+  useDeletePointsCatalogProductMutation,
+  useGetAdminPaintersQuery,
+  useGetAdminPainterQuery,
+  useCreatePainterMutation,
+  useUpdatePainterMutation,
+  useDeletePainterMutation,
+  useGetPainterSalesQuery,
+  usePromotePainterToTtpMutation,
+  useGetPainterPointsQuery,
+  useLazyGetPainterIdCardUrlQuery,
+  useLazyGetPainterIdCardTemplateQuery,
+  useRegeneratePainterIdCardWithPhotoMutation,
+  useSearchPaintersQuery,
+  useLazySearchPaintersQuery,
+  useRegisterRtpPainterMutation,
 } = meituApi;

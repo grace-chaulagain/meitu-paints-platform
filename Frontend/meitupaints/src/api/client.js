@@ -34,6 +34,96 @@ let refreshPromise = null;
 
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
+// The refresh token lives in a browser-wide httpOnly cookie, and the access
+// token is mirrored into localStorage so a new tab can restore a session -
+// which means two tabs of the same admin session end up holding the exact
+// same access token with the exact same expiry, so their independent
+// proactive-refresh timers fire within milliseconds of each other. The
+// server's refresh token is single-use and only tolerates that race for a
+// short grace window (see REFRESH_ROTATION_GRACE_MS in auth.service.js), so
+// three or more near-simultaneous refreshers (e.g. three open tabs) can
+// permanently strand one of them with a REFRESH_TOKEN_REVOKED - a terminal
+// failure that force-logs-out that tab. Coordinating refreshes across tabs
+// (one tab actually calls the network, the rest just adopt the result)
+// removes the race instead of merely tolerating it.
+const REFRESH_LOCK_KEY = "meitu.refreshLock";
+const REFRESH_LOCK_TTL_MS = 8000;
+const authChannel =
+  typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("meitu-auth") : null;
+const externalTokenListeners = new Set();
+
+export function onExternalAccessTokenUpdate(listener) {
+  externalTokenListeners.add(listener);
+  return () => externalTokenListeners.delete(listener);
+}
+
+function notifyExternalListeners(token) {
+  externalTokenListeners.forEach((listener) => {
+    try {
+      listener(token);
+    } catch {
+      // A listener error shouldn't break the auth flow for this tab.
+    }
+  });
+}
+
+authChannel?.addEventListener("message", (event) => {
+  const data = event?.data || {};
+  if (data.type === "token" && data.token) {
+    setAccessToken(data.token);
+    notifyExternalListeners(data.token);
+  } else if (data.type === "logout") {
+    setAccessToken(null);
+    notifyExternalListeners(null);
+  }
+});
+
+function tryAcquireRefreshLock() {
+  try {
+    const raw = localStorage.getItem(REFRESH_LOCK_KEY);
+    const now = Date.now();
+    if (raw && now - (Number(raw) || 0) < REFRESH_LOCK_TTL_MS) {
+      return false;
+    }
+    localStorage.setItem(REFRESH_LOCK_KEY, String(now));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function releaseRefreshLock() {
+  try {
+    localStorage.removeItem(REFRESH_LOCK_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// Another tab already holds the refresh lock - wait briefly for it to
+// broadcast the new token (handled by the BroadcastChannel listener above,
+// which calls setAccessToken) instead of racing it with a second
+// /api/auth/refresh call against the same single-use rotating cookie. Falls
+// through to a normal refresh if nothing arrives in time (e.g. the other
+// tab crashed mid-refresh, or BroadcastChannel isn't available).
+function waitForExternalRefresh(tokenBeforeWait, timeoutMs = REFRESH_LOCK_TTL_MS + 2000) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const poll = () => {
+      if (currentAccessToken && currentAccessToken !== tokenBeforeWait) {
+        resolve(currentAccessToken);
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(poll, 200);
+    };
+    poll();
+  });
+}
+
 const TERMINAL_AUTH_CODES = new Set([
   "ACCOUNT_DISABLED",
   "REFRESH_TOKEN_EXPIRED",
@@ -135,19 +225,34 @@ async function refreshAccessTokenOnce() {
   }
 
   if (!refreshPromise) {
+    const tokenBeforeRefresh = currentAccessToken;
+
     refreshPromise = Promise.resolve()
-      .then(() => refreshHandler())
-      .then((token) => {
-        if (!token) {
-          throw new Error("Unable to refresh access token");
+      .then(async () => {
+        if (!tryAcquireRefreshLock()) {
+          const externalToken = await waitForExternalRefresh(tokenBeforeRefresh);
+          if (externalToken) return externalToken;
+          // Nothing arrived in time - fall through and refresh ourselves
+          // rather than leaving this tab stuck.
         }
 
-        setAccessToken(token);
-        return token;
+        try {
+          const token = await refreshHandler();
+          if (!token) {
+            throw new Error("Unable to refresh access token");
+          }
+
+          setAccessToken(token);
+          authChannel?.postMessage({ type: "token", token });
+          return token;
+        } finally {
+          releaseRefreshLock();
+        }
       })
       .catch(async (error) => {
         if (logoutHandler && isTerminalAuthFailure(error)) {
           await logoutHandler(error);
+          authChannel?.postMessage({ type: "logout" });
         }
         throw error;
       })

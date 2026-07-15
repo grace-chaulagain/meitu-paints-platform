@@ -1,1250 +1,819 @@
-import { useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import NavBar from "../components/NavBar.jsx";
-import { useGetDealerOrdersQuery } from "../redux/api/meituApi.js";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import {
+  useGetDealerOrdersQuery,
+  useGetProductFamiliesQuery,
+  useGetProductsQuery,
+} from "../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../redux/api/selectors.js";
-import { downloadOrderSummaryPdf } from "../utils/downloadOrderSummaryPdf.js";
+import { formatMoney } from "./pricing.js";
+import { DashboardIcon } from "../components/dashboard/DashboardIcons.jsx";
+import {
+  EmptyState,
+  GhostButton,
+  Pill,
+  PrimaryButton,
+  SearchField,
+  SectionHeader,
+  Surface,
+} from "../components/dashboard/DashboardUI.jsx";
+import { OrderDetailStyles, Spinner } from "./orderDetailUI.jsx";
+import { AppleDateField } from "../components/dashboard/ApplePickers.jsx";
+import {
+  DISPLAY_BUCKET_META,
+  formatDate,
+  formatTime,
+  normalizeStatus,
+  orderDisplayBucket,
+  resolveOrderItemImage,
+  statusLabel,
+} from "./orderDetailLogic.js";
+
+const PAGE_SIZE = 10;
 
 const ORDER_FILTERS = [
-  { key: "ALL", label: "All" },
-  { key: "SUBMITTED", label: "Submitted" },
-  { key: "VERIFIED", label: "Verified" },
-  { key: "REJECTED", label: "Rejected" },
-  { key: "ARCHIVED", label: "Archived" },
+  { key: "ALL", label: "All Orders" },
+  { key: "PENDING", label: "Pending" },
+  { key: "COMPLETED", label: "Completed" },
 ];
 
-function GlassCard({ children, style = {}, ...rest }) {
-  return (
-    <div
-      {...rest}
-      style={{
-        borderRadius: 26,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "rgba(255,255,255,.82)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
-        boxShadow:
-          "0 24px 70px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.82)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
+function formatDayKey(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "unknown";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function SectionHeader({ title, subtitle, action = null }) {
+function formatDayDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "Unknown date";
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+// Returns "Today"/"Yesterday" when applicable, otherwise null — a null label
+// means the plain date itself (formatDayDate) is the only heading needed.
+function formatRelativeDayLabel(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (formatDayKey(date) === formatDayKey(today)) return "Today";
+  if (formatDayKey(date) === formatDayKey(yesterday)) return "Yesterday";
+  return null;
+}
+
+// Interpreted as a plain calendar date (no time zone shift), since the
+// AppleDateField value is always a "YYYY-MM-DD" key - same convention as
+// the admin dealer profile's history date filter.
+function startOfDayFromInput(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function endOfDayFromInput(value) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 23, 59, 59, 999);
+}
+
+function orderWithinDateRange(order, bounds) {
+  if (!bounds.from && !bounds.to) return true;
+  const created = new Date(order.createdAt);
+  if (bounds.from && created < bounds.from) return false;
+  if (bounds.to && created > bounds.to) return false;
+  return true;
+}
+
+// Orders arrive newest-first from the API; grouping preserves that order and
+// simply buckets consecutive-in-time orders under the calendar day they share,
+// so the timeline reads top-to-bottom without needing a separate re-sort.
+function groupOrdersByDay(orders) {
+  const groups = [];
+  const indexByKey = new Map();
+
+  orders.forEach((order) => {
+    const key = formatDayKey(order.createdAt);
+    if (!indexByKey.has(key)) {
+      indexByKey.set(key, groups.length);
+      groups.push({
+        key,
+        relativeLabel: formatRelativeDayLabel(order.createdAt),
+        dateText: formatDayDate(order.createdAt),
+        orders: [],
+      });
+    }
+    groups[indexByKey.get(key)].orders.push(order);
+  });
+
+  return groups;
+}
+
+function buildPageList(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
+  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const result = [];
+  let prev = 0;
+  sorted.forEach((p) => {
+    if (prev && p - prev > 1) result.push("ellipsis-" + p);
+    result.push(p);
+    prev = p;
+  });
+  return result;
+}
+
+function OrderThumbnails({ items, productsMap, familyMap }) {
+  const visible = items.slice(0, 4);
+  const overflow = items.length - visible.length;
+
+  if (!visible.length) return null;
+
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {visible.map((item, index) => {
+        const image = resolveOrderItemImage(item, productsMap, familyMap);
+        return (
           <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.58)",
-            }}
+            key={`${item.sku || item.code || "item"}-${index}`}
+            className="dealer-order-thumb"
           >
-            {subtitle}
+            {image?.url ? (
+              <img src={image.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <DashboardIcon name="package" size={16} strokeWidth={1.6} style={{ color: "var(--color-graphite, #707070)" }} />
+            )}
           </div>
-        ) : null}
-      </div>
-      {action}
+        );
+      })}
+      {overflow > 0 ? (
+        <div className="dealer-order-thumb dealer-order-thumb-more">
+          +{overflow}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function SearchInput({ value, onChange, placeholder, onSubmit, onClear }) {
+function OrderTimelineRow({ order, onOpen, productsMap, familyMap }) {
+  const status = normalizeStatus(order.status);
+  const bucket = orderDisplayBucket(status);
+  const meta = DISPLAY_BUCKET_META[bucket];
+  const pillLabel = meta.pillLabel || statusLabel(status);
+  const items = Array.isArray(order.items) ? order.items : [];
+  const stateClass = bucket === "COMPLETED" ? "is-completed" : bucket === "REJECTED" ? "is-rejected" : "is-pending";
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit?.();
-      }}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        height: 50,
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        padding: "0 14px",
-      }}
-    >
-      <span style={{ fontWeight: 900, color: "rgba(15,23,42,.42)" }}>⌕</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: "100%",
-          border: "none",
-          outline: "none",
-          background: "transparent",
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#0f172a",
+    <div className={`dealer-order-timeline-row ${stateClass}`}>
+      <span
+        className="dealer-order-marker"
+        style={{ "--marker-color": meta.color, "--marker-bg": meta.bg }}
+        aria-hidden="true"
+      >
+        <DashboardIcon name={meta.icon} size={13} strokeWidth={2.4} />
+      </span>
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(order)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpen(order);
+          }
         }}
-      />
-      {value ? (
-        <button
-          type="button"
-          aria-label="Clear search"
-          onClick={onClear}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 999,
-            border: "1px solid rgba(15,23,42,.08)",
-            background: "rgba(248,250,252,.95)",
-            color: "rgba(15,23,42,.58)",
-            fontSize: 18,
-            fontWeight: 900,
-            lineHeight: 1,
-            cursor: "pointer",
-            display: "grid",
-            placeItems: "center",
-            flex: "0 0 auto",
-          }}
-        >
-          ×
-        </button>
-      ) : null}
-    </form>
+        className="dash-selectable-row dealer-order-card"
+      >
+        <div className="dealer-order-card-top">
+          <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span className="dealer-order-number">{order.orderNumber || "Unnamed Order"}</span>
+            <Pill tone={meta.pillTone} size="small">{pillLabel}</Pill>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span className="dealer-order-amount">{formatMoney(order?.totals?.total, order?.totals?.currency)}</span>
+            <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
+          </div>
+        </div>
+
+        <div className="dealer-order-meta">
+          {formatTime(order.createdAt)} · {items.length} {items.length === 1 ? "item" : "items"}
+        </div>
+
+        <div className="dealer-order-card-bottom">
+          <OrderThumbnails items={items} productsMap={productsMap} familyMap={familyMap} />
+          <div className="dealer-order-state-copy">
+            {bucket === "PENDING" ? (
+              <>
+                <Spinner size={26} color={meta.color} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>Processing</span>
+              </>
+            ) : (
+              <>
+                <DashboardIcon name={meta.icon} size={12} strokeWidth={2.4} style={{ color: meta.color }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>{meta.stateLabel}</span>
+                <span style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>{formatDate(order.updatedAt || order.createdAt)}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function FilterPill({ active, children, onClick, count }) {
+const IconButton = forwardRef(function IconButton({ icon, onClick, active = false, label }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className="dealer-order-icon-btn"
       style={{
-        height: 42,
-        padding: "0 14px",
-        borderRadius: 999,
-        border: active
-          ? "1px solid rgba(180,35,24,.16)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: active
-          ? "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)"
-          : "#fff",
-        color: active ? "#fff" : "#0f172a",
-        fontWeight: 900,
-        fontSize: 13,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        border: `1px solid ${active ? "var(--color-azure, #0071e3)" : "rgba(29,29,31,.1)"}`,
+        background: active ? "rgba(0,113,227,.08)" : "rgba(255,255,255,.9)",
+        color: active ? "var(--color-azure, #0071e3)" : "var(--color-ink, #1d1d1f)",
+        display: "grid",
+        placeItems: "center",
         cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
+        flexShrink: 0,
       }}
     >
-      <span>{children}</span>
-      {typeof count === "number" ? (
-        <span
-          style={{
-            minWidth: 22,
-            height: 22,
-            padding: "0 6px",
-            borderRadius: 999,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: active ? "rgba(255,255,255,.18)" : "rgba(15,23,42,.06)",
-            color: active ? "#fff" : "#0f172a",
-            fontSize: 11,
-            fontWeight: 900,
-          }}
-        >
-          {count}
-        </span>
-      ) : null}
+      <DashboardIcon name={icon} size={16} strokeWidth={1.9} />
     </button>
   );
-}
+});
 
-function ActionButton({
-  children,
-  onClick,
-  danger = false,
-  subtle = false,
-  disabled = false,
-  title = "",
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!disabled) onClick?.(e);
-      }}
-      disabled={disabled}
-      style={{
-        height: 42,
-        padding: "0 16px",
-        borderRadius: 14,
-        border: danger
-          ? "1px solid rgba(180,35,24,.14)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: danger
-          ? "rgba(180,35,24,.06)"
-          : subtle
-            ? "#fff"
-            : "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)",
-        color: danger ? "#b42318" : subtle ? "#0f172a" : "#fff",
-        fontWeight: 900,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
+// A compact alternative to the status tabs — same options/state, surfaced as
+// a small popover behind a filter icon so the header stays uncluttered on
+// narrow viewports where the tab row would otherwise need to scroll.
+// Portal-rendered to document.body with fixed positioning computed from the
+// trigger's own rect — matches the MetricInfoButton popover pattern in
+// DashboardUI.jsx. A locally absolute-positioned popover got visually
+// stacked underneath the timeline below it (the timeline's day-label grid
+// item still hit-tests across its full 1fr-width box even though it only
+// paints text on the left), so escaping to a body-level portal sidesteps
+// that ancestor-stacking-context ambiguity entirely rather than fighting it
+// with z-index.
+function FilterMenu({ options, value, onChange, dateFrom, dateTo, onApplyDate, onClearDate }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const [draftFrom, setDraftFrom] = useState(dateFrom);
+  const [draftTo, setDraftTo] = useState(dateTo);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const dateActive = Boolean(dateFrom || dateTo);
 
-function StatusBadge({ status }) {
-  const normalized = String(status || "").toUpperCase();
+  function updatePosition() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPosition({ top: rect.bottom + 8, left: Math.max(12, rect.right - 260) });
+  }
 
-  const tone =
-    normalized === "VERIFIED"
-      ? {
-          bg: "rgba(22,163,74,.08)",
-          color: "#15803d",
-          border: "1px solid rgba(22,163,74,.12)",
-        }
-      : normalized === "REJECTED"
-        ? {
-            bg: "rgba(180,35,24,.08)",
-            color: "#b42318",
-            border: "1px solid rgba(180,35,24,.12)",
-          }
-        : normalized === "ARCHIVED"
-          ? {
-              bg: "rgba(15,23,42,.08)",
-              color: "#334155",
-              border: "1px solid rgba(15,23,42,.12)",
-            }
-          : {
-              bg: "rgba(245,158,11,.10)",
-              color: "#b45309",
-              border: "1px solid rgba(245,158,11,.16)",
-            };
+  function toggleOpen() {
+    setOpen((current) => {
+      if (!current) {
+        // Opening - reset the date drafts to whatever's actually applied,
+        // discarding any unapplied edits from the last time this was open.
+        setDraftFrom(dateFrom);
+        setDraftTo(dateTo);
+      }
+      return !current;
+    });
+  }
 
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        height: 28,
-        padding: "0 10px",
-        borderRadius: 999,
-        background: tone.bg,
-        color: tone.color,
-        border: tone.border,
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: ".04em",
-      }}
-    >
-      {status || "—"}
-    </span>
-  );
-}
+  useEffect(() => {
+    if (!open) return undefined;
 
-function DetailItem({ label, value }) {
-  return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.44)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 14,
-          lineHeight: 1.65,
-          fontWeight: 800,
-          color: "#0f172a",
-          wordBreak: "break-word",
-        }}
-      >
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
+    function handlePointerDown(event) {
+      if (menuRef.current?.contains(event.target) || buttonRef.current?.contains(event.target)) return;
+      // The AppleDateField calendar is its own document.body portal, a DOM
+      // sibling of this menu rather than a descendant, so a click inside it
+      // doesn't satisfy menuRef.contains() above even though it's logically
+      // still "inside" this popover - explicitly excusing it here is what
+      // stops picking a day from also closing the filter menu underneath it.
+      if (event.target.closest?.(".apple-calendar-pop")) return;
+      setOpen(false);
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
 
-function Label({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 900,
-        letterSpacing: ".08em",
-        textTransform: "uppercase",
-        color: "rgba(15,23,42,.44)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
 
-function money(value, currency = "NPR") {
-  return `${currency} ${Number(value || 0).toLocaleString()}`;
-}
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
-function normalizeStatus(status) {
-  const s = String(status || "")
-    .toUpperCase()
-    .trim();
-  if (s === "ARCHIVE") return "ARCHIVED";
-  return s;
-}
+  function applyDate() {
+    onApplyDate({ from: draftFrom, to: draftTo });
+    setOpen(false);
+  }
 
-function canDownloadOrderPdf(order) {
-  return normalizeStatus(order?.status) === "VERIFIED";
-}
-
-
-function OrderRow({ order, onOpen }) {
-  return (
-    <button
-      type="button"
-      className="dealer-order-row"
-      onClick={() => onOpen(order)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        border: "1px solid rgba(15,23,42,.06)",
-        background: "#fff",
-        borderRadius: 22,
-        padding: 18,
-        cursor: "pointer",
-      }}
-    >
-      <div
-        className="dealer-order-row-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1fr) auto",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 950,
-                letterSpacing: "-0.02em",
-                color: "#0f172a",
-              }}
-            >
-              {order.orderNumber || "Unnamed Order"}
-            </div>
-
-            <StatusBadge status={normalizeStatus(order.status)} />
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.56)",
-            }}
-          >
-            <span>
-              {money(order?.totals?.total, order?.totals?.currency || "NPR")}
-            </span>
-            <span>•</span>
-            <span>{order?.payment?.method || "No payment method"}</span>
-            <span>•</span>
-            <span>
-              {order.createdAt
-                ? new Date(order.createdAt).toLocaleDateString()
-                : "—"}
-            </span>
-          </div>
-        </div>
-
-        <div
-          className="dealer-order-count"
-          style={{
-            justifySelf: "end",
-            textAlign: "right",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "rgba(15,23,42,.52)",
-          }}
-        >
-          {Array.isArray(order.items) ? `${order.items.length} items` : "—"}
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {Array.from({ length: 5 }).map((_, index) => (
-        <GlassCard key={index} style={{ padding: 18 }}>
-          <div
-            style={{
-              height: 96,
-              borderRadius: 18,
-              background:
-                "linear-gradient(90deg, rgba(241,245,249,.9), rgba(248,250,252,1), rgba(241,245,249,.9))",
-            }}
-          />
-        </GlassCard>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ onReset }) {
-  return (
-    <GlassCard style={{ padding: 26 }}>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        No orders found
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          maxWidth: 620,
-          fontSize: 14,
-          lineHeight: 1.7,
-          fontWeight: 700,
-          color: "rgba(15,23,42,.56)",
-        }}
-      >
-        Try adjusting the search or status filters to view your submitted order
-        history.
-      </div>
-      <div style={{ marginTop: 18 }}>
-        <ActionButton subtle onClick={onReset}>
-          Clear filters
-        </ActionButton>
-      </div>
-    </GlassCard>
-  );
-}
-
-function OrderItemsTable({ items = [] }) {
-  if (!items.length) {
-    return (
-      <div
-        style={{
-          padding: 16,
-          borderRadius: 18,
-          border: "1px solid rgba(15,23,42,.06)",
-          background: "#fff",
-          color: "rgba(15,23,42,.56)",
-          fontWeight: 800,
-        }}
-      >
-        No items found.
-      </div>
-    );
+  function clearDate() {
+    setDraftFrom("");
+    setDraftTo("");
+    onClearDate();
   }
 
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        border: "1px solid rgba(15,23,42,.06)",
-        background: "#fff",
-        overflow: "hidden",
-      }}
-    >
-      <div className="dealer-order-table-wrap" style={{ overflowX: "auto" }}>
-        <table
-          className="dealer-order-items-table"
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            tableLayout: "fixed",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "rgba(15,23,42,.03)" }}>
-              <th
-                style={{
-                  width: "54%",
-                  textAlign: "left",
-                  padding: "12px 14px",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(15,23,42,.52)",
-                }}
-              >
-                Item
-              </th>
-              <th
-                style={{
-                  width: "14%",
-                  textAlign: "left",
-                  padding: "12px 14px",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(15,23,42,.52)",
-                }}
-              >
-                Pack
-              </th>
-              <th
-                style={{
-                  width: "10%",
-                  textAlign: "right",
-                  padding: "12px 14px",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(15,23,42,.52)",
-                }}
-              >
-                Qty
-              </th>
-              <th
-                style={{
-                  width: "11%",
-                  textAlign: "right",
-                  padding: "12px 14px",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(15,23,42,.52)",
-                }}
-              >
-                Rate
-              </th>
-              <th
-                style={{
-                  width: "11%",
-                  textAlign: "right",
-                  padding: "12px 14px",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(15,23,42,.52)",
-                }}
-              >
-                Amount
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, index) => (
-              <tr
-                key={`${item.sku || item.code || item.name}-${index}`}
-                style={{ borderTop: "1px solid rgba(15,23,42,.06)" }}
-              >
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    verticalAlign: "top",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      color: "#0f172a",
-                      lineHeight: 1.35,
-                      whiteSpace: "normal",
-                      wordBreak: "break-word",
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {item.name || "—"}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 12,
-                      lineHeight: 1.4,
-                      fontWeight: 700,
-                      color: "rgba(15,23,42,.52)",
-                      whiteSpace: "normal",
-                      wordBreak: "break-word",
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {item.sku || item.code || ""}
-                  </div>
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    verticalAlign: "top",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                    whiteSpace: "normal",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {item.packLabel || item.variantLabel || item.unit || "—"}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    verticalAlign: "top",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {Number(item.quantity || 0).toLocaleString()}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    verticalAlign: "top",
-                    textAlign: "right",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {Number(item.unitPrice || 0).toLocaleString()}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    verticalAlign: "top",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {Number(item.lineTotal || 0).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function ModalShell({ open, onClose, children, maxWidth = 1080 }) {
-  if (!open) return null;
-
-  return (
-    <div
-      className="dealer-order-modal-overlay"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1400,
-        background: "rgba(15,23,42,.38)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 28,
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <GlassCard
-        style={{
-          width: `min(${maxWidth}px, 100%)`,
-          maxHeight: "92vh",
-          overflow: "auto",
+    <>
+      <IconButton
+        ref={buttonRef}
+        icon="filter"
+        active={open || value !== "ALL" || dateActive}
+        onClick={() => {
+          toggleOpen();
+          requestAnimationFrame(updatePosition);
         }}
-      >
-        {children}
-      </GlassCard>
-    </div>
-  );
-}
-
-function OrderDetailModal({ open, order, onClose }) {
-  if (!open || !order) return null;
-
-  const isDownloadable = canDownloadOrderPdf(order);
-
-  return (
-    <ModalShell open={open} onClose={onClose} maxWidth={1120}>
-      <div className="dealer-order-modal-body" style={{ padding: 24 }}>
-        <SectionHeader
-          title={order.orderNumber || "Order Detail"}
-          subtitle="Complete record of your submitted order"
-          action={
+        label="Filter orders"
+      />
+      {open && position
+        ? createPortal(
             <div
+              ref={menuRef}
+              role="menu"
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
+                position: "fixed",
+                top: position.top,
+                left: position.left,
+                width: 260,
+                background: "#fff",
+                borderRadius: 14,
+                border: "1px solid rgba(29,29,31,.08)",
+                boxShadow: "0 12px 32px rgba(29,29,31,.16)",
+                padding: 6,
+                // Below AppleDateField's own calendar popover (z-index 1401,
+                // with a 1400 click-outside backdrop) so picking a day
+                // renders on top of this menu's Clear/Apply row instead of
+                // underneath it - still comfortably above ordinary page content.
+                zIndex: 1300,
               }}
             >
-              <ActionButton
-                subtle
-                disabled={!isDownloadable}
-                title={
-                  isDownloadable
-                    ? "Download verified order summary PDF"
-                    : "PDF download becomes available after admin verification"
-                }
-                onClick={() => {
-                  if (!isDownloadable) return;
-                  downloadOrderSummaryPdf({ order });
-                }}
-              >
-                {isDownloadable
-                  ? "Download PDF"
-                  : "Available after verification"}
-              </ActionButton>
+              {options.map((option) => {
+                const active = option.key === value;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onChange(option.key);
+                      setOpen(false);
+                    }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      padding: "8px 10px",
+                      borderRadius: 9,
+                      border: "none",
+                      background: active ? "rgba(0,113,227,.08)" : "transparent",
+                      color: active ? "var(--color-azure, #0071e3)" : "var(--color-ink, #1d1d1f)",
+                      fontSize: 13,
+                      fontWeight: active ? 700 : 600,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-graphite, #707070)" }}>{option.count}</span>
+                  </button>
+                );
+              })}
 
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  border: "1px solid rgba(15,23,42,.08)",
-                  background: "#fff",
-                  fontSize: 20,
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  color: "#0f172a",
-                }}
-              >
-                ×
-              </button>
-            </div>
-          }
-        />
+              <div className="dealer-order-filter-divider" />
 
-        <div
-          className="dealer-order-detail-grid"
-          style={{
-            marginTop: 18,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          <StatusBadge status={normalizeStatus(order.status)} />
-        </div>
-
-        {!isDownloadable ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: "rgba(245,158,11,.10)",
-              color: "#b45309",
-              border: "1px solid rgba(245,158,11,.16)",
-              fontWeight: 800,
-              lineHeight: 1.6,
-            }}
-          >
-            This order summary PDF can be downloaded only after the order has
-            been verified by Meitu.
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            marginTop: 22,
-            display: "grid",
-            gridTemplateColumns: "minmax(0,1fr) minmax(320px,.9fr)",
-            gap: 18,
-          }}
-        >
-          <GlassCard style={{ padding: 18, background: "#fff" }}>
-            <Label>Order Items</Label>
-            <div style={{ marginTop: 10 }}>
-              <OrderItemsTable items={order.items || []} />
-            </div>
-          </GlassCard>
-
-          <div style={{ display: "grid", gap: 18 }}>
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Order Context</Label>
-              <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
-                <DetailItem
-                  label="Total"
-                  value={money(
-                    order?.totals?.total,
-                    order?.totals?.currency || "NPR",
-                  )}
-                />
-                <DetailItem
-                  label="Payment Method"
-                  value={order?.payment?.method}
-                />
-                <DetailItem label="Dealer Note" value={order?.dealerNote} />
-                <DetailItem label="Internal Note" value={order?.internalNote} />
-                <DetailItem
-                  label="Submitted"
-                  value={
-                    order?.createdAt
-                      ? new Date(order.createdAt).toLocaleString()
-                      : "—"
-                  }
-                />
+              <div className="dealer-order-filter-date-title">
+                <DashboardIcon name="calendar" size={12} strokeWidth={1.9} />
+                Date range
               </div>
-            </GlassCard>
-          </div>
-        </div>
+
+              <label className="dealer-order-filter-date-field">
+                <span>From</span>
+                <AppleDateField value={draftFrom || ""} onChange={setDraftFrom} />
+              </label>
+
+              <label className="dealer-order-filter-date-field">
+                <span>To</span>
+                <AppleDateField value={draftTo || ""} onChange={setDraftTo} />
+              </label>
+
+              <div className="dealer-order-filter-date-actions">
+                <GhostButton onClick={clearDate}>Clear</GhostButton>
+                <PrimaryButton
+                  onClick={applyDate}
+                  disabled={!draftFrom && !draftTo}
+                  style={{ height: 34, padding: "0 14px", fontSize: 12.5 }}
+                >
+                  Apply
+                </PrimaryButton>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function OrderStatusTabs({ options, value, onChange }) {
+  return (
+    <div className="dealer-order-tabs" role="tablist">
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            role="tab"
+            data-status={option.key}
+            aria-selected={active}
+            onClick={() => onChange(option.key)}
+            className={`dealer-order-tab ${active ? "is-active" : ""}`}
+          >
+            <span>{option.label}</span>
+            <span className="dealer-order-tab-count">{option.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages, totalCount, pageSize, onChange }) {
+  if (totalCount === 0) return null;
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, totalCount);
+  const pages = buildPageList(page, totalPages);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "6px 4px" }}>
+      <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
+        Showing {start} to {end} of {totalCount} orders
+      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          aria-label="Previous page"
+          className="dealer-order-page-btn"
+        >
+          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} style={{ transform: "rotate(180deg)" }} />
+        </button>
+        {pages.map((p) =>
+          typeof p === "number" ? (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              className={`dealer-order-page-btn ${p === page ? "is-active" : ""}`}
+            >
+              {p}
+            </button>
+          ) : (
+            <span key={p} style={{ padding: "0 4px", color: "var(--color-graphite, #707070)", fontSize: 12.5 }}>
+              …
+            </span>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+          className="dealer-order-page-btn"
+        >
+          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} />
+        </button>
       </div>
-    </ModalShell>
+    </div>
   );
 }
 
 export default function DealerOrdersPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [activeOrder, setActiveOrder] = useState(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
   const resultsRef = useRef(null);
 
   const visibleParams = useMemo(() => {
-    const params = {};
-
-    if (statusFilter !== "ALL") {
-      params.status = statusFilter === "ARCHIVED" ? "ARCHIVE" : statusFilter;
-    }
-
+    const params = { limit: 100 };
     if (committedSearch.trim()) {
       params.q = committedSearch.trim();
     }
-
     return params;
-  }, [committedSearch, statusFilter]);
+  }, [committedSearch]);
 
-  const countsQuery = useGetDealerOrdersQuery({});
+  const countsQuery = useGetDealerOrdersQuery({ limit: 100 });
   const ordersQuery = useGetDealerOrdersQuery(visibleParams);
+  const productsQuery = useGetProductsQuery();
+  const familiesQuery = useGetProductFamiliesQuery();
 
-  const allOrders = useMemo(() => {
-    return (countsQuery.data?.items || []).map((item) => ({
-      ...item,
-      status: normalizeStatus(item?.status),
-    }));
-  }, [countsQuery.data]);
+  const allOrders = useMemo(
+    () => (countsQuery.data?.items || []).map((item) => ({ ...item, status: normalizeStatus(item?.status) })),
+    [countsQuery.data],
+  );
 
-  const visibleOrders = useMemo(() => {
-    return (ordersQuery.data?.items || []).map((item) => ({
-      ...item,
-      status: normalizeStatus(item?.status),
-    }));
-  }, [ordersQuery.data]);
+  const dateBounds = useMemo(
+    () => ({ from: startOfDayFromInput(dateFrom), to: endOfDayFromInput(dateTo) }),
+    [dateFrom, dateTo],
+  );
 
-  const loading =
-    (countsQuery.isLoading && allOrders.length === 0) ||
-    (ordersQuery.isLoading && visibleOrders.length === 0);
-  const isRefreshing =
-    !loading && (countsQuery.isFetching || ordersQuery.isFetching);
+  // Tab/filter-menu counts are scoped by the active date range too, so a
+  // dealer filtering to a past week sees "Pending 3" for that week, not the
+  // lifetime total.
+  const dateFilteredAllOrders = useMemo(
+    () => allOrders.filter((item) => orderWithinDateRange(item, dateBounds)),
+    [allOrders, dateBounds],
+  );
+
+  const visibleOrders = useMemo(
+    () =>
+      (ordersQuery.data?.items || [])
+        .map((item) => ({ ...item, status: normalizeStatus(item?.status) }))
+        .filter((item) => {
+          if (statusFilter !== "ALL" && orderDisplayBucket(item.status) !== statusFilter) return false;
+          return orderWithinDateRange(item, dateBounds);
+        }),
+    [ordersQuery.data, statusFilter, dateBounds],
+  );
+
+  const productsMap = useMemo(() => {
+    const map = {};
+    for (const item of productsQuery.data || []) map[item.sku] = item;
+    return map;
+  }, [productsQuery.data]);
+
+  const familyMap = useMemo(() => {
+    const map = {};
+    for (const family of familiesQuery.data || []) {
+      if (family?.code) map[family.code] = family;
+    }
+    return map;
+  }, [familiesQuery.data]);
+
+  const loading = (countsQuery.isLoading && allOrders.length === 0) || (ordersQuery.isLoading && visibleOrders.length === 0);
+  const isRefreshing = !loading && (countsQuery.isFetching || ordersQuery.isFetching);
   const queryError = ordersQuery.error || countsQuery.error;
-  const error = queryError
-    ? getQueryErrorMessage(queryError, "Failed to load your order history.")
-    : "";
+  const error = queryError ? getQueryErrorMessage(queryError, "Failed to load your order history.") : "";
 
-  const activeOrderView = useMemo(() => {
-    if (!activeOrder?._id) return null;
-    return (
-      visibleOrders.find((item) => item._id === activeOrder._id) ||
-      allOrders.find((item) => item._id === activeOrder._id) ||
-      activeOrder
-    );
-  }, [activeOrder, allOrders, visibleOrders]);
+  const totalPages = Math.max(1, Math.ceil(visibleOrders.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
 
-  function submitSearch() {
-    setCommittedSearch(search);
+  const pagedOrders = useMemo(
+    () => visibleOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [visibleOrders, currentPage],
+  );
+
+  function goToPage(nextPage) {
+    setPage(nextPage);
     window.requestAnimationFrame(() => {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
-  function clearSearch() {
-    setSearch("");
-    setCommittedSearch("");
+  function submitSearch() {
+    setCommittedSearch(search);
+    setPage(1);
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function resetFilters() {
     setSearch("");
     setCommittedSearch("");
+    setSearchOpen(false);
     setStatusFilter("ALL");
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  }
+
+  function changeStatusFilter(nextFilter) {
+    setStatusFilter(nextFilter);
+    setPage(1);
+  }
+
+  function applyDateFilter({ from, to }) {
+    setDateFrom(from || "");
+    setDateTo(to || "");
+    setPage(1);
+  }
+
+  function clearDateFilter() {
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  }
+
+  function openOrder(order) {
+    navigate(`/dealer/orders/${order._id}`);
   }
 
   const countsByFilter = useMemo(() => {
     return {
-      ALL: allOrders.length,
-      SUBMITTED: allOrders.filter(
-        (o) => normalizeStatus(o.status) === "SUBMITTED",
-      ).length,
-      VERIFIED: allOrders.filter(
-        (o) => normalizeStatus(o.status) === "VERIFIED",
-      ).length,
-      REJECTED: allOrders.filter(
-        (o) => normalizeStatus(o.status) === "REJECTED",
-      ).length,
-      ARCHIVED: allOrders.filter(
-        (o) => normalizeStatus(o.status) === "ARCHIVED",
-      ).length,
+      ALL: dateFilteredAllOrders.length,
+      PENDING: dateFilteredAllOrders.filter((o) => orderDisplayBucket(o.status) === "PENDING").length,
+      COMPLETED: dateFilteredAllOrders.filter((o) => orderDisplayBucket(o.status) === "COMPLETED").length,
     };
-  }, [allOrders]);
+  }, [dateFilteredAllOrders]);
+
+  const filterOptions = ORDER_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
+  const groupedOrders = useMemo(() => groupOrdersByDay(pagedOrders), [pagedOrders]);
 
   return (
-    <>
-      <NavBar />
-
-      <div
-        className="dealer-orders-page"
-        style={{
-          minHeight: "100vh",
-          paddingTop: 96,
-          paddingBottom: 52,
-          background:
-            "radial-gradient(1200px 700px at 20% 10%, rgba(255,204,0,.10), transparent 55%), radial-gradient(900px 600px at 80% 20%, rgba(255,80,0,.08), transparent 55%), radial-gradient(900px 700px at 50% 100%, rgba(196,0,0,.06), transparent 60%), linear-gradient(180deg, rgba(250,250,252,1) 0%, rgba(245,245,248,1) 100%)",
-        }}
-      >
-        <div className="container" style={{ maxWidth: 1440 }}>
-          <div style={{ display: "grid", gap: 20 }}>
-            <GlassCard style={{ padding: 18 }}>
-              <SectionHeader
-                title="Order History"
-                subtitle="Review every order you have submitted to Meitu."
-                action={
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Link
-                      to="/dealer/orders/reports"
-                      style={{
-                        height: 42,
-                        padding: "0 16px",
-                        borderRadius: 14,
-                        border: "1px solid rgba(15,23,42,.08)",
-                        background: "#fff",
-                        color: "#0f172a",
-                        fontWeight: 900,
-                        textDecoration: "none",
-                        display: "inline-flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      Utility Reports
-                    </Link>
-
-                    <Link
-                      to="/dealer/catalog"
-                      style={{
-                        height: 42,
-                        padding: "0 16px",
-                        borderRadius: 14,
-                        border: "1px solid rgba(15,23,42,.08)",
-                        background: "#fff",
-                        color: "#0f172a",
-                        fontWeight: 900,
-                        textDecoration: "none",
-                        display: "inline-flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      Back to Catalog
-                    </Link>
-                  </div>
-                }
-              />
-
-              <div
-                className="dealer-orders-filter-grid"
-                style={{
-                  marginTop: 18,
-                  display: "grid",
-                  gridTemplateColumns: "minmax(280px, 1fr) auto",
-                  gap: 12,
-                  alignItems: "center",
-                }}
-              >
-                <SearchInput
+    <div style={{ display: "grid", gap: 16 }}>
+      <Surface padding={18} className="dash-fade-up">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <SectionHeader
+            icon="orders"
+            title="Dealer Orders"
+            subtitle="Track and manage all your dealer orders."
+            action={isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            {searchOpen ? (
+              <div style={{ width: 240 }}>
+                <SearchField
                   value={search}
                   onChange={setSearch}
-                  placeholder="Search order number, payment, notes..."
                   onSubmit={submitSearch}
-                  onClear={clearSearch}
+                  placeholder="Search order number, payment, notes…"
                 />
-                <div
-                  className="dealer-orders-filter-pills"
-                  style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-                >
-                  {ORDER_FILTERS.map((filter) => (
-                    <FilterPill
-                      key={filter.key}
-                      active={statusFilter === filter.key}
-                      onClick={() => setStatusFilter(filter.key)}
-                      count={countsByFilter[filter.key]}
-                    >
-                      {filter.label}
-                    </FilterPill>
-                  ))}
-                </div>
               </div>
-
-              {error ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: "14px 16px",
-                    borderRadius: 16,
-                    background: "rgba(180,35,24,.08)",
-                    color: "#b42318",
-                    border: "1px solid rgba(180,35,24,.14)",
-                    fontWeight: 800,
-                  }}
-                >
-                  {error}
-                </div>
-              ) : null}
-
-              {isRefreshing ? (
-                <div
-                  style={{
-                    marginTop: 12,
-                    fontSize: 12,
-                    fontWeight: 900,
-                    color: "rgba(15,23,42,.46)",
-                  }}
-                >
-                  Updating orders...
-                </div>
-              ) : null}
-            </GlassCard>
-
-            <div ref={resultsRef} style={{ scrollMarginTop: 24 }}>
-              {loading ? (
-                <LoadingState />
-              ) : visibleOrders.length === 0 ? (
-                <EmptyState
-                  onReset={resetFilters}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 14 }}>
-                  {visibleOrders.map((order) => (
-                    <OrderRow
-                      key={order._id}
-                      order={order}
-                      onOpen={(next) => setActiveOrder(next)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            ) : null}
+            <IconButton
+              icon={searchOpen ? "close" : "search"}
+              active={searchOpen}
+              onClick={() => {
+                if (searchOpen && committedSearch) {
+                  setSearch("");
+                  setCommittedSearch("");
+                  setPage(1);
+                }
+                setSearchOpen((v) => !v);
+              }}
+              label={searchOpen ? "Close search" : "Search orders"}
+            />
+            <FilterMenu
+              options={filterOptions}
+              value={statusFilter}
+              onChange={changeStatusFilter}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onApplyDate={applyDateFilter}
+              onClearDate={clearDateFilter}
+            />
+            <PrimaryButton icon="plus" onClick={() => navigate("/dealer/catalog")}>New Order</PrimaryButton>
           </div>
         </div>
+
+        <div style={{ marginTop: 18 }}>
+          <OrderStatusTabs options={filterOptions} value={statusFilter} onChange={changeStatusFilter} />
+        </div>
+
+        {error ? (
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>{error}</div>
+        ) : null}
+      </Surface>
+
+      <div ref={resultsRef} style={{ scrollMarginTop: 16, display: "grid", gap: 16 }}>
+        {loading ? (
+          <Surface padding={18}>
+            <div style={{ height: 220, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
+          </Surface>
+        ) : visibleOrders.length === 0 ? (
+          <Surface padding={20}>
+            <EmptyState icon="orders" title="No orders found" subtitle="Try adjusting the search or status filters." />
+            <div style={{ marginTop: 4 }}>
+              <GhostButton onClick={resetFilters}>Clear filters</GhostButton>
+            </div>
+          </Surface>
+        ) : (
+          <>
+            <div className="dealer-order-timeline">
+              {groupedOrders.map((group) => (
+                <div key={group.key} className="dealer-order-timeline-day">
+                  <div className="dealer-order-timeline-day-header">
+                    <div className="dealer-order-timeline-day-label">
+                      {group.relativeLabel ? (
+                        <>
+                          <strong>{group.relativeLabel}</strong>
+                          <span className="dealer-order-timeline-day-sep">•</span>
+                          <span>{group.dateText}</span>
+                        </>
+                      ) : (
+                        <strong>{group.dateText}</strong>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 14 }}>
+                    {group.orders.map((order) => (
+                      <OrderTimelineRow key={order._id} order={order} onOpen={openOrder} productsMap={productsMap} familyMap={familyMap} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Pagination page={currentPage} totalPages={totalPages} totalCount={visibleOrders.length} pageSize={PAGE_SIZE} onChange={goToPage} />
+          </>
+        )}
       </div>
 
-      <OrderDetailModal
-        open={Boolean(activeOrderView)}
-        order={activeOrderView}
-        onClose={() => setActiveOrder(null)}
-      />
+      <OrderDetailStyles />
 
       <style>{`
-        .dealer-orders-page,
-        .dealer-orders-page *{
-          box-sizing:border-box;
-          min-width:0;
+        .dealer-order-filter-divider{ height:1px; margin:6px 4px; background:rgba(29,29,31,.08); }
+        .dealer-order-filter-date-title{ display:flex; align-items:center; gap:6px; padding:6px 10px 4px; font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--color-graphite, #707070); }
+        .dealer-order-filter-date-field{ display:grid; gap:4px; padding:4px 10px; }
+        .dealer-order-filter-date-field span{ font-size:10.5px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:var(--color-graphite, #707070); }
+        .dealer-order-filter-date-actions{ display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:10px 6px 4px; }
+
+        .dealer-order-tabs{ display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid rgba(29,29,31,.1); overflow-x:auto; scrollbar-width:none; }
+        .dealer-order-tabs::-webkit-scrollbar{ display:none; }
+        .dealer-order-tab{ min-width:max-content; display:flex; align-items:center; gap:10px; padding:12px 18px 15px; border:none; background:transparent; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+        .dealer-order-tab span:first-child{ font-size:13.5px; font-weight:650; color:var(--color-graphite, #707070); }
+        .dealer-order-tab-count{ display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:22px; padding:0 8px; border-radius:999px; font-size:11px; font-weight:750; background:rgba(29,29,31,.06); color:var(--color-graphite, #707070); }
+        .dealer-order-tab.is-active{ --tab-accent:var(--color-azure, #0071e3); border-bottom-color:var(--tab-accent); }
+        .dealer-order-tab[data-status="COMPLETED"].is-active{ --tab-accent:#2fb344; }
+        .dealer-order-tab.is-active span:first-child{ color:var(--tab-accent); font-weight:700; }
+        .dealer-order-tab.is-active .dealer-order-tab-count{ background:color-mix(in srgb, var(--tab-accent) 12%, transparent); color:var(--tab-accent); }
+
+        .dealer-order-timeline{ position:relative; display:grid; gap:26px; }
+        .dealer-order-timeline-day{ position:relative; display:grid; gap:14px; }
+        .dealer-order-timeline-day-header{ position:relative; display:grid; grid-template-columns:32px 1fr; align-items:center; column-gap:14px; }
+        .dealer-order-timeline-day-label{ grid-column:2; display:flex; align-items:center; font-size:12.5px; color:var(--color-graphite, #707070); white-space:nowrap; }
+        .dealer-order-timeline-day-label strong{ font-size:13px; font-weight:700; color:var(--color-ink, #1d1d1f); }
+        .dealer-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
+
+        .dealer-order-timeline-row{ position:relative; display:grid; grid-template-columns:32px 1fr; column-gap:14px; align-items:center; }
+        .dealer-order-marker{ position:relative; z-index:1; justify-self:center; width:24px; height:24px; border-radius:999px; display:grid; place-items:center; background:var(--marker-bg); color:var(--marker-color); border:2px solid #fff; box-shadow:0 0 0 1px rgba(29,29,31,.08); flex-shrink:0; }
+        .dealer-order-timeline-row.is-completed .dealer-order-marker{ background:#2fb344; color:#fff; }
+        .dealer-order-timeline-row.is-rejected .dealer-order-marker{ background:#b42318; color:#fff; }
+        .dealer-order-timeline-row.is-pending .dealer-order-marker{ background:#fff; border-color:var(--color-azure, #0071e3); color:var(--color-azure, #0071e3); box-shadow:0 0 0 1px rgba(0,113,227,.2); }
+
+        .dealer-order-card{ border-radius:16px; border:1px solid rgba(29,29,31,.08); background:#fff; padding:20px 22px; cursor:pointer; box-shadow:0 12px 32px rgba(29,29,31,.06); transition:box-shadow .18s ease, transform .16s ease, border-color .16s ease; }
+        .dealer-order-card:hover{ transform:translateY(-1px); box-shadow:0 16px 42px rgba(29,29,31,.09); border-color:rgba(0,113,227,.18); }
+        .dealer-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+        .dealer-order-number{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+        .dealer-order-amount{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
+        .dealer-order-meta{ margin-top:5px; font-size:12px; color:var(--color-graphite, #707070); }
+        .dealer-order-card-bottom{ margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+        .dealer-order-state-copy{ display:flex; align-items:center; gap:7px; flex-shrink:0; }
+
+        .dealer-order-page-btn{ min-width:32px; height:32px; padding:0 8px; border-radius:8px; border:none; background:transparent; font-size:12.5px; font-weight:700; color:var(--color-ink, #1d1d1f); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+        .dealer-order-page-btn:disabled{ opacity:.35; cursor:not-allowed; }
+        .dealer-order-page-btn.is-active{ background:var(--color-azure, #0071e3); color:#fff; }
+        .dealer-order-page-btn:not(.is-active):not(:disabled):hover{ background:rgba(29,29,31,.06); }
+
+        @media (max-width:760px){
+          .dealer-order-tab{ padding-left:10px; padding-right:10px; }
+          .dealer-order-card{ padding:16px; }
+          .dealer-order-card-top{ align-items:flex-start; }
+          .dealer-order-thumb{ width:46px; height:46px; }
         }
 
-        .dealer-order-table-wrap{
-          -webkit-overflow-scrolling:touch;
-        }
-
-        @media (max-width:900px){
-          .dealer-order-detail-grid{
-            grid-template-columns:1fr!important;
+        @media (max-width:560px){
+          .dealer-order-timeline-row,
+          .dealer-order-timeline-day-header{
+            grid-template-columns:24px 1fr;
+            column-gap:10px;
           }
-        }
-
-        @media (max-width:720px){
-          .dealer-orders-page{
-            padding-top:84px!important;
-            padding-bottom:36px!important;
-          }
-
-          .dealer-orders-page .container{
-            padding-left:14px;
-            padding-right:14px;
-          }
-
-          .dealer-orders-filter-grid{
-            grid-template-columns:1fr!important;
-          }
-
-          .dealer-orders-filter-pills{
-            overflow-x:auto;
-            flex-wrap:nowrap!important;
-            padding-bottom:4px;
-            -webkit-overflow-scrolling:touch;
-          }
-
-          .dealer-orders-filter-pills button{
-            flex:0 0 auto;
-          }
-
-          .dealer-order-row{
-            border-radius:18px!important;
-            padding:15px!important;
-          }
-
-          .dealer-order-row-grid{
-            grid-template-columns:1fr!important;
-          }
-
-          .dealer-order-count{
-            justify-self:start!important;
-            text-align:left!important;
-          }
-
-          .dealer-order-items-table{
-            min-width:0;
-          }
-
-          .dealer-order-items-table,
-          .dealer-order-items-table tbody,
-          .dealer-order-items-table tr,
-          .dealer-order-items-table td{
-            display:block;
-            width:100%!important;
-          }
-
-          .dealer-order-items-table thead{
-            display:none;
-          }
-
-          .dealer-order-items-table tr{
-            padding:12px;
-            border-top:1px solid rgba(15,23,42,.08)!important;
-          }
-
-          .dealer-order-items-table tr:first-child{
-            border-top:0!important;
-          }
-
-          .dealer-order-items-table td{
-            padding:8px 0!important;
-            text-align:left!important;
-            white-space:normal!important;
-          }
-
-          .dealer-order-items-table td::before{
-            display:block;
-            margin-bottom:4px;
-            font-size:10px;
-            font-weight:950;
-            letter-spacing:.08em;
-            text-transform:uppercase;
-            color:rgba(15,23,42,.44);
-          }
-
-          .dealer-order-items-table td:nth-child(1)::before{ content:"Item"; }
-          .dealer-order-items-table td:nth-child(2)::before{ content:"Pack"; }
-          .dealer-order-items-table td:nth-child(3)::before{ content:"Qty"; }
-          .dealer-order-items-table td:nth-child(4)::before{ content:"Rate"; }
-          .dealer-order-items-table td:nth-child(5)::before{ content:"Amount"; }
-
-          .dealer-order-table-wrap{
-            overflow-x:hidden!important;
-          }
-
-          .dealer-order-modal-overlay{
-            padding:12px!important;
-            align-items:stretch!important;
-            place-items:stretch!important;
-          }
-
-          .dealer-order-modal-overlay > div{
-            width:100%!important;
-            max-height:calc(100dvh - 24px)!important;
-            border-radius:20px!important;
-          }
-
-          .dealer-order-modal-body{
-            padding:16px!important;
-          }
-        }
-
-        @media (max-width:520px){
-          .dealer-orders-page h1,
-          .dealer-orders-page [style*="font-size: 28px"]{
-            font-size:24px!important;
-          }
-
-          .dealer-order-modal-body{
-            padding:14px!important;
-          }
+          .dealer-order-marker{ width:22px; height:22px; }
+          .dealer-order-card-top{ flex-direction:column; }
+          .dealer-order-card-bottom{ align-items:flex-start; }
+          .dealer-order-state-copy{ width:100%; justify-content:flex-start; }
         }
       `}</style>
-    </>
+    </div>
   );
 }

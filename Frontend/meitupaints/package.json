@@ -10,14 +10,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
     "@reduxjs/toolkit": "^2.11.2",
     "axios": "^1.18.0",
     "bootstrap": "^5.3.8",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
     "jspdf": "^4.2.1",
+    "jszip": "^3.10.1",
+    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-easy-crop": "^6.2.2",
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.9.5",
     "react-virtualized": "^9.22.6",

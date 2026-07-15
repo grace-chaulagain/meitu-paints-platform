@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigationType } from "react-router-dom";
 import NavBar from "../NavBar.jsx";
 import DashboardIcon from "./DashboardIcons.jsx";
 
@@ -7,30 +7,15 @@ function badgeText(value) {
   return value === null || value === undefined ? "" : String(value);
 }
 
-const DASHBOARD_RAIL_STORAGE_KEY = "meitu.dashboard.rail";
-const DEFAULT_RAIL_WIDTH = 286;
-const MIN_RAIL_WIDTH = 232;
-const MAX_RAIL_WIDTH = 430;
+const DEFAULT_RAIL_WIDTH = 248;
+const RAIL_COLLAPSE_KEY = "meitu_dashboard_rail_collapsed";
 
-function clampRailWidth(value) {
-  const width = Number(value || DEFAULT_RAIL_WIDTH);
-  return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, width));
-}
-
-function getInitialRailState() {
-  if (typeof window === "undefined") {
-    return { visible: true, width: DEFAULT_RAIL_WIDTH };
-  }
-
+function readStoredRailCollapsed() {
+  if (typeof window === "undefined") return false;
   try {
-    const raw = window.localStorage.getItem(DASHBOARD_RAIL_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return {
-      visible: parsed.visible !== false,
-      width: clampRailWidth(parsed.width),
-    };
+    return window.localStorage.getItem(RAIL_COLLAPSE_KEY) === "1";
   } catch {
-    return { visible: true, width: DEFAULT_RAIL_WIDTH };
+    return false;
   }
 }
 
@@ -48,15 +33,10 @@ function DashboardNavItem({ item, active, onNavigate, compact = false }) {
     >
       {iconName ? (
         <span className="dashboard-nav-icon">
-          <DashboardIcon name={iconName} size={compact ? 17 : 19} />
+          <DashboardIcon name={iconName} size={compact ? 17 : 16} strokeWidth={1.7} />
         </span>
       ) : null}
-      <span className="dashboard-nav-copy">
-        <span className="dashboard-nav-title">{item.title}</span>
-        {!compact && item.subtitle ? (
-          <span className="dashboard-nav-subtitle">{item.subtitle}</span>
-        ) : null}
-      </span>
+      <span className="dashboard-nav-title">{item.title}</span>
       {badge ? <span className="dashboard-nav-badge">{badge}</span> : null}
     </button>
   );
@@ -69,162 +49,117 @@ export default function DashboardShell({
   navGroups = [],
   activeKey = "",
   onNavigate,
-  priorityLabel = "Current Priority",
-  priorityText = "",
   children,
 }) {
   const allItems = navGroups.flatMap((group) => group.items || []);
   const location = useLocation();
+  const navigationType = useNavigationType();
   const mainRef = useRef(null);
-  const [railState, setRailState] = useState(getInitialRailState);
-  const railVisible = railState.visible;
-  const railWidth = clampRailWidth(railState.width);
+  // Remembers each pathname's last scroll offset within this browser session so
+  // that going "back" (e.g. from an order detail page to the orders list) restores
+  // the list exactly where the admin left it, instead of always jumping to top.
+  const scrollPositions = useRef(new Map());
+  const railWidth = DEFAULT_RAIL_WIDTH;
+  const [railCollapsed, setRailCollapsed] = useState(readStoredRailCollapsed);
 
-  useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  const toggleRail = useCallback(() => {
+    setRailCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(RAIL_COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore write failures (e.g. private browsing storage quota)
+      }
+      return next;
+    });
+  }, []);
+
+  const handleMainScroll = useCallback(() => {
+    if (mainRef.current) {
+      scrollPositions.current.set(location.pathname, mainRef.current.scrollTop);
+    }
   }, [location.pathname]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const node = mainRef.current;
+    if (!node) return;
 
-    try {
-      window.localStorage.setItem(
-        DASHBOARD_RAIL_STORAGE_KEY,
-        JSON.stringify({ visible: railVisible, width: railWidth }),
-      );
-    } catch {
-      // Dashboard preferences are nice-to-have; storage failures should not block navigation.
+    if (navigationType === "POP" && scrollPositions.current.has(location.pathname)) {
+      node.scrollTo({ top: scrollPositions.current.get(location.pathname), left: 0, behavior: "auto" });
+    } else if (navigationType !== "POP") {
+      node.scrollTo({ top: 0, left: 0, behavior: "auto" });
     }
-  }, [railVisible, railWidth]);
-
-  function setRailVisible(visible) {
-    setRailState((current) => ({ ...current, visible }));
-  }
-
-  function setRailWidth(width) {
-    setRailState((current) => ({ ...current, width: clampRailWidth(width) }));
-  }
-
-  function nudgeRailWidth(amount) {
-    setRailState((current) => ({
-      ...current,
-      width: clampRailWidth(Number(current.width || DEFAULT_RAIL_WIDTH) + amount),
-    }));
-  }
-
-  function startRailResize(event) {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = railWidth;
-
-    function handleMove(moveEvent) {
-      setRailWidth(startWidth + moveEvent.clientX - startX);
-    }
-
-    function handleUp() {
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
-  }
+  }, [location.pathname, navigationType]);
 
   return (
     <>
       <NavBar />
 
       <div
-        className={`dashboard-shell ${railVisible ? "" : "rail-hidden"}`}
+        className={`dashboard-shell ${railCollapsed ? "rail-collapsed" : ""}`}
         style={{ "--dashboard-rail-width": `${railWidth}px` }}
       >
-        {railVisible ? (
-          <aside className="dashboard-rail" aria-label={`${title} navigation`}>
-            <div className="dashboard-rail-inner">
-              <div className="dashboard-rail-head">
-                <div className="dashboard-rail-topline">
-                  <div className="dashboard-eyebrow">{eyebrow}</div>
-                  <button
-                    type="button"
-                    className="dashboard-rail-hide-btn"
-                    onClick={() => setRailVisible(false)}
-                    aria-label="Hide sidebar"
-                  >
-                    <DashboardIcon name="chevron" size={16} className="dashboard-chevron-left" />
-                  </button>
-                </div>
+        <aside className="dashboard-rail" aria-label={`${title} navigation`} aria-hidden={railCollapsed}>
+          <div className="dashboard-rail-inner">
+            <div className="dashboard-rail-head">
+              <div className="dashboard-rail-identity">
                 <div className="dashboard-rail-title">{title}</div>
-                {accountLabel ? (
-                  <div className="dashboard-account">{accountLabel}</div>
-                ) : null}
+                <div className="dashboard-eyebrow">{eyebrow}</div>
               </div>
-
-              <nav className="dashboard-nav" aria-label="Dashboard sections">
-                {navGroups.map((group) => (
-                  <div className="dashboard-nav-group" key={group.label}>
-                    {group.label ? (
-                      <div className="dashboard-nav-group-label">
-                        {group.label}
-                      </div>
-                    ) : null}
-                    <div className="dashboard-nav-items">
-                      {(group.items || []).map((item) => (
-                        <DashboardNavItem
-                          key={item.key}
-                          item={item}
-                          active={activeKey === item.key}
-                          onNavigate={onNavigate}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </nav>
-
-              {priorityText ? (
-                <div className="dashboard-rail-note">
-                  <div className="dashboard-rail-note-label">{priorityLabel}</div>
-                  <div className="dashboard-rail-note-text">{priorityText}</div>
-                </div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              className="dashboard-rail-resizer"
-              onPointerDown={startRailResize}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") {
-                  event.preventDefault();
-                  nudgeRailWidth(-12);
-                }
-                if (event.key === "ArrowRight") {
-                  event.preventDefault();
-                  nudgeRailWidth(12);
-                }
-              }}
-              aria-label="Resize sidebar"
-              aria-orientation="vertical"
-            />
-          </aside>
-        ) : null}
-
-        <section className="dashboard-main-shell" ref={mainRef}>
-          {!railVisible ? (
-            <div className="dashboard-sidebar-return">
               <button
                 type="button"
-                onClick={() => setRailVisible(true)}
-                aria-label="Show sidebar"
+                className="dashboard-rail-toggle"
+                onClick={toggleRail}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                tabIndex={railCollapsed ? -1 : 0}
               >
-                <DashboardIcon name="chevron" size={17} />
+                <DashboardIcon name="chevron" size={13} strokeWidth={2.1} style={{ transform: "rotate(180deg)" }} />
               </button>
             </div>
-          ) : null}
 
+            <nav className="dashboard-nav" aria-label="Dashboard sections">
+              {navGroups.map((group) => (
+                <div className="dashboard-nav-group" key={group.label}>
+                  {group.label ? (
+                    <div className="dashboard-nav-group-label">
+                      {group.label}
+                    </div>
+                  ) : null}
+                  <div className="dashboard-nav-items">
+                    {(group.items || []).map((item) => (
+                      <DashboardNavItem
+                        key={item.key}
+                        item={item}
+                        active={activeKey === item.key}
+                        onNavigate={onNavigate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+
+            {accountLabel ? (
+              <div className="dashboard-account" title={accountLabel}>
+                {accountLabel}
+              </div>
+            ) : null}
+          </div>
+        </aside>
+
+        <button
+          type="button"
+          className="dashboard-rail-reveal"
+          onClick={toggleRail}
+          aria-label="Show sidebar"
+          title="Show sidebar"
+          tabIndex={railCollapsed ? 0 : -1}
+        >
+          <DashboardIcon name="chevron" size={13} strokeWidth={2.1} />
+        </button>
+
+        <section className="dashboard-main-shell" ref={mainRef} onScroll={handleMainScroll}>
           <div className="dashboard-mobile-head">
             <div>
               <div className="dashboard-eyebrow">{eyebrow}</div>
@@ -254,149 +189,185 @@ export default function DashboardShell({
       <style>{`
         .dashboard-shell{
           --dashboard-nav-height:70px;
-          --dashboard-rail-width:286px;
+          --dashboard-rail-width:248px;
+          position:relative;
           height:calc(100dvh - var(--dashboard-nav-height));
           min-height:0;
-          display:grid;
-          grid-template-columns:var(--dashboard-rail-width) minmax(0,1fr);
+          display:flex;
+          align-items:stretch;
           overflow:hidden;
           background:
-            linear-gradient(180deg, rgba(250,250,252,1) 0%, rgba(246,247,249,1) 100%);
-          color:#0f172a;
-        }
-
-        .dashboard-shell.rail-hidden{
-          grid-template-columns:minmax(0,1fr);
+            radial-gradient(circle at 72% 6%, rgba(0,113,227,.08), transparent 28%),
+            linear-gradient(180deg, #ffffff 0%, var(--color-fog,#f5f5f7) 42%, var(--color-fog,#f5f5f7) 100%);
+          color:var(--color-ink,#1d1d1f);
+          font-family:var(--font-sf-pro-text, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
         }
 
         .dashboard-rail{
           position:relative;
+          flex:0 0 var(--dashboard-rail-width);
+          width:var(--dashboard-rail-width);
           height:100%;
           min-height:0;
           overflow:hidden;
-          border-right:1px solid rgba(15,23,42,.09);
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.92) 0%, rgba(248,250,252,.94) 100%);
+          border-right:1px solid rgba(29,29,31,.08);
+          background:rgba(255,255,255,.74);
+          backdrop-filter:blur(24px);
+          -webkit-backdrop-filter:blur(24px);
+          transition:flex-basis .42s cubic-bezier(.32,.72,0,1), width .42s cubic-bezier(.32,.72,0,1), opacity .3s ease, border-color .3s ease;
         }
 
-        .dashboard-rail-resizer{
-          position:absolute;
-          top:0;
-          right:0;
-          width:10px;
-          height:100%;
-          border:0;
-          border-radius:0;
-          background:transparent;
-          cursor:col-resize;
-          z-index:5;
-        }
-
-        .dashboard-rail-resizer::after{
-          content:"";
-          position:absolute;
-          top:50%;
-          right:3px;
-          width:3px;
-          height:42px;
-          border-radius:999px;
-          transform:translateY(-50%);
-          background:rgba(15,23,42,.12);
+        .dashboard-shell.rail-collapsed .dashboard-rail{
+          flex-basis:0;
+          width:0;
           opacity:0;
-          transition:opacity .16s ease, background .16s ease;
-        }
-
-        .dashboard-rail:hover .dashboard-rail-resizer::after,
-        .dashboard-rail-resizer:focus-visible::after{
-          opacity:1;
-        }
-
-        .dashboard-rail-resizer:focus-visible{
-          outline:2px solid rgba(180,35,24,.28);
-          outline-offset:-2px;
+          border-right-color:transparent;
         }
 
         .dashboard-rail-inner{
+          width:var(--dashboard-rail-width);
+          flex:0 0 auto;
           height:100%;
           min-height:0;
           display:flex;
           flex-direction:column;
-          padding:10px 16px 16px 22px;
+          padding:18px 12px 14px;
           overflow:hidden;
         }
 
         .dashboard-rail-head{
+          flex:0 0 auto;
           display:flex;
-          flex-direction:column;
-          justify-content:flex-start;
-          padding:0 10px 14px;
-          border-bottom:1px solid rgba(15,23,42,.08);
-        }
-
-        .dashboard-rail-topline{
-          display:flex;
-          align-items:center;
+          align-items:flex-start;
           justify-content:space-between;
-          gap:10px;
+          gap:6px;
+          padding:4px 8px 18px;
         }
 
-        .dashboard-rail-hide-btn{
-          width:30px;
-          height:30px;
-          border:1px solid rgba(15,23,42,.08);
-          border-radius:10px;
-          background:#fff;
-          color:rgba(15,23,42,.58);
-          padding:0;
+        .dashboard-rail-toggle{
+          flex:0 0 auto;
+          width:26px;
+          height:26px;
+          margin-top:2px;
+          border:0;
+          border-radius:999px;
           display:inline-flex;
           align-items:center;
           justify-content:center;
+          color:rgba(0,0,0,.42);
+          background:rgba(29,29,31,.045);
           cursor:pointer;
+          transition:background .16s ease, color .16s ease, transform .16s ease;
         }
 
-        .dashboard-chevron-left{
-          transform:rotate(180deg);
+        .dashboard-rail-toggle:hover{
+          background:rgba(29,29,31,.09);
+          color:var(--color-ink,#1d1d1f);
+          transform:scale(1.05);
         }
 
-        .dashboard-rail-hide-btn:hover{
-          color:#b42318;
-          border-color:rgba(180,35,24,.18);
-          background:rgba(180,35,24,.04);
+        .dashboard-rail-toggle:active{
+          transform:scale(.92);
+        }
+
+        .dashboard-rail-reveal{
+          position:absolute;
+          top:18px;
+          left:14px;
+          z-index:40;
+          width:30px;
+          height:30px;
+          border:1px solid rgba(29,29,31,.08);
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          color:rgba(0,0,0,.5);
+          background:rgba(255,255,255,.86);
+          backdrop-filter:blur(16px);
+          -webkit-backdrop-filter:blur(16px);
+          box-shadow:0 6px 18px rgba(15,23,42,.1);
+          cursor:pointer;
+          opacity:0;
+          transform:translateX(-8px) scale(.88);
+          pointer-events:none;
+          transition:opacity .3s ease, transform .38s cubic-bezier(.32,.72,0,1), background .16s ease, color .16s ease;
+        }
+
+        .dashboard-rail-reveal:hover{
+          color:var(--color-ink,#1d1d1f);
+          background:#fff;
+        }
+
+        .dashboard-shell.rail-collapsed .dashboard-rail-reveal{
+          opacity:1;
+          transform:translateX(0) scale(1);
+          pointer-events:auto;
+          transition-delay:.1s;
+        }
+
+        .dashboard-shell.rail-collapsed .dashboard-rail-reveal:active{
+          transform:translateX(0) scale(.88);
+        }
+
+        .dashboard-rail-identity{
+          min-width:0;
         }
 
         .dashboard-eyebrow{
-          font-size:11px;
-          font-weight:950;
-          letter-spacing:.1em;
+          margin-top:2px;
+          font-size:10.5px;
+          line-height:1.3;
+          font-weight:700;
+          letter-spacing:.08em;
           text-transform:uppercase;
-          color:rgba(15,23,42,.44);
+          color:rgba(0,0,0,.4);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
         }
 
-        .dashboard-rail-title,
+        .dashboard-rail-title{
+          font-size:17px;
+          line-height:1.18;
+          font-weight:800;
+          letter-spacing:-.03em;
+          color:var(--color-ink,#1d1d1f);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+
         .dashboard-mobile-title{
           margin-top:8px;
-          font-size:22px;
+          font-size:24px;
           line-height:1.1;
-          font-weight:950;
+          font-weight:800;
           letter-spacing:-.03em;
-          color:#0f172a;
+          color:var(--color-ink,#1d1d1f);
         }
 
         .dashboard-account{
-          margin-top:7px;
-          font-size:12px;
-          line-height:1.45;
-          font-weight:750;
-          color:rgba(15,23,42,.58);
-          word-break:break-word;
+          flex:0 0 auto;
+          margin-top:12px;
+          padding:12px 10px 3px;
+          border-top:1px solid rgba(29,29,31,.08);
+          font-size:11.5px;
+          line-height:1.4;
+          font-weight:500;
+          color:rgba(0,0,0,.4);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
         }
 
         .dashboard-nav{
           flex:1 1 auto;
           min-height:0;
-          padding:14px 0;
+          padding:2px 0;
           display:grid;
-          gap:22px;
+          align-content:start;
+          gap:20px;
           overflow-y:auto;
           overscroll-behavior:contain;
           scrollbar-width:none;
@@ -409,148 +380,113 @@ export default function DashboardShell({
 
         .dashboard-nav-group{
           display:grid;
-          gap:8px;
+          align-content:start;
+          gap:2px;
         }
 
         .dashboard-nav-group-label{
-          padding:0 10px;
-          font-size:11px;
-          font-weight:950;
+          padding:0 10px 7px;
+          font-size:10.5px;
+          font-weight:800;
           letter-spacing:.08em;
           text-transform:uppercase;
-          color:rgba(15,23,42,.42);
+          color:rgba(0,0,0,.38);
         }
 
         .dashboard-nav-items{
           display:grid;
-          gap:2px;
+          align-content:start;
+          gap:3px;
         }
 
         .dashboard-nav-item{
           width:100%;
-          min-height:50px;
+          min-height:38px;
           border:0;
-          border-left:3px solid transparent;
-          border-radius:0 12px 12px 0;
+          border-radius:14px;
           background:transparent;
-          color:#0f172a;
+          color:var(--color-ink,#1d1d1f);
           display:grid;
           grid-template-columns:minmax(0,1fr) auto;
           align-items:center;
-          gap:10px;
-          padding:9px 10px 9px 12px;
+          gap:9px;
+          padding:8px 10px;
           text-align:left;
           cursor:pointer;
-          transition:background .16s ease, color .16s ease, border-color .16s ease;
+          transition:background .16s ease, color .16s ease, transform .16s ease;
         }
 
         .dashboard-nav-item.has-icon{
-          grid-template-columns:22px minmax(0,1fr) auto;
-          padding-left:10px;
+          grid-template-columns:24px minmax(0,1fr) auto;
         }
 
         .dashboard-nav-icon{
-          width:22px;
-          height:22px;
-          border-radius:8px;
+          width:24px;
+          height:24px;
+          border-radius:999px;
           display:inline-flex;
           align-items:center;
           justify-content:center;
-          color:rgba(15,23,42,.54);
+          color:rgba(0,0,0,.5);
+          background:rgba(29,29,31,.045);
+          transition:background .16s ease, color .16s ease;
         }
 
         .dashboard-nav-item.active .dashboard-nav-icon{
-          color:#b42318;
-          background:rgba(180,35,24,.08);
+          color:var(--color-azure,#0071e3);
+          background:rgba(0,113,227,.1);
         }
 
         .dashboard-nav-item:hover{
-          background:rgba(15,23,42,.045);
+          background:rgba(29,29,31,.045);
+          transform:translateX(1px);
         }
 
         .dashboard-nav-item.active{
-          border-left-color:#b42318;
-          background:rgba(180,35,24,.075);
-          color:#b42318;
+          background:rgba(0,113,227,.1);
+          color:var(--color-azure,#0071e3);
         }
 
-        .dashboard-nav-copy{
-          min-width:0;
-          display:grid;
-          gap:3px;
+        .dashboard-nav-item.active:hover{
+          background:rgba(0,113,227,.16);
         }
 
         .dashboard-nav-title{
           min-width:0;
-          font-size:14px;
-          line-height:1.2;
-          font-weight:900;
+          font-size:13.5px;
+          line-height:1.3;
+          font-weight:600;
           letter-spacing:-.01em;
           overflow:hidden;
           text-overflow:ellipsis;
           white-space:nowrap;
         }
 
-        .dashboard-nav-subtitle{
-          min-width:0;
-          font-size:12px;
-          line-height:1.25;
-          font-weight:700;
-          color:rgba(15,23,42,.53);
-          overflow:hidden;
-          text-overflow:ellipsis;
-          white-space:nowrap;
-        }
-
-        .dashboard-nav-item.active .dashboard-nav-subtitle{
-          color:rgba(180,35,24,.68);
+        .dashboard-nav-item.active .dashboard-nav-title{
+          font-weight:600;
         }
 
         .dashboard-nav-badge{
-          min-width:28px;
-          height:22px;
-          padding:0 8px;
+          min-width:18px;
+          height:18px;
+          padding:0 6px;
           border-radius:999px;
-          background:rgba(15,23,42,.07);
-          color:rgba(15,23,42,.68);
+          background:rgba(29,29,31,.07);
+          color:rgba(0,0,0,.5);
           display:inline-flex;
           align-items:center;
           justify-content:center;
           font-size:10px;
-          font-weight:950;
-          letter-spacing:.03em;
-          text-transform:uppercase;
+          font-weight:600;
         }
 
         .dashboard-nav-item.active .dashboard-nav-badge{
-          background:rgba(180,35,24,.12);
-          color:#b42318;
-        }
-
-        .dashboard-rail-note{
-          flex:0 0 auto;
-          margin-top:auto;
-          padding:12px 10px 0;
-          border-top:1px solid rgba(15,23,42,.08);
-        }
-
-        .dashboard-rail-note-label{
-          font-size:11px;
-          font-weight:950;
-          letter-spacing:.08em;
-          text-transform:uppercase;
-          color:rgba(15,23,42,.42);
-        }
-
-        .dashboard-rail-note-text{
-          margin-top:8px;
-          font-size:12px;
-          line-height:1.65;
-          font-weight:700;
-          color:rgba(15,23,42,.58);
+          background:rgba(0,113,227,.16);
+          color:var(--color-azure,#0071e3);
         }
 
         .dashboard-main-shell{
+          flex:1 1 auto;
           min-width:0;
           min-height:0;
           height:100%;
@@ -558,45 +494,30 @@ export default function DashboardShell({
           overflow-x:hidden;
           overscroll-behavior:contain;
           scrollbar-gutter:stable;
-          padding:24px 32px 48px;
-        }
-
-        .dashboard-sidebar-return{
-          position:sticky;
-          top:0;
-          z-index:25;
-          margin:-8px 0 14px;
-          display:flex;
-          justify-content:flex-start;
-          pointer-events:none;
-        }
-
-        .dashboard-sidebar-return button{
-          width:38px;
-          height:38px;
-          border:1px solid rgba(15,23,42,.08);
-          border-radius:13px;
-          background:rgba(255,255,255,.94);
-          color:#0f172a;
-          padding:0;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          cursor:pointer;
-          pointer-events:auto;
-          box-shadow:0 10px 28px rgba(15,23,42,.08);
-          backdrop-filter:blur(16px);
-          -webkit-backdrop-filter:blur(16px);
-        }
-
-        .dashboard-sidebar-return button:hover{
-          color:#b42318;
-          border-color:rgba(180,35,24,.18);
+          padding:28px 34px 52px;
         }
 
         .dashboard-content{
-          width:min(100%, 1420px);
+          width:min(100%, 1480px);
           min-width:0;
+          /* fill-mode is "backwards" (not "both") on purpose: retaining the
+             final keyframe's transform after the animation ends would make
+             this the CSS containing block for any descendant position:fixed
+             modal, positioning it relative to this (page-content-height-tall)
+             box instead of the viewport. "backwards" avoids an initial flash
+             without leaving a stray transform behind once the animation completes. */
+          animation:dashboardContentIn .34s cubic-bezier(.2,.7,.3,1) backwards;
+        }
+
+        @keyframes dashboardContentIn{
+          from{ opacity:0; transform:translateY(7px); }
+          to{ opacity:1; transform:translateY(0); }
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          .dashboard-content{ animation:none; }
+          .dashboard-rail,
+          .dashboard-rail-reveal{ transition:none; }
         }
 
         .dashboard-content,
@@ -633,6 +554,10 @@ export default function DashboardShell({
             display:none;
           }
 
+          .dashboard-rail-reveal{
+            display:none;
+          }
+
           .dashboard-sidebar-return{
             display:none;
           }
@@ -647,8 +572,8 @@ export default function DashboardShell({
             justify-content:space-between;
             align-items:flex-end;
             gap:16px;
-            padding:2px 0 14px;
-            border-bottom:1px solid rgba(15,23,42,.08);
+            padding:4px 0 14px;
+            border-bottom:1px solid rgba(29,29,31,.08);
           }
 
           .dashboard-mobile-nav{
@@ -660,10 +585,10 @@ export default function DashboardShell({
             display:flex;
             gap:8px;
             overflow-x:auto;
-            border-bottom:1px solid rgba(15,23,42,.08);
-            background:rgba(248,250,252,.94);
-            backdrop-filter:blur(16px);
-            -webkit-backdrop-filter:blur(16px);
+            border-bottom:1px solid rgba(29,29,31,.08);
+            background:rgba(255,255,255,.82);
+            backdrop-filter:blur(22px);
+            -webkit-backdrop-filter:blur(22px);
           }
 
           .dashboard-nav-item.compact{
@@ -674,8 +599,8 @@ export default function DashboardShell({
             border-left:0;
             border-radius:999px;
             padding:8px 12px;
-            border:1px solid rgba(15,23,42,.08);
-            background:#fff;
+            border:1px solid rgba(29,29,31,.08);
+            background:rgba(255,255,255,.9);
           }
 
           .dashboard-nav-item.compact.has-icon{
@@ -690,8 +615,8 @@ export default function DashboardShell({
           }
 
           .dashboard-nav-item.compact.active{
-            border-color:rgba(180,35,24,.18);
-            background:rgba(180,35,24,.08);
+            border-color:rgba(0,113,227,.22);
+            background:rgba(0,113,227,.08);
           }
 
           .dashboard-nav-item.compact .dashboard-nav-title{

@@ -32,6 +32,118 @@ const PRODUCT_MENU_ITEMS = [
   },
 ];
 
+function NavAccountIcon({ name, size = 18 }) {
+  if (name === "bag") {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+      </svg>
+    );
+  }
+
+  const paths = {
+    user: (
+      <>
+        <circle cx="12" cy="8" r="3.4" />
+        <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+      </>
+    ),
+    dashboard: (
+      <>
+        <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+        <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+        <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      </>
+    ),
+    catalog: (
+      <>
+        <path d="M4.5 7.5 12 3.5l7.5 4-7.5 4-7.5-4Z" />
+        <path d="M4.5 7.5v8.7l7.5 4.3 7.5-4.3V7.5" />
+        <path d="M12 11.5v9" />
+      </>
+    ),
+    orders: (
+      <>
+        <path d="M5 5h14v10l-2.8 4H7.8L5 15V5Z" />
+        <path d="M5 15h4.2l1.4 2h2.8l1.4-2H19" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 6.8-2.5 8h17c0-1.2-2.5-2-2.5-8Z" />
+        <path d="M10 20.5h4" />
+      </>
+    ),
+    document: (
+      <>
+        <path d="M7 3h7l4 4v14H7V3Z" />
+        <path d="M14 3v5h4" />
+        <path d="M9.5 12h5" />
+        <path d="M9.5 16h4" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 5H6v14h4" />
+        <path d="M14 8l4 4-4 4" />
+        <path d="M18 12H9" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {paths[name] || paths.user}
+    </svg>
+  );
+}
+
+function NavRightArrowIcon({ size = 16 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M5 12h13"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="m13 6 6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,7 +184,6 @@ function NavBar() {
   const unreadBadge = formatBadgeCount(notifications?.totalUnread || 0);
 
   const [scrolled, setScrolled] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -83,31 +194,35 @@ function NavBar() {
   const navAuthRef = useRef(null);
   const desktopWidthRef = useRef(0);
   const profileWrapRef = useRef(null);
+  const accountPanelRef = useRef(null);
 
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const searchWrapRef = useRef(null);
+  const searchPanelRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
 
     const onClickOutside = (e) => {
-      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+      const clickedSearchTrigger = searchWrapRef.current?.contains(e.target);
+      const clickedSearchPanel = searchPanelRef.current?.contains(e.target);
+
+      if (!clickedSearchTrigger && !clickedSearchPanel) {
         setSearchOpen(false);
         setActiveIndex(-1);
       }
 
       if (
-        profileWrapRef.current &&
-        !profileWrapRef.current.contains(e.target)
+        !profileWrapRef.current?.contains(e.target) &&
+        !accountPanelRef.current?.contains(e.target)
       ) {
         setProfileMenuOpen(false);
       }
 
-      setDropdownOpen(false);
       setMobileOpen(false);
     };
 
@@ -131,6 +246,16 @@ function NavBar() {
   }, []);
 
   useEffect(() => {
+    if (!searchOpen) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [searchOpen]);
+
+  useEffect(() => {
     const shell = navShellRef.current;
     if (!shell || typeof window === "undefined") return undefined;
 
@@ -148,7 +273,7 @@ function NavBar() {
         navCenterRef.current?.getBoundingClientRect().width ||
         0;
       const authWidth = navAuthRef.current?.getBoundingClientRect().width || 0;
-      const preferredSearchWidth = 220;
+      const preferredSearchWidth = 44;
       const desktopItemCount = 4;
       const measuredDesktopWidth =
         horizontalPadding +
@@ -192,10 +317,6 @@ function NavBar() {
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const productsActive = PRODUCT_MENU_ITEMS.some((item) =>
-    isActive(item.href),
-  );
-
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -233,6 +354,35 @@ function NavBar() {
     setActiveIndex(-1);
     setQuery("");
     navigate(item.route);
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setActiveIndex(-1);
+  };
+
+  const openSearch = () => {
+    setMobileOpen(false);
+    setProfileMenuOpen(false);
+    setSearchOpen(true);
+  };
+
+  const toggleAccountPanel = () => {
+    setMobileOpen(false);
+    setSearchOpen(false);
+    setActiveIndex(-1);
+    setProfileMenuOpen((v) => !v);
+  };
+
+  const closeAccountPanel = () => {
+    setProfileMenuOpen(false);
+  };
+
+  const closeMobilePanel = () => {
+    setMobileOpen(false);
+    setSearchOpen(false);
+    setProfileMenuOpen(false);
+    setActiveIndex(-1);
   };
 
   const onSearchKeyDown = (e) => {
@@ -279,133 +429,127 @@ function NavBar() {
     }
   };
 
-  const renderProfileMenu = () => (
-    <div className="account-menu" role="menu" aria-label="Account menu">
-      <div className="account-menu-head">
-        <div className="account-avatar-large">{account.initial}</div>
+  const accountMenuItems = useMemo(() => {
+    if (!user) {
+      return [
+        {
+          label: "Sign in",
+          description: "Access dealer, admin, dispatcher, or factory tools",
+          href: "/login",
+          icon: "user",
+        },
+        {
+          label: "Become a dealer",
+          description: "Apply for a Meitu dealership",
+          href: "/dealership",
+          icon: "document",
+        },
+        {
+          label: "Browse catalog",
+          description: "Explore buckets, colors, and textures",
+          href: "/products",
+          icon: "catalog",
+        },
+      ];
+    }
 
-        <div className="account-identity">
-          <div className="account-name">{account.username}</div>
-          <div className="account-email">{account.email}</div>
-        </div>
-      </div>
+    const role = account.role;
+    const items = [
+      {
+        label: "Profile",
+        description: account.email,
+        href: profileHref,
+        icon: "user",
+      },
+    ];
 
-      <div className="account-role-badge">{account.role}</div>
+    if (role === "ADMIN") {
+      items.push(
+        {
+          label: "Dashboard",
+          description: "Admin operations workspace",
+          href: dashboardHref,
+          icon: "dashboard",
+        },
+        {
+          label: "Catalog",
+          description: "Products, families, pricing, and media",
+          href: adminCatalogHref,
+          icon: "catalog",
+        },
+      );
+    }
 
-      <div className="account-actions">
-        <Link
-          to={profileHref}
-          className="account-link-btn"
-          role="menuitem"
-          onClick={() => setProfileMenuOpen(false)}
-        >
-          View Profile
-        </Link>
+    if (role === "DEALER") {
+      items.push(
+        {
+          label: "Catalog",
+          description: "Build a dealer order",
+          href: dealerCatalogHref,
+          icon: "catalog",
+        },
+        {
+          label: "Orders",
+          description: "Review order history",
+          href: dealerOrdersHref,
+          icon: "orders",
+        },
+      );
+    }
 
-        {account.role === "ADMIN" ? (
-          <>
-            <Link
-              to={dashboardHref}
-              className="account-link-btn"
-              role="menuitem"
-              onClick={() => setProfileMenuOpen(false)}
-            >
-              <span>Dashboard</span>
-              {unreadBadge ? (
-                <span className="account-menu-badge">{unreadBadge}</span>
-              ) : null}
-            </Link>
+    if (role === "DISPATCHER") {
+      items.push({
+        label: "Dashboard",
+        description: "Dispatcher routes and orders",
+        href: dispatcherDashboardHref,
+        icon: "dashboard",
+      });
+    }
 
-            <Link
-              to={adminCatalogHref}
-              className="account-link-btn"
-              role="menuitem"
-              onClick={() => setProfileMenuOpen(false)}
-            >
-              Catalog
-            </Link>
-          </>
-        ) : null}
+    if (role === "FACTORY") {
+      items.push({
+        label: "Dashboard",
+        description: "Factory orders, stock, and invoices",
+        href: factoryDashboardHref,
+        icon: "dashboard",
+      });
+    }
 
-        {account.role === "DEALER" ? (
-          <>
-            <Link
-              to={dealerCatalogHref}
-              className="account-link-btn"
-              role="menuitem"
-              onClick={() => setProfileMenuOpen(false)}
-            >
-              Order
-            </Link>
+    if (notifications?.enabled) {
+      items.push({
+        label: "Notifications",
+        description: unreadBadge ? `${unreadBadge} unread` : "No unread notifications",
+        href: notificationsHref,
+        icon: "bell",
+        badge: unreadBadge,
+      });
+    }
 
-            <Link
-              to={dealerOrdersHref}
-              className="account-link-btn"
-              role="menuitem"
-              onClick={() => setProfileMenuOpen(false)}
-            >
-              History
-            </Link>
-          </>
-        ) : null}
+    return items;
+  }, [
+    account.email,
+    account.role,
+    adminCatalogHref,
+    dashboardHref,
+    dealerCatalogHref,
+    dealerOrdersHref,
+    dispatcherDashboardHref,
+    factoryDashboardHref,
+    notifications?.enabled,
+    notificationsHref,
+    profileHref,
+    unreadBadge,
+    user,
+  ]);
 
-        {account.role === "DISPATCHER" ? (
-          <Link
-            to={dispatcherDashboardHref}
-            className="account-link-btn"
-            role="menuitem"
-            onClick={() => setProfileMenuOpen(false)}
-          >
-            <span>Dashboard</span>
-            {unreadBadge ? (
-              <span className="account-menu-badge">{unreadBadge}</span>
-            ) : null}
-          </Link>
-        ) : null}
-
-        {account.role === "FACTORY" ? (
-          <Link
-            to={factoryDashboardHref}
-            className="account-link-btn"
-            role="menuitem"
-            onClick={() => setProfileMenuOpen(false)}
-          >
-            Factory Dashboard
-          </Link>
-        ) : null}
-
-        {notifications?.enabled ? (
-          <Link
-            to={notificationsHref}
-            className="account-link-btn"
-            role="menuitem"
-            onClick={() => setProfileMenuOpen(false)}
-          >
-            <span>Notifications</span>
-            {unreadBadge ? (
-              <span className="account-menu-badge">{unreadBadge}</span>
-            ) : null}
-          </Link>
-        ) : null}
-
-        <button
-          type="button"
-          className="account-logout-btn"
-          role="menuitem"
-          onClick={handleLogout}
-        >
-          Log out
-        </button>
-      </div>
-    </div>
-  );
+  const mobilePanelOpen = mobileOpen || searchOpen || profileMenuOpen;
 
   return (
     <>
       <nav
         className={`apple-nav ${scrolled ? "scrolled" : ""} ${
           navCollapsed ? "collapsed" : ""
-        }`}
+        } ${mobilePanelOpen ? "mobile-panel-active" : ""}`}
       >
         <div className="nav-shell" ref={navShellRef}>
           <Link to="/" className="brand" ref={brandRef}>
@@ -415,10 +559,6 @@ function NavBar() {
               width="50"
               height="50"
             />
-            <div className="brand-text">
-              <span className="brand-main">MEITU</span>
-              <span className="brand-sub">PAINTS</span>
-            </div>
           </Link>
 
           <div className="nav-center" ref={navCenterRef}>
@@ -429,47 +569,15 @@ function NavBar() {
               Home
             </Link>
 
-            <div
-              className={`nav-item dropdown ${dropdownOpen ? "open" : ""}`}
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={() => setDropdownOpen(true)}
-              onMouseLeave={() => setDropdownOpen(false)}
-              onFocus={() => setDropdownOpen(true)}
-            >
-              <button
-                type="button"
-                className={`products-menu-button ${
-                  productsActive ? "active" : ""
-                }`}
-                aria-haspopup="true"
-                aria-expanded={dropdownOpen}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDropdownOpen((v) => !v);
-                }}
+            {PRODUCT_MENU_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                className={`nav-item ${isActive(item.href) ? "active" : ""}`}
+                to={item.href}
               >
-                Products
-                <span aria-hidden="true">⌄</span>
-              </button>
-              <div className="dropdown-panel">
-                <div className="dropdown-grid">
-                  {PRODUCT_MENU_ITEMS.map((item) => (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      className="dropdown-card"
-                      onClick={() => setDropdownOpen(false)}
-                    >
-                      <span className="dropdown-card-mark" aria-hidden="true" />
-                      <span className="dropdown-card-copy">
-                        <span>{item.label}</span>
-                        <small>{item.description}</small>
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
+                {item.label}
+              </Link>
+            ))}
 
             <Link
               className={`nav-item ${
@@ -478,6 +586,13 @@ function NavBar() {
               to="/ratecalculator"
             >
               Rate Calculator
+            </Link>
+
+            <Link
+              className={`nav-item ${isActive("/horoscope") ? "active" : ""}`}
+              to="/horoscope"
+            >
+              Horoscope
             </Link>
 
             <Link
@@ -507,6 +622,9 @@ function NavBar() {
             aria-label="Toggle navigation"
             onClick={(e) => {
               e.stopPropagation();
+              setSearchOpen(false);
+              setProfileMenuOpen(false);
+              setActiveIndex(-1);
               setMobileOpen((v) => !v);
             }}
           >
@@ -519,64 +637,35 @@ function NavBar() {
             ref={searchWrapRef}
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="search-icon">⌕</span>
-            <input
-              ref={inputRef}
-              type="search"
-              placeholder="Search products"
-              value={query}
-              onChange={(e) => {
-                const v = e.target.value;
-                setQuery(v);
-                setSearchOpen(!!v.trim());
-                setActiveIndex(-1);
-              }}
-              onFocus={() => {
-                if (query.trim()) setSearchOpen(true);
-              }}
-              onKeyDown={onSearchKeyDown}
-            />
-
-            {searchOpen && results.length > 0 && (
-              <div
-                className="search-panel"
-                role="listbox"
-                aria-label="Search results"
+            <button
+              type="button"
+              className="nav-search-trigger"
+              aria-label="Search Meitu products"
+              aria-expanded={searchOpen}
+              onClick={openSearch}
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
               >
-                {results.map((r, idx) => {
-                  const active = idx === activeIndex;
-
-                  return (
-                    <Link
-                      key={`${r.type}-${r.id}`}
-                      to={r.route}
-                      className={`search-row ${active ? "active" : ""}`}
-                      role="option"
-                      aria-selected={active}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSearchOpen(false);
-                        setActiveIndex(-1);
-                        setQuery("");
-                      }}
-                    >
-                      <div className="sr-main">{r.name}</div>
-                      <div className="sr-sub">
-                        {r.meta?.category || "product"}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-
-            {searchOpen && query.trim() && results.length === 0 && (
-              <div className="search-panel empty" aria-label="No results">
-                <div className="empty-title">No results</div>
-                <div className="empty-sub">Try a product name or ID.</div>
-              </div>
-            )}
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="7"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  d="m20 20-3.5-3.5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
           </div>
 
           <div
@@ -584,84 +673,278 @@ function NavBar() {
             ref={navAuthRef}
             onClick={(e) => e.stopPropagation()}
           >
-            {!user ? (
-              <Link to="/login" className="auth-btn">
-                Login
-              </Link>
-            ) : (
-              <>
-                {notifications?.enabled ? (
-                  <Link
-                    to={notificationsHref}
-                    className="notification-trigger"
-                    aria-label="Open notifications"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M13.7 21a2 2 0 0 1-3.4 0"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    {unreadBadge ? (
-                      <span className="notification-badge">{unreadBadge}</span>
-                    ) : null}
-                  </Link>
+            <div className="profile-wrap" ref={profileWrapRef}>
+              <button
+                type="button"
+                className={`nav-bag-trigger ${profileMenuOpen ? "open" : ""}`}
+                aria-label={user ? "Open account menu" : "Open sign in menu"}
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+                onClick={toggleAccountPanel}
+              >
+                <NavAccountIcon name="bag" size={18} />
+                {unreadBadge ? (
+                  <span className="notification-badge">{unreadBadge}</span>
                 ) : null}
-
-                <div className="profile-wrap" ref={profileWrapRef}>
-                  <button
-                    type="button"
-                    className={`account-trigger ${profileMenuOpen ? "open" : ""}`}
-                    aria-label="Open account menu"
-                    aria-haspopup="menu"
-                    aria-expanded={profileMenuOpen}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setProfileMenuOpen((v) => !v);
-                    }}
-                  >
-                    <span className="account-avatar-small">
-                      {account.initial}
-                      {unreadBadge ? (
-                        <span className="account-avatar-badge">
-                          {unreadBadge}
-                        </span>
-                      ) : null}
-                    </span>
-
-                    <span className="account-trigger-text">
-                      <span className="account-trigger-name">
-                        {account.username}
-                      </span>
-                      <span className="account-trigger-role">{account.role}</span>
-                    </span>
-                  </button>
-
-                  {profileMenuOpen && renderProfileMenu()}
-                </div>
-              </>
-            )}
+              </button>
+            </div>
           </div>
+
+          <button
+            type="button"
+            className="nav-mobile-close"
+            aria-label="Close navigation panel"
+            onClick={(e) => {
+              e.stopPropagation();
+              closeMobilePanel();
+            }}
+          >
+            <span />
+            <span />
+          </button>
         </div>
       </nav>
 
       <div className="nav-spacer" aria-hidden="true" />
+
+      {searchOpen ? (
+        <>
+          <button
+            type="button"
+            className="search-page-scrim"
+            aria-label="Close search"
+            onClick={closeSearch}
+          />
+          <section
+            className="nav-search-extension show"
+            ref={searchPanelRef}
+            aria-label="Product search"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="nav-search-extension-inner">
+              <div className="nav-search-field">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="11"
+                    cy="11"
+                    r="7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="m20 20-3.5-3.5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <input
+                  ref={inputRef}
+                  type="search"
+                  placeholder="Search Meitu products"
+                  value={query}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setQuery(v);
+                    setActiveIndex(-1);
+                  }}
+                  onKeyDown={onSearchKeyDown}
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    className="nav-search-clear"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      setQuery("");
+                      setActiveIndex(-1);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="nav-search-content">
+                <div className="nav-search-kicker">
+                  {query.trim() ? "Top matches" : "Quick links"}
+                </div>
+
+                {query.trim() ? (
+                  results.length > 0 ? (
+                    <div
+                      className="nav-search-results"
+                      role="listbox"
+                      aria-label="Search results"
+                    >
+                      {results.map((r, idx) => {
+                        const active = idx === activeIndex;
+
+                        return (
+                          <Link
+                            key={`${r.type}-${r.id}`}
+                            to={r.route}
+                            className={`nav-search-result ${
+                              active ? "active" : ""
+                            }`}
+                            role="option"
+                            aria-selected={active}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            onClick={() => {
+                              setSearchOpen(false);
+                              setActiveIndex(-1);
+                              setQuery("");
+                            }}
+                          >
+                            <span className="nav-search-result-mark" />
+                            <span className="nav-search-result-copy">
+                              <span>{r.name}</span>
+                              <small>{r.meta?.category || "Product"}</small>
+                            </span>
+                            <span className="nav-search-result-arrow">
+                              <NavRightArrowIcon size={15} />
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="nav-search-empty" aria-label="No results">
+                      <strong>No results found.</strong>
+                      <span>Try a product name, collection, or finish.</span>
+                    </div>
+                  )
+                ) : (
+                  <div className="nav-search-quicklinks">
+                    {[...PRODUCT_MENU_ITEMS, {
+                      label: "Rate Calculator",
+                      description: "Estimate paint requirements",
+                      href: "/ratecalculator",
+                    }, {
+                      label: "Horoscope",
+                      description: "Explore zodiac-inspired palettes",
+                      href: "/horoscope",
+                    }, {
+                      label: "Dealership",
+                      description: "Apply or learn about partnership",
+                      href: "/dealership",
+                    }, {
+                      label: "Support",
+                      description: "Get product guidance",
+                      href: "/support",
+                    }].map((item) => (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className="nav-search-quicklink"
+                        onClick={() => {
+                          setSearchOpen(false);
+                          setQuery("");
+                        }}
+                      >
+                        <span className="nav-search-quicklink-copy">
+                          <span>{item.label}</span>
+                          <small>{item.description}</small>
+                        </span>
+                        <span className="nav-search-quicklink-arrow">
+                          <NavRightArrowIcon size={15} />
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {profileMenuOpen ? (
+        <>
+          <button
+            type="button"
+            className="account-page-scrim"
+            aria-label="Close account menu"
+            onClick={closeAccountPanel}
+          />
+          <section
+            className="account-nav-extension show"
+            ref={accountPanelRef}
+            aria-label="Account menu"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="account-nav-extension-inner">
+              <div className="account-nav-head">
+                <div>
+                  <div className="account-nav-kicker">
+                    {user ? account.role : "Meitu account"}
+                  </div>
+                  <div className="account-nav-title">
+                    {user ? account.username : "Sign in to continue"}
+                  </div>
+                  <div className="account-nav-subtitle">
+                    {user
+                      ? account.email
+                      : "Open your role workspace and saved tools."}
+                  </div>
+                </div>
+                <div className="account-nav-avatar" aria-hidden="true">
+                  {user ? account.initial : <NavAccountIcon name="bag" size={19} />}
+                </div>
+              </div>
+
+              <div className="account-nav-grid" role="menu">
+                {accountMenuItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className="account-nav-action"
+                    role="menuitem"
+                    onClick={closeAccountPanel}
+                  >
+                    <span className="account-nav-icon">
+                      <NavAccountIcon name={item.icon} size={18} />
+                    </span>
+                    <span className="account-nav-action-copy">
+                      <span>{item.label}</span>
+                      <small>{item.description}</small>
+                    </span>
+                    {item.badge ? (
+                      <span className="account-nav-action-badge">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))}
+
+                {user ? (
+                  <button
+                    type="button"
+                    className="account-nav-action account-nav-logout"
+                    role="menuitem"
+                    onClick={handleLogout}
+                  >
+                    <span className="account-nav-icon">
+                      <NavAccountIcon name="logout" size={18} />
+                    </span>
+                    <span className="account-nav-action-copy">
+                      <span>Log out</span>
+                      <small>End this secure session</small>
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <div className={`mobile-nav ${mobileOpen ? "show" : ""}`}>
         <Link to="/" onClick={() => setMobileOpen(false)}>
@@ -778,405 +1061,61 @@ function NavBar() {
       </div>
 
       <style>{`
-        .nav-auth{
-          display:flex;
-          align-items:center;
-          justify-content:flex-end;
-          flex:0 0 auto;
-          gap:10px;
-        }
-
-        .nav-spacer{
-          height:70px;
-          flex:0 0 auto;
-        }
-
-        .notification-trigger{
-          position:relative;
-          width:44px;
-          height:44px;
-          border-radius:999px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          color:#0f172a;
-          text-decoration:none;
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.82) 0%, rgba(255,255,255,.66) 100%);
-          border:1px solid rgba(255,255,255,.62);
-          box-shadow:
-            0 14px 28px rgba(15,23,42,.08),
-            inset 0 1px 0 rgba(255,255,255,.92);
-          transition:transform .16s ease, box-shadow .16s ease;
-        }
-
-        .notification-trigger:hover{
-          transform:translateY(-1px);
-          color:#0f172a;
-          box-shadow:
-            0 18px 34px rgba(15,23,42,.10),
-            inset 0 1px 0 rgba(255,255,255,.94);
-        }
-
-        .notification-badge,
-        .account-avatar-badge,
-        .account-menu-badge{
-          min-width:18px;
-          height:18px;
-          padding:0 5px;
-          border-radius:999px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          background:#b42318;
-          color:#fff;
-          font-size:10px;
-          font-weight:950;
-          line-height:1;
-          box-shadow:0 8px 18px rgba(180,35,24,.24);
-        }
-
-        .notification-badge{
-          position:absolute;
-          top:-3px;
-          right:-3px;
-        }
-
-        .auth-btn{
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          height:40px;
-          padding:0 16px;
-          border-radius:999px;
-          text-decoration:none;
-          font-size:14px;
-          font-weight:800;
-          color:#fff;
-          background:var(--red);
-          box-shadow:0 10px 25px rgba(193,18,31,.22);
-          transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
-          white-space:nowrap;
-        }
-
-        .auth-btn:hover{
-          transform:translateY(-1px);
-          box-shadow:0 14px 30px rgba(193,18,31,.26);
-          filter:saturate(1.06);
-        }
-
-        .profile-wrap{
-          position:relative;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-        }
-
-        .account-trigger{
-          height:48px;
-          min-width:48px;
-          padding:0 14px;
-          border:none;
-          border-radius:999px;
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.82) 0%, rgba(255,255,255,.66) 100%);
-          box-shadow:
-            0 14px 28px rgba(15,23,42,.08),
-            inset 0 1px 0 rgba(255,255,255,.92);
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          cursor:pointer;
-          color:#0f172a;
-          font-weight:900;
-          transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
-          border:1px solid rgba(255,255,255,.62);
-        }
-
-        .account-trigger:hover{
-          transform:translateY(-1px);
-          box-shadow:
-            0 18px 34px rgba(15,23,42,.10),
-            inset 0 1px 0 rgba(255,255,255,.94);
-        }
-
-        .account-trigger.open{
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(255,255,255,.74) 100%);
-        }
-
-        .account-avatar-small{
-          position:relative;
-          width:28px;
-          height:28px;
-          border-radius:999px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          background:linear-gradient(135deg, #c40000 0%, #ff5b2e 100%);
-          color:#fff;
-          font-size:12px;
-          font-weight:950;
-          box-shadow:0 10px 18px rgba(196,0,0,.2);
-          flex-shrink:0;
-        }
-
-        .account-avatar-badge{
-          position:absolute;
-          top:-8px;
-          right:-10px;
-          border:2px solid rgba(255,255,255,.9);
-        }
-
-        .account-trigger-text{
-          display:flex;
-          flex-direction:column;
-          align-items:flex-start;
-          line-height:1.05;
-        }
-
-        .account-trigger-name{
-          font-size:13px;
-          font-weight:900;
-          max-width:110px;
-          white-space:nowrap;
-          overflow:hidden;
-          text-overflow:ellipsis;
-        }
-
-        .account-trigger-role{
-          margin-top:4px;
-          font-size:10px;
-          font-weight:900;
-          letter-spacing:.08em;
-          text-transform:uppercase;
-          color:rgba(0,0,0,.48);
-        }
-
-        .account-menu{
-          position:absolute;
-          top:calc(100% + 14px);
-          right:0;
-          width:320px;
-          border-radius:26px;
-          border:1px solid rgba(255,255,255,.68);
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.88) 0%, rgba(255,255,255,.76) 100%);
-          backdrop-filter:blur(24px);
-          -webkit-backdrop-filter:blur(24px);
-          box-shadow:
-            0 28px 70px rgba(15,23,42,.18),
-            inset 0 1px 0 rgba(255,255,255,.92);
-          overflow:hidden;
-          z-index:2200;
-          animation:pmPop .18s ease-out;
-        }
-
-        @keyframes pmPop{
-          from{ transform:translateY(6px); opacity:0; }
-          to{ transform:translateY(0); opacity:1; }
-        }
-
-        .account-menu-head{
-          display:flex;
-          align-items:center;
-          gap:14px;
-        }
-
-        .account-avatar-large{
-          width:52px;
-          height:52px;
-          border-radius:18px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          background:linear-gradient(135deg, #c40000 0%, #ff5b2e 100%);
-          color:#fff;
-          font-weight:950;
-          font-size:18px;
-          box-shadow:0 14px 28px rgba(196,0,0,.24);
-          flex-shrink:0;
-        }
-
-        .account-identity{
-          min-width:0;
-        }
-
-        .account-name{
-          font-size:17px;
-          font-weight:950;
-          letter-spacing:-.03em;
-          color:#0f172a;
-          white-space:nowrap;
-          overflow:hidden;
-          text-overflow:ellipsis;
-        }
-
-        .account-email{
-          margin-top:4px;
-          color:rgba(0,0,0,.56);
-          font-weight:700;
-          font-size:13px;
-          white-space:nowrap;
-          overflow:hidden;
-          text-overflow:ellipsis;
-        }
-
-        .account-menu-head,
-        .account-role-badge{
-          position:relative;
-          z-index:1;
-        }
-
-        .account-menu-head{
-          padding:18px 18px 0 18px;
-        }
-
-        .account-role-badge{
-          margin:16px 18px 0 18px;
-          display:inline-flex;
-          align-items:center;
-          padding:8px 12px;
-          border-radius:999px;
-          background:rgba(255,255,255,.7);
-          border:1px solid rgba(0,0,0,.05);
-          font-size:11px;
-          font-weight:900;
-          letter-spacing:.08em;
-          text-transform:uppercase;
-          color:rgba(0,0,0,.6);
-        }
-
-        .account-menu::before{
-          content:"";
-          position:absolute;
-          inset:0;
-          background:
-            radial-gradient(circle at 18% 18%, rgba(255,255,255,.95), transparent 22%),
-            radial-gradient(circle at 84% 82%, rgba(209,0,0,.08), transparent 24%),
-            linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,0));
-          pointer-events:none;
-        }
-
-        .account-panel{
-          display:grid;
-          gap:6px;
-          padding:14px;
-          border-radius:20px;
-          background:rgba(248,248,250,.88);
-          border:1px solid rgba(0,0,0,.05);
-        }
-
-        .account-panel-label{
-          font-size:11px;
-          font-weight:900;
-          letter-spacing:.08em;
-          text-transform:uppercase;
-          color:rgba(0,0,0,.46);
-        }
-
-        .account-panel-name{
-          font-weight:900;
-          color:#111827;
-        }
-
-        .account-panel-email{
-          color:rgba(0,0,0,.58);
-          font-weight:700;
-          font-size:13px;
-          word-break:break-word;
-        }
-
-        .account-actions{
-          padding:14px;
-          display:grid;
-          gap:10px;
-        }
-
-        .account-link-btn{
-          height:46px;
-          border-radius:18px;
-          border:1px solid rgba(0,0,0,.08);
-          background:rgba(255,255,255,.94);
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-          padding:0 14px;
-          color:#111827;
-          font-weight:900;
-          text-decoration:none;
-          box-shadow:inset 0 1px 0 rgba(255,255,255,.92);
-        }
-
-        .account-logout-btn{
-          height:50px;
-          border-radius:18px;
-          border:1px solid rgba(196,0,0,.16);
-          background:linear-gradient(135deg, #c40000 0%, #ff5b2e 100%);
-          color:#fff;
-          font-weight:950;
-          letter-spacing:-.01em;
-          cursor:pointer;
-          box-shadow:0 16px 30px rgba(196,0,0,.22);
-        }
-
-        :root{
-          --red:#c1121f;
-          --black:#0b0b0c;
-          --ink70:rgba(11,11,12,.7);
-          --ink55:rgba(11,11,12,.55);
-          --glass:rgba(255,255,255,.85);
-        }
+        /* ─── Apple-Inspired NavBar Design System ─── */
 
         .apple-nav{
           position:fixed;
           top:0; left:0; right:0;
           z-index:1200;
-          background:transparent;
-          border-bottom:1px solid rgba(0,0,0,.06);
+          height:44px;
+          background:var(--color-fog, #f5f5f7);
+          border-bottom:1px solid transparent;
           isolation:isolate;
-          transition:box-shadow .25s ease;
+          font-family:var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+          transition:border-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
         }
 
         .apple-nav::before{
-          content:"";
-          position:absolute;
-          inset:0;
-          background:var(--glass);
-          backdrop-filter:blur(20px);
-          -webkit-backdrop-filter:blur(20px);
-          z-index:0;
+          display:none;
         }
 
         .apple-nav.scrolled{
-          box-shadow:0 10px 30px rgba(0,0,0,.12);
+          border-bottom-color:var(--color-silver-mist, #e8e8ed);
+        }
+
+        .nav-spacer{
+          height:44px;
+          flex:0 0 auto;
         }
 
         .nav-shell{
-          max-width:1400px;
+          max-width:980px;
           margin:auto;
-          padding:14px 28px;
+          min-height:44px;
+          padding:0 24px;
           display:flex;
           align-items:center;
-          justify-content:space-between;
-          gap:28px;
+          justify-content:center;
+          gap:18px;
           position:relative;
           z-index:1;
           min-width:0;
         }
 
+        /* ─── Brand ─── */
+
         .brand{
           display:flex;
           align-items:center;
-          gap:12px;
+          gap:0;
           text-decoration:none;
           flex:0 0 auto;
+          margin-right:4px;
         }
 
         .brand img{
-          width:40px;
-          height:40px;
+          width:30px;
+          height:30px;
         }
 
         .brand-text{
@@ -1186,38 +1125,60 @@ function NavBar() {
         }
 
         .brand-main{
-          font-size:18px;
-          font-weight:800;
-          letter-spacing:.12em;
-          color:var(--black);
+          font-family:var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size:14px;
+          font-weight:700;
+          letter-spacing:.14em;
+          color:var(--color-ink, #1d1d1f);
         }
 
         .brand-sub{
-          font-size:11px;
-          font-weight:700;
-          letter-spacing:.32em;
-          color:var(--red);
+          margin-top:2px;
+          font-family:var(--font-sf-pro-text, Inter, system-ui, sans-serif);
+          font-size:8px;
+          font-weight:600;
+          letter-spacing:.34em;
+          color:var(--color-graphite, #707070);
         }
+
+        /* ─── Nav Center Links ─── */
 
         .nav-center{
           display:flex;
           align-items:center;
-          gap:24px;
-          flex:0 1 auto;
+          gap:22px;
+          flex:0 0 auto;
           min-width:0;
         }
 
         .nav-item{
           position:relative;
-          font-size:15px;
-          font-weight:500;
-          color:var(--ink70);
           text-decoration:none;
         }
 
+        .nav-item,
+        .products-menu-button{
+          font-family:var(--font-sf-pro-text, Inter, system-ui, sans-serif);
+          font-size:12px;
+          line-height:1;
+          font-weight:400;
+          letter-spacing:-.003em;
+          color:var(--color-ink, #1d1d1f);
+          opacity:.86;
+          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
         .nav-item:hover,
-        .nav-item.active{
-          color:var(--black);
+        .products-menu-button:hover{
+          color:var(--color-cobalt-link, #0066cc);
+          opacity:1;
+        }
+
+        .nav-item.active,
+        .products-menu-button.active{
+          color:var(--color-ink, #1d1d1f);
+          opacity:1;
         }
 
         .nav-item.active::after{
@@ -1226,19 +1187,18 @@ function NavBar() {
           left:0; right:0;
           bottom:-10px;
           height:2px;
-          background:var(--red);
-          border-radius:999px;
+          background:var(--color-ink, #1d1d1f);
+          border-radius:var(--radius-buttons, 999px);
         }
 
         .products-menu-button.active::after{
           content:"";
           position:absolute;
-          left:0;
-          right:0;
+          left:0; right:0;
           bottom:-10px;
           height:2px;
-          background:var(--red);
-          border-radius:999px;
+          background:var(--color-ink, #1d1d1f);
+          border-radius:var(--radius-buttons, 999px);
         }
 
         .products-menu-button{
@@ -1255,18 +1215,21 @@ function NavBar() {
         }
 
         .products-menu-button span{
-          color:rgba(11,11,12,.48);
+          color:var(--color-graphite, #707070);
           font-size:13px;
           transform:translateY(-1px);
-          transition:transform .2s ease, color .2s ease;
+          transition:transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
         }
 
         .dropdown.open .products-menu-button span,
         .dropdown:hover .products-menu-button span,
         .dropdown:focus-within .products-menu-button span{
-          color:var(--black);
+          color:var(--color-ink, #1d1d1f);
           transform:translateY(-1px) rotate(180deg);
         }
+
+        /* ─── Dropdown Panel ─── */
 
         .dropdown{
           display:flex;
@@ -1284,22 +1247,18 @@ function NavBar() {
 
         .dropdown-panel{
           position:absolute;
-          top:calc(100% + 20px);
+          top:calc(100% + 10px);
           left:50%;
           width:min(380px, calc(100vw - 32px));
-          background:linear-gradient(180deg, rgba(255,255,255,.94) 0%, rgba(255,255,255,.82) 100%);
-          border:1px solid rgba(255,255,255,.68);
-          border-radius:26px;
+          background:var(--surface-card, #ffffff);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          border-radius:var(--radius-cards, 28px);
           padding:12px;
-          box-shadow:
-            0 30px 80px rgba(15,23,42,.18),
-            inset 0 1px 0 rgba(255,255,255,.9);
-          backdrop-filter:blur(24px);
-          -webkit-backdrop-filter:blur(24px);
           opacity:0;
           pointer-events:none;
           transform:translate(-50%, 8px);
-          transition:opacity .25s ease, transform .25s ease;
+          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease);
         }
 
         .dropdown.open .dropdown-panel,
@@ -1323,24 +1282,22 @@ function NavBar() {
           padding:14px;
           border-radius:18px;
           text-decoration:none;
-          background:rgba(255,255,255,.72);
-          border:1px solid rgba(15,23,42,.06);
-          transition:background .15s ease, transform .15s ease, border-color .15s ease;
+          background:var(--color-fog, #f5f5f7);
+          border:1px solid transparent;
+          transition:background var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    border-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
         }
 
         .dropdown-card:hover{
-          background:rgba(180,35,24,.06);
-          border-color:rgba(180,35,24,.14);
-          transform:translateY(-2px);
+          background:var(--surface-card, #ffffff);
+          border-color:var(--color-silver-mist, #e8e8ed);
         }
 
         .dropdown-card-mark{
           width:34px;
           height:34px;
           border-radius:12px;
-          background:
-            linear-gradient(135deg, rgba(180,35,24,.95), rgba(221,81,39,.86));
-          box-shadow:0 12px 26px rgba(180,35,24,.18);
+          background:var(--color-ink, #1d1d1f);
           flex:0 0 auto;
         }
 
@@ -1353,27 +1310,30 @@ function NavBar() {
         .dropdown-card-copy span{
           font-size:15px;
           font-weight:850;
-          color:var(--black);
+          color:var(--color-ink, #1d1d1f);
           line-height:1.2;
         }
 
         .dropdown-card-copy small{
           font-size:13px;
           line-height:1.35;
-          color:var(--ink55);
+          color:var(--color-graphite, #707070);
           font-weight:650;
         }
+
+        /* ─── Nav Search Icon ─── */
 
         .nav-search{
           position:relative;
           display:flex;
           align-items:center;
-          gap:8px;
-          background:rgba(0,0,0,.05);
-          border-radius:999px;
-          padding:10px 16px;
-          min-width:0;
-          flex:1 1 220px;
+          flex:0 0 auto;
+          width:32px;
+          height:32px;
+          padding:0;
+          background:transparent;
+          border-radius:var(--radius-buttons, 999px);
+          margin-left:0;
         }
 
         .nav-search input{
@@ -1389,7 +1349,43 @@ function NavBar() {
         }
 
         .search-icon{
-          color:var(--ink55);
+          color:var(--color-graphite, #707070);
+        }
+
+        .nav-search-trigger{
+          width:32px;
+          height:32px;
+          border:0;
+          border-radius:var(--radius-buttons, 999px);
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          cursor:pointer;
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .nav-search-trigger:hover,
+        .nav-search-trigger[aria-expanded="true"]{
+          background:rgba(232,232,237,.72);
+        }
+
+        .nav-search-trigger:active{
+          transform:scale(.96);
+        }
+
+        /* ─── Search Panel Extension ─── */
+
+        .search-page-scrim{
+          position:fixed;
+          inset:44px 0 0;
+          z-index:9990;
+          border:0;
+          background:rgba(245,245,247,.50);
+          animation:searchScrimIn var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          cursor:default;
         }
 
         .search-panel{
@@ -1397,18 +1393,16 @@ function NavBar() {
           top:calc(100% + 12px);
           left:0;
           right:0;
-          background: rgba(255,255,255,.92);
-          border:1px solid rgba(0,0,0,.10);
+          background:var(--surface-card, #ffffff);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
           border-radius:18px;
-          box-shadow:0 30px 70px rgba(0,0,0,.14);
           overflow:hidden;
           padding:8px;
           z-index:2000;
-          backdrop-filter: blur(18px);
         }
 
         .search-panel.empty{
-          padding:14px 14px;
+          padding:14px;
         }
 
         .search-row{
@@ -1420,42 +1414,771 @@ function NavBar() {
           padding:10px 12px;
           border-radius:14px;
           cursor:pointer;
-          transition: background .12s ease, transform .12s ease;
+          transition:background var(--duration-primary, 0.344s) var(--ease-smooth, ease);
           text-decoration:none;
         }
 
         .search-row:hover{
-          background: rgba(0,0,0,.04);
+          background:rgba(0,0,0,.04);
         }
 
         .search-row.active{
-          background: rgba(193,18,31,.10);
+          background:rgba(0,0,0,.06);
         }
 
         .sr-main{
           font-size:13px;
           font-weight:700;
-          color:var(--black);
+          color:var(--color-ink, #1d1d1f);
           line-height:1.25;
         }
 
         .sr-sub{
           margin-top:4px;
           font-size:11px;
-          color:var(--ink55);
+          color:var(--color-graphite, #707070);
           line-height:1.2;
         }
 
         .empty-title{
           font-weight:800;
-          color:var(--black);
+          color:var(--color-ink, #1d1d1f);
           font-size:13px;
         }
+
         .empty-sub{
           margin-top:6px;
           font-size:12px;
-          color:var(--ink55);
+          color:var(--color-graphite, #707070);
         }
+
+        .nav-search-extension{
+          position:fixed;
+          top:44px;
+          left:0;
+          right:0;
+          z-index:9995;
+          background:var(--color-fog, #f5f5f7);
+          border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
+          transform:translateY(-34px);
+          opacity:0;
+          pointer-events:none;
+          overflow:hidden;
+          max-height:0;
+          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    max-height var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .nav-search-extension.show{
+          transform:translateY(0);
+          opacity:1;
+          pointer-events:auto;
+          max-height:320px;
+          animation:searchBarLower var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+        }
+
+        .nav-search-extension-inner{
+          width:min(620px, calc(100vw - 40px));
+          margin:0 auto;
+          padding:16px 0 18px;
+        }
+
+        .nav-search-field{
+          display:grid;
+          grid-template-columns:24px minmax(0,1fr) 34px;
+          align-items:center;
+          gap:10px;
+          min-height:42px;
+          color:var(--color-graphite, #707070);
+        }
+
+        .nav-search-field input{
+          width:100%;
+          border:0;
+          outline:0;
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          font-family:var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size:22px;
+          line-height:1.14;
+          font-weight:600;
+          letter-spacing:-.005em;
+        }
+
+        .nav-search-field input::placeholder{
+          color:var(--color-graphite, #707070);
+        }
+
+        .nav-search-clear{
+          width:32px;
+          height:32px;
+          border:0;
+          border-radius:var(--radius-buttons, 999px);
+          background:var(--color-silver-mist, #e8e8ed);
+          color:var(--color-graphite, #707070);
+          font-size:21px;
+          line-height:1;
+          cursor:pointer;
+        }
+
+        .nav-search-content{
+          margin-top:10px;
+        }
+
+        .nav-search-kicker{
+          margin-bottom:8px;
+          font-size:12px;
+          font-weight:600;
+          color:var(--color-graphite, #707070);
+          letter-spacing:-.003em;
+        }
+
+        .nav-search-results,
+        .nav-search-quicklinks{
+          display:grid;
+          gap:4px;
+        }
+
+        .nav-search-result,
+        .nav-search-quicklink{
+          min-height:42px;
+          display:grid;
+          align-items:center;
+          text-decoration:none;
+          border-radius:14px;
+          color:var(--color-ink, #1d1d1f);
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .nav-search-result{
+          grid-template-columns:16px minmax(0,1fr) 20px;
+          gap:12px;
+          padding:7px 10px;
+        }
+
+        .nav-search-quicklink{
+          grid-template-columns:minmax(0,1fr) 20px;
+          gap:12px;
+          padding:8px 10px;
+        }
+
+        .nav-search-result:hover,
+        .nav-search-result.active,
+        .nav-search-quicklink:hover{
+          background:var(--surface-card, #ffffff);
+        }
+
+        .nav-search-result-mark{
+          width:6px;
+          height:6px;
+          border-radius:var(--radius-buttons, 999px);
+          background:var(--color-ink, #1d1d1f);
+        }
+
+        .nav-search-result-copy,
+        .nav-search-quicklink-copy{
+          min-width:0;
+          display:grid;
+          gap:3px;
+        }
+
+        .nav-search-result-copy span,
+        .nav-search-quicklink-copy span{
+          min-width:0;
+          color:var(--color-ink, #1d1d1f);
+          font-size:15px;
+          line-height:1.2;
+          font-weight:600;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+
+        .nav-search-result-copy small,
+        .nav-search-quicklink-copy small{
+          color:var(--color-graphite, #707070);
+          font-size:12px;
+          line-height:1.2;
+          font-weight:400;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+
+        .nav-search-result-arrow,
+        .nav-search-quicklink-arrow{
+          color:var(--color-graphite, #707070);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          transition:transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .nav-search-result:hover .nav-search-result-arrow,
+        .nav-search-result.active .nav-search-result-arrow,
+        .nav-search-quicklink:hover .nav-search-quicklink-arrow{
+          color:var(--color-ink, #1d1d1f);
+          transform:translateX(3px);
+        }
+
+        .nav-search-empty{
+          padding:18px 12px;
+          border-radius:18px;
+          background:var(--surface-card, #ffffff);
+          display:grid;
+          gap:5px;
+        }
+
+        .nav-search-empty strong{
+          color:var(--color-ink, #1d1d1f);
+          font-size:15px;
+        }
+
+        .nav-search-empty span{
+          color:var(--color-graphite, #707070);
+          font-size:13px;
+        }
+
+        /* ─── Nav Auth / Profile / Bag ─── */
+
+        .nav-auth{
+          display:flex;
+          align-items:center;
+          justify-content:flex-end;
+          flex:0 0 auto;
+          gap:6px;
+          margin-left:0;
+        }
+
+        .profile-wrap{
+          position:relative;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+
+        .nav-bag-trigger{
+          position:relative;
+          width:32px;
+          height:32px;
+          border:0;
+          border-radius:var(--radius-buttons, 999px);
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          cursor:pointer;
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .nav-bag-trigger:hover,
+        .nav-bag-trigger.open{
+          background:rgba(232,232,237,.72);
+        }
+
+        .nav-bag-trigger:active{
+          transform:scale(.96);
+        }
+
+        /* ─── Notification Badge ─── */
+
+        .notification-badge,
+        .account-avatar-badge,
+        .account-menu-badge{
+          min-width:18px;
+          height:18px;
+          padding:0 5px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--color-azure, #0071e3);
+          color:#fff;
+          font-size:10px;
+          font-weight:600;
+          line-height:1;
+        }
+
+        .notification-badge{
+          position:absolute;
+          top:-3px;
+          right:-3px;
+        }
+
+        .nav-bag-trigger .notification-badge{
+          top:-5px;
+          right:-5px;
+          min-width:15px;
+          height:15px;
+          padding:0 4px;
+          font-size:9px;
+          border:2px solid var(--color-fog, #f5f5f7);
+        }
+
+        /* ─── Notification Trigger ─── */
+
+        .notification-trigger{
+          position:relative;
+          width:44px;
+          height:44px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          color:var(--color-ink, #1d1d1f);
+          text-decoration:none;
+          background:var(--surface-card, #ffffff);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .notification-trigger:hover{
+          color:var(--color-ink, #1d1d1f);
+        }
+
+        /* ─── Auth CTA Button ─── */
+
+        .auth-btn{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          height:30px;
+          padding:0 13px;
+          border-radius:var(--radius-buttons, 999px);
+          text-decoration:none;
+          font-size:12px;
+          font-weight:400;
+          color:#fff;
+          background:var(--color-azure, #0071e3);
+          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+          white-space:nowrap;
+        }
+
+        .auth-btn:hover{
+          opacity:.88;
+        }
+
+        /* ─── Account Trigger ─── */
+
+        .account-trigger{
+          height:48px;
+          min-width:48px;
+          padding:0 14px;
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          border-radius:var(--radius-buttons, 999px);
+          background:var(--surface-card, #ffffff);
+          display:inline-flex;
+          align-items:center;
+          gap:10px;
+          cursor:pointer;
+          color:var(--color-ink, #1d1d1f);
+          font-weight:900;
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .account-trigger:hover{
+          background:var(--color-fog, #f5f5f7);
+        }
+
+        .account-trigger.open{
+          background:var(--color-fog, #f5f5f7);
+        }
+
+        .account-avatar-small{
+          position:relative;
+          width:28px;
+          height:28px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--color-ink, #1d1d1f);
+          color:#fff;
+          font-size:12px;
+          font-weight:600;
+          flex-shrink:0;
+        }
+
+        .account-avatar-badge{
+          position:absolute;
+          top:-8px;
+          right:-10px;
+          border:2px solid var(--surface-card, #ffffff);
+        }
+
+        .account-trigger-text{
+          display:flex;
+          flex-direction:column;
+          align-items:flex-start;
+          line-height:1.05;
+        }
+
+        .account-trigger-name{
+          font-size:13px;
+          font-weight:600;
+          max-width:110px;
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        }
+
+        .account-trigger-role{
+          margin-top:4px;
+          font-size:10px;
+          font-weight:600;
+          letter-spacing:.08em;
+          text-transform:uppercase;
+          color:var(--color-graphite, #707070);
+        }
+
+        /* ─── Account Menu ─── */
+
+        .account-menu{
+          position:absolute;
+          top:calc(100% + 14px);
+          right:0;
+          width:320px;
+          border-radius:var(--radius-cards, 28px);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          background:var(--surface-card, #ffffff);
+          overflow:hidden;
+          z-index:2200;
+          animation:pmPop var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .account-menu::before{
+          display:none;
+        }
+
+        @keyframes pmPop{
+          from{ transform:translateY(6px); opacity:0; }
+          to{ transform:translateY(0); opacity:1; }
+        }
+
+        .account-menu-head{
+          display:flex;
+          align-items:center;
+          gap:14px;
+        }
+
+        .account-menu-head{
+          padding:18px 18px 0 18px;
+        }
+
+        .account-avatar-large{
+          width:52px;
+          height:52px;
+          border-radius:18px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--color-ink, #1d1d1f);
+          color:#fff;
+          font-weight:600;
+          font-size:18px;
+          flex-shrink:0;
+        }
+
+        .account-identity{
+          min-width:0;
+        }
+
+        .account-name{
+          font-size:17px;
+          font-weight:600;
+          letter-spacing:-.03em;
+          color:var(--color-ink, #1d1d1f);
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        }
+
+        .account-email{
+          margin-top:4px;
+          color:var(--color-graphite, #707070);
+          font-weight:400;
+          font-size:13px;
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        }
+
+        .account-menu-head,
+        .account-role-badge{
+          position:relative;
+          z-index:1;
+        }
+
+        .account-role-badge{
+          margin:16px 18px 0 18px;
+          display:inline-flex;
+          align-items:center;
+          padding:8px 12px;
+          border-radius:var(--radius-buttons, 999px);
+          background:var(--color-fog, #f5f5f7);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          font-size:11px;
+          font-weight:600;
+          letter-spacing:.08em;
+          text-transform:uppercase;
+          color:var(--color-graphite, #707070);
+        }
+
+        .account-panel{
+          display:grid;
+          gap:6px;
+          padding:14px;
+          border-radius:20px;
+          background:var(--color-fog, #f5f5f7);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+        }
+
+        .account-panel-label{
+          font-size:11px;
+          font-weight:600;
+          letter-spacing:.08em;
+          text-transform:uppercase;
+          color:var(--color-graphite, #707070);
+        }
+
+        .account-panel-name{
+          font-weight:600;
+          color:var(--color-ink, #1d1d1f);
+        }
+
+        .account-panel-email{
+          color:var(--color-graphite, #707070);
+          font-weight:400;
+          font-size:13px;
+          word-break:break-word;
+        }
+
+        .account-actions{
+          padding:14px;
+          display:grid;
+          gap:10px;
+        }
+
+        .account-link-btn{
+          height:46px;
+          border-radius:18px;
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          background:var(--surface-card, #ffffff);
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+          padding:0 14px;
+          color:var(--color-ink, #1d1d1f);
+          font-weight:600;
+          text-decoration:none;
+        }
+
+        .account-logout-btn{
+          height:50px;
+          border-radius:18px;
+          border:1px solid var(--color-ink, #1d1d1f);
+          background:var(--color-ink, #1d1d1f);
+          color:#fff;
+          font-weight:600;
+          letter-spacing:-.01em;
+          cursor:pointer;
+        }
+
+        /* ─── Account Nav Extension (Profile Panel) ─── */
+
+        .account-page-scrim{
+          position:fixed;
+          inset:44px 0 0;
+          z-index:9990;
+          border:0;
+          background:rgba(245,245,247,.38);
+          animation:searchScrimIn var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          cursor:default;
+        }
+
+        .account-nav-extension{
+          position:fixed;
+          top:44px;
+          left:0;
+          right:0;
+          z-index:9995;
+          background:var(--color-fog, #f5f5f7);
+          border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
+          transform:translateY(-34px);
+          opacity:0;
+          pointer-events:none;
+          overflow:hidden;
+          max-height:0;
+          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    max-height var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .account-nav-extension.show{
+          transform:translateY(0);
+          opacity:1;
+          pointer-events:auto;
+          max-height:380px;
+          animation:searchBarLower var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+        }
+
+        .account-nav-extension-inner{
+          width:min(640px, calc(100vw - 40px));
+          margin:0 auto;
+          padding:16px 0 18px;
+        }
+
+        .account-nav-head{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:18px;
+          padding:0 4px 12px;
+          border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
+        }
+
+        .account-nav-kicker{
+          color:var(--color-graphite, #707070);
+          font-size:12px;
+          line-height:1.2;
+          font-weight:600;
+          letter-spacing:-.003em;
+          text-transform:uppercase;
+        }
+
+        .account-nav-title{
+          margin-top:4px;
+          color:var(--color-ink, #1d1d1f);
+          font-family:var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size:22px;
+          line-height:1.1;
+          font-weight:600;
+          letter-spacing:-.005em;
+        }
+
+        .account-nav-subtitle{
+          margin-top:4px;
+          color:var(--color-graphite, #707070);
+          font-size:13px;
+          line-height:1.3;
+          font-weight:400;
+        }
+
+        .account-nav-avatar{
+          width:38px;
+          height:38px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--surface-card, #ffffff);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          color:var(--color-ink, #1d1d1f);
+          font-weight:600;
+          flex:0 0 auto;
+        }
+
+        .account-nav-grid{
+          display:grid;
+          grid-template-columns:repeat(2, minmax(0, 1fr));
+          gap:6px;
+          padding-top:12px;
+        }
+
+        .account-nav-action{
+          width:100%;
+          min-height:54px;
+          border:0;
+          border-radius:16px;
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          display:grid;
+          grid-template-columns:28px minmax(0,1fr) auto;
+          align-items:center;
+          gap:10px;
+          padding:9px 10px;
+          text-align:left;
+          text-decoration:none;
+          cursor:pointer;
+          font-family:var(--font-sf-pro-text, Inter, system-ui, sans-serif);
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .account-nav-action:hover{
+          background:var(--surface-card, #ffffff);
+          color:var(--color-ink, #1d1d1f);
+        }
+
+        .account-nav-icon{
+          width:28px;
+          height:28px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--surface-card, #ffffff);
+          border:1px solid var(--color-silver-mist, #e8e8ed);
+          color:var(--color-ink, #1d1d1f);
+        }
+
+        .account-nav-action-copy{
+          min-width:0;
+          display:grid;
+          gap:3px;
+        }
+
+        .account-nav-action-copy span{
+          min-width:0;
+          color:var(--color-ink, #1d1d1f);
+          font-size:14px;
+          line-height:1.2;
+          font-weight:600;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+
+        .account-nav-action-copy small{
+          min-width:0;
+          color:var(--color-graphite, #707070);
+          font-size:12px;
+          line-height:1.2;
+          font-weight:400;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+
+        .account-nav-action-badge{
+          min-width:18px;
+          height:18px;
+          padding:0 5px;
+          border-radius:var(--radius-buttons, 999px);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background:var(--color-azure, #0071e3);
+          color:#fff;
+          font-size:10px;
+          font-weight:600;
+        }
+
+        .account-nav-logout{
+          grid-column:1 / -1;
+        }
+
+        .account-nav-logout .account-nav-icon{
+          background:var(--color-ink, #1d1d1f);
+          border-color:var(--color-ink, #1d1d1f);
+          color:#fff;
+        }
+
+        /* ─── Collapsed State ─── */
 
         .apple-nav.collapsed .nav-center{
           display:none;
@@ -1479,6 +2202,8 @@ function NavBar() {
           margin-left:12px;
         }
 
+        /* ─── Mobile Toggle ─── */
+
         .mobile-toggle{
           display:none;
           position:relative;
@@ -1497,10 +2222,10 @@ function NavBar() {
           left:0;
           right:0;
           height:2px;
-          background:var(--black);
-          border-radius:999px;
-          transition:transform .35s cubic-bezier(.22,.61,.36,1),
-                    opacity .25s ease;
+          background:var(--color-ink, #1d1d1f);
+          border-radius:var(--radius-buttons, 999px);
+          transition:transform var(--duration-primary, 0.344s) cubic-bezier(.22,.61,.36,1),
+                    opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease);
         }
 
         .mobile-toggle span:first-child{ top:6px; }
@@ -1514,29 +2239,80 @@ function NavBar() {
           transform:translateY(-4px) rotate(-45deg);
         }
 
+        /* ─── Mobile Close Button ─── */
+
+        .nav-mobile-close{
+          display:none;
+          position:absolute;
+          top:50%;
+          right:24px;
+          width:32px;
+          height:32px;
+          padding:0;
+          border:0;
+          border-radius:var(--radius-buttons, 999px);
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          cursor:pointer;
+          transform:translateY(-50%);
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+          z-index:10002;
+        }
+
+        .nav-mobile-close:hover{
+          background:rgba(232,232,237,.72);
+        }
+
+        .nav-mobile-close:active{
+          transform:translateY(-50%) scale(.96);
+        }
+
+        .nav-mobile-close span{
+          position:absolute;
+          left:9px;
+          right:9px;
+          top:50%;
+          height:1.5px;
+          border-radius:var(--radius-buttons, 999px);
+          background:currentColor;
+        }
+
+        .nav-mobile-close span:first-child{
+          transform:rotate(45deg);
+        }
+
+        .nav-mobile-close span:last-child{
+          transform:rotate(-45deg);
+        }
+
+        /* ─── Mobile Nav Panel ─── */
+
         .mobile-nav{
           position:fixed;
-          top:68px;
+          top:var(--nav-height, 44px);
           left:0;
           right:0;
           bottom:0;
-          background:rgba(255,255,255,.96);
-          backdrop-filter:blur(28px);
+          background:var(--surface-card, #ffffff);
           display:flex;
           flex-direction:column;
           padding:36px 28px;
           gap:28px;
-          transform:translateY(-8%);
+          transform:translateY(0);
+          transform-origin:top center;
+          clip-path:inset(0 0 100% 0);
           opacity:0;
           pointer-events:none;
           transition:
-            transform .45s cubic-bezier(.22,.61,.36,1),
-            opacity .35s ease;
-          z-index:999;
+            clip-path var(--duration-primary, 0.344s) cubic-bezier(.22,.61,.36,1),
+            opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+          z-index:9995;
         }
 
         .mobile-nav.show{
           transform:translateY(0);
+          clip-path:inset(0 0 0 0);
           opacity:1;
           pointer-events:auto;
         }
@@ -1544,7 +2320,7 @@ function NavBar() {
         .mobile-nav a{
           font-size:22px;
           font-weight:600;
-          color:var(--black);
+          color:var(--color-ink, #1d1d1f);
           text-decoration:none;
         }
 
@@ -1556,57 +2332,260 @@ function NavBar() {
         .mobile-nav-group a{
           padding-left:16px;
           font-size:20px;
-          color:rgba(11,11,12,.72);
+          color:var(--color-graphite, #707070);
         }
 
         .mobile-nav-heading{
           font-size:22px;
           font-weight:700;
-          color:var(--black);
-        }
-
-        @media (max-width:760px){
-          .nav-center{display:none;}
-          .mobile-toggle{ display:block; }
-          .nav-search{ display:none; }
-          .nav-shell{
-            gap:14px;
-            padding:12px 16px;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .nav-spacer{ height:64px; }
-          .brand-main { font-size: 16px; }
-          .brand-sub { font-size: 10px; letter-spacing: .28em; }
-          .nav-search { padding: 12px 14px; }
-          .nav-search input { font-size: 15px; }
-          .brand img{
-            width:40px;
-            height:40px;
-          }
-          .account-trigger-text{
-            display:none;
-          }
-          .account-menu{
-            width:min(320px, calc(100vw - 28px));
-            right:-6px;
-          }
-        }
-
-        @media (hover: none) {
-          .dropdown-card:hover { transform: none; }
+          color:var(--color-ink, #1d1d1f);
         }
 
         .mobile-logout{
           font-size:22px;
           font-weight:600;
-          color:var(--red);
+          color:var(--color-ink, #1d1d1f);
           background:transparent;
           border:none;
           padding:0;
           text-align:left;
           cursor:pointer;
+        }
+
+        /* ─── Keyframes ─── */
+
+        @keyframes searchScrimIn{
+          from{ opacity:0; }
+          to{ opacity:1; }
+        }
+
+        @keyframes searchBarLower{
+          from{
+            transform:translateY(-34px);
+            clip-path:inset(0 0 100% 0);
+          }
+          to{
+            transform:translateY(0);
+            clip-path:inset(0 0 0 0);
+          }
+        }
+
+        @keyframes mobilePanelReveal{
+          from{
+            opacity:0;
+            clip-path:inset(0 0 100% 0);
+          }
+          to{
+            opacity:1;
+            clip-path:inset(0 0 0 0);
+          }
+        }
+
+        @keyframes mobilePanelContentIn{
+          from{
+            opacity:0;
+            transform:translateY(-10px);
+          }
+          to{
+            opacity:1;
+            transform:translateY(0);
+          }
+        }
+
+        /* ─── Responsive ─── */
+
+        @media (max-width:1040px){
+          .nav-shell{
+            max-width:100%;
+            gap:12px;
+          }
+          .nav-center{
+            gap:16px;
+          }
+        }
+
+        @media (max-width:760px){
+          .nav-center{display:none;}
+          .mobile-toggle{ display:block; }
+          .nav-search{ display:flex; }
+          .nav-shell{
+            display:flex;
+            align-items:center;
+            justify-content:flex-start;
+            gap:10px;
+            min-height:44px;
+          }
+
+          .brand{
+            order:0;
+            margin-right:auto;
+            flex:0 0 auto;
+          }
+
+          .nav-center{
+            display:none !important;
+          }
+
+          .nav-search{
+            order:1 !important;
+            display:flex !important;
+            flex:0 0 32px !important;
+            width:32px !important;
+            height:32px !important;
+            margin-left:0 !important;
+          }
+
+          .nav-auth{
+            order:2 !important;
+            display:flex !important;
+            flex:0 0 32px !important;
+            width:32px !important;
+            height:32px !important;
+            margin-left:0 !important;
+          }
+
+          .mobile-toggle{
+            order:3 !important;
+            display:inline-flex !important;
+            align-items:center;
+            justify-content:center;
+            flex:0 0 32px !important;
+            width:32px !important;
+            min-width:32px !important;
+            height:32px !important;
+            margin-left:0 !important;
+            padding:0 !important;
+            border-radius:var(--radius-buttons, 999px);
+          }
+
+          .mobile-toggle:hover,
+          .mobile-toggle.open{
+            background:rgba(232,232,237,.72);
+          }
+
+          .mobile-toggle span{
+            left:8px;
+            right:8px;
+            height:1.5px;
+          }
+
+          .mobile-toggle span:first-child{ top:11px; }
+          .mobile-toggle span:last-child{ bottom:11px; }
+
+          .mobile-toggle.open span:first-child{
+            transform:translateY(4px) rotate(45deg);
+          }
+
+          .mobile-toggle.open span:last-child{
+            transform:translateY(-4px) rotate(-45deg);
+          }
+
+          .apple-nav.mobile-panel-active .brand,
+          .apple-nav.mobile-panel-active .nav-center,
+          .apple-nav.mobile-panel-active .nav-search,
+          .apple-nav.mobile-panel-active .nav-auth,
+          .apple-nav.mobile-panel-active .mobile-toggle{
+            opacity:0 !important;
+            visibility:hidden !important;
+            pointer-events:none !important;
+          }
+
+          .apple-nav.mobile-panel-active .nav-mobile-close{
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+          }
+
+          .search-page-scrim,
+          .account-page-scrim{
+            inset:var(--nav-height, 44px) 0 0;
+          }
+
+          .nav-search-extension,
+          .account-nav-extension{
+            top:var(--nav-height, 44px);
+            bottom:0;
+            z-index:9995;
+            transform:translateY(0);
+            transform-origin:top center;
+            clip-path:inset(0 0 100% 0);
+            max-height:none;
+            overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
+            transition:
+              clip-path .42s cubic-bezier(.22,.61,.36,1),
+              opacity .28s ease;
+          }
+
+          .nav-search-extension.show,
+          .account-nav-extension.show{
+            transform:translateY(0);
+            clip-path:inset(0 0 0 0);
+            max-height:none;
+            animation:mobilePanelReveal .44s cubic-bezier(.22,.61,.36,1) both;
+          }
+
+          .nav-search-extension.show .nav-search-extension-inner,
+          .account-nav-extension.show .account-nav-extension-inner{
+            animation:mobilePanelContentIn .34s ease .08s both;
+          }
+
+          .nav-search-extension-inner,
+          .account-nav-extension-inner{
+            width:min(680px, calc(100vw - 32px));
+            padding:28px 0 44px;
+          }
+
+          .nav-search-content{
+            margin-top:22px;
+          }
+
+          .nav-search-results,
+          .nav-search-quicklinks,
+          .account-nav-grid{
+            gap:8px;
+          }
+
+          .nav-search-result,
+          .nav-search-quicklink{
+            min-height:54px;
+            border-radius:18px;
+            padding:10px 12px;
+          }
+        }
+
+        @media (max-width:640px){
+          .nav-shell{
+            padding:0 16px;
+            justify-content:space-between;
+          }
+          .nav-spacer{
+            height:44px;
+          }
+          .nav-search-extension-inner{
+            width:calc(100vw - 28px);
+            padding:22px 0 26px;
+          }
+          .account-nav-extension-inner{
+            width:calc(100vw - 28px);
+            padding:14px 0 16px;
+          }
+          .account-nav-grid{
+            grid-template-columns:1fr;
+          }
+          .nav-search-field input{
+            font-size:24px;
+          }
+          .brand-main{
+            font-size:13px;
+          }
+          .brand-sub{
+            font-size:8px;
+          }
+        }
+
+        @media (hover: none) {
+          .dropdown-card:hover { transform:none; }
         }
       `}</style>
     </>

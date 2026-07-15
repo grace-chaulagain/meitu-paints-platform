@@ -1137,6 +1137,118 @@ export default function Enamel() {
   .trust-row{ margin-top:14px; }
   .trust-pill{ width:100%; justify-content:space-between; }
 }
+
+/* Apple design refresh overrides */
+.product-hero, .details-section, .colors-section, .colors-cta-wrap {
+  color: var(--color-ink, #1d1d1f) !important;
+  font-family: var(--font-sf-pro-text, Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif) !important;
+}
+.product-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--meitu-home-hero-gradient) !important;
+}
+.details-section, .colors-section, .colors-cta-wrap {
+  background: var(--color-fog, #f5f5f7) !important;
+}
+.product-hero .py-6 {
+  padding-top: 1rem !important;
+  padding-bottom: 3rem !important;
+}
+.visual-surface, .detail-block, .color-card, .color-modal-card {
+  background: #fff !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 28px !important;
+}
+.visual-surface {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.74), rgba(255,255,255,.46)),
+    radial-gradient(circle at 50% 78%, rgba(29,29,31,.08), transparent 34%) !important;
+  backdrop-filter: blur(20px);
+}
+.visual-surface::before {
+  content: "";
+  position: absolute;
+  inset: 12% 10% 0;
+  background:
+    radial-gradient(ellipse at 50% 52%, rgba(0,113,227,.12), transparent 46%),
+    radial-gradient(ellipse at 32% 68%, rgba(245,0,180,.08), transparent 42%),
+    radial-gradient(ellipse at 72% 70%, rgba(223,231,79,.14), transparent 44%);
+  filter: blur(18px);
+  opacity: .88;
+  pointer-events: none;
+}
+.visual-surface::after {
+  content: "";
+  position: absolute;
+  width: 72%;
+  aspect-ratio: 1 / .42;
+  border: 1px solid rgba(29,29,31,.08);
+  border-radius: 999px;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+.hero-image {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 18px 32px rgba(29,29,31,.13)) !important;
+  animation: enamelProductFloat 5.6s ease-in-out infinite;
+}
+@keyframes enamelProductFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -10px, 0) scale(1.012); }
+}
+.context-pill, .context-pill.ghost.view-colors {
+  background: rgba(210,210,215,.64) !important;
+  border: 0 !important;
+  color: var(--color-ink, #1d1d1f) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(20px) !important;
+}
+.headline, .colors-header h3, .detail-block h3, .color-modal-title {
+  font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif) !important;
+  color: var(--color-ink, #1d1d1f) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.018em !important;
+}
+.headline { font-size: clamp(44px, 6vw, 76px) !important; line-height: 1.04 !important; }
+.lead-text, .subline, .detail-block p, .detail-note, .colors-header p, .color-modal-lead {
+  color: var(--color-graphite, #707070) !important;
+}
+.primary-action, .color-modal-cta {
+  background: var(--apple-control-blue, #0071e3) !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  box-shadow: none !important;
+  font-weight: 400 !important;
+  transition: background-color .1s ease, transform .1s ease !important;
+}
+.primary-action:hover, .color-modal-cta:hover {
+  background: var(--apple-control-blue-hover, #0077ed) !important;
+  transform: translateY(-1px);
+}
+.secondary-action, .color-modal-secondary {
+  background: #fff !important;
+  border: 1px solid var(--color-silver-mist, #e8e8ed) !important;
+  box-shadow: none !important;
+  color: var(--color-ink, #1d1d1f) !important;
+}
+.size-pill.active {
+  border-color: var(--color-ink, #1d1d1f) !important;
+  color: var(--color-ink, #1d1d1f) !important;
+  background: #fff !important;
+  box-shadow: inset 0 0 0 1px var(--color-ink, #1d1d1f) !important;
+}
+.trust-pill, .chip {
+  background: #fff !important;
+  border: 1px solid var(--color-silver-mist, #e8e8ed) !important;
+  box-shadow: none !important;
+}
+.trust-dot, .trust-check { background: var(--color-ink, #1d1d1f) !important; box-shadow: none !important; }
+.benefits li::before { color: var(--color-ink, #1d1d1f) !important; }
+
 `}</style>
     </>
   );

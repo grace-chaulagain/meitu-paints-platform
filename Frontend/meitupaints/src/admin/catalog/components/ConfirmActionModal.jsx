@@ -1,3 +1,7 @@
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+
+const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
+
 export default function ConfirmActionModal({
   open,
   title = "Confirm Action",
@@ -9,39 +13,61 @@ export default function ConfirmActionModal({
   onClose,
   onConfirm,
 }) {
-  if (!open) return null;
+  const shouldReduceMotion = useReducedMotion();
+  const scale = shouldReduceMotion ? 1 : 0.95;
+  const fast = shouldReduceMotion ? 0.001 : 0.16;
+  const slow = shouldReduceMotion ? 0.001 : 0.22;
 
   return (
-    <div style={overlayStyle}>
-      <div style={modalStyle}>
-        <div style={eyebrowStyle}>
-          {danger ? "Danger Zone" : "Confirmation"}
-        </div>
-
-        <div style={titleStyle}>{title}</div>
-
-        <div style={descStyle}>{description}</div>
-
-        <div style={footerStyle}>
-          <button type="button" onClick={onClose} style={secondaryBtnStyle}>
-            {cancelText}
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            style={{
-              ...primaryBtnStyle,
-              ...(danger ? dangerBtnStyle : {}),
-              opacity: loading ? 0.7 : 1,
-            }}
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: fast, ease: "easeOut" }}
+          style={overlayStyle}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            initial={{ opacity: 0, scale }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale }}
+            transition={{ duration: slow, ease: MODAL_EASE_OUT }}
+            style={{ ...modalStyle, transformOrigin: "center" }}
           >
-            {loading ? "Processing..." : confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
+            <div style={eyebrowStyle}>
+              {danger ? "Danger Zone" : "Confirmation"}
+            </div>
+
+            <div style={titleStyle}>{title}</div>
+
+            <div style={descStyle}>{description}</div>
+
+            <div style={footerStyle}>
+              <button type="button" onClick={onClose} style={secondaryBtnStyle}>
+                {cancelText}
+              </button>
+
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={loading}
+                style={{
+                  ...primaryBtnStyle,
+                  ...(danger ? dangerBtnStyle : {}),
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? "Processing..." : confirmText}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 

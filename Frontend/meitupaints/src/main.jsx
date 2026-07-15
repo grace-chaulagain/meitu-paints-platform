@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "./index.css";
 
 import RoomMaskTest from "./components/RoomMaskTest";
 import Home from "./Home.jsx";
@@ -28,7 +27,6 @@ import PuttingProducts from "./productsPages/PuttingProducts.jsx";
 import InquiryForm from "./productsPages/InquiryForm.jsx";
 import ZodiacDetails from "./pages/ZodiacDetails.jsx";
 import MeituColors from "./productsPages/meituColors.jsx";
-import Enamel from "./productsPages/EnamelPage.jsx";
 import MeituTextures from "./productsPages/meituTextures.jsx";
 
 import {
@@ -56,13 +54,18 @@ import {
   ResetPasswordPage,
   ResendSetupLinkPage,
 } from "./pages/AuthRecoveryPages.jsx";
-import AdminOrders from "./admin/dashboard/AdminDashboardPage.jsx";
 import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
 
+import DealerDashboardPage from "./dealer/DealerDashboardPage.jsx";
 import DealerCatalogPage from "./dealer/DealerCatalogPage.jsx";
 import DealerCartPage from "./dealer/DealerCartPage.jsx";
 import DealerOrderReportsPage from "./dealer/DealerOrderReportsPage.jsx";
 import DealerOrdersPage from "./dealer/DealerOrdersPage.jsx";
+import DealerOrderDetailPage from "./dealer/DealerOrderDetailPage.jsx";
+import DealerInventoryPage from "./dealer/inventory/DealerInventoryPage.jsx";
+import DealerInventoryDetailPage from "./dealer/inventory/DealerInventoryDetailPage.jsx";
+import DealerSalesPage from "./dealer/sales/DealerSalesPage.jsx";
+import CouponRedeemPage from "./dealer/coupons/CouponRedeemPage.jsx";
 
 import { Provider } from "react-redux";
 import store from "./redux/store.js";
@@ -78,9 +81,14 @@ import DispatcherDealersPage from "./dispatcher/dashboard/dealers/DispatcherDeal
 import DispatcherDealerProfilePage from "./dispatcher/dashboard/dealers/DispatcherDealerProfilePage.jsx";
 import DispatcherDealerOrdersPage from "./dispatcher/dashboard/dealers/DispatcherDealerOrdersPage.jsx";
 import DispatcherProfileWorkspacePage from "./dispatcher/dashboard/DispatcherProfileWorkspacePage.jsx";
+import DispatcherStockPage from "./dispatcher/dashboard/stock/DispatcherStockPage.jsx";
+import DispatcherOrderCatalogPage from "./dispatcher/dashboard/order/DispatcherOrderCatalogPage.jsx";
+import DispatcherOrderCartPage from "./dispatcher/dashboard/order/DispatcherOrderCartPage.jsx";
+import DispatcherOrderHistoryPage from "./dispatcher/dashboard/order/DispatcherOrderHistoryPage.jsx";
 import DispatcherRegisterPage from "./dispatcher/DispatcherRegisterPage.jsx";
 import DispatcherDashboardPage from "./dispatcher/dashboard/DispatcherDashboardPage.jsx";
 import FactoryDashboardPage from "./factory/FactoryDashboardPage.jsx";
+import "./index.css";
 
 function Layout() {
   return (
@@ -254,6 +262,7 @@ const router = createBrowserRouter([
       { path: "/horoscope/:zodiac", element: withFooter(<ZodiacDetails />) },
       { path: "/support", element: withFooter(<Support />) },
       { path: "/about", element: withFooter(<About />) },
+      { path: "/aboutus", element: withFooter(<About />) },
       { path: "/regular", element: withFooter(<Regular />) },
       { path: "/regular/:id", element: withFooter(<RegularProducts />) },
       { path: "/granite", element: withFooter(<Granite />) },
@@ -269,39 +278,101 @@ const router = createBrowserRouter([
       { path: "/products", element: withFooter(<Products />) },
       { path: "/inquiry", element: withFooter(<InquiryForm />) },
       { path: "/colors", element: withFooter(<MeituColors />) },
-      { path: "/specialty/oth-002", element: withFooter(<Enamel />) },
+      { path: "/texture", element: withFooter(<MeituTextures />) },
       { path: "/textures", element: withFooter(<MeituTextures />) },
       { path: "/mask-test", element: withFooter(<RoomMaskTest />) },
       {
         path: "/dealer/catalog",
-        element: withFooter(
+        element: (
           <RequireDealer>
-            <DealerCatalogPage />
-          </RequireDealer>,
+            <DealerDashboardPage>
+              <DealerCatalogPage />
+            </DealerDashboardPage>
+          </RequireDealer>
         ),
       },
       {
         path: "/dealer/cart",
-        element: withFooter(
+        element: (
           <RequireDealer>
-            <DealerCartPage />
-          </RequireDealer>,
+            <DealerDashboardPage>
+              <DealerCartPage />
+            </DealerDashboardPage>
+          </RequireDealer>
         ),
       },
       {
         path: "/dealer/orders",
-        element: withFooter(
+        element: (
           <RequireDealer>
-            <DealerOrdersPage />
-          </RequireDealer>,
+            <DealerDashboardPage>
+              <DealerOrdersPage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
+      {
+        path: "/dealer/orders/:orderId",
+        element: (
+          <RequireDealer>
+            <DealerDashboardPage>
+              <DealerOrderDetailPage />
+            </DealerDashboardPage>
+          </RequireDealer>
         ),
       },
       {
         path: "/dealer/orders/reports",
-        element: withFooter(
+        element: (
           <RequireDealer>
-            <DealerOrderReportsPage />
-          </RequireDealer>,
+            <DealerDashboardPage>
+              <DealerOrderReportsPage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
+      {
+        path: "/dealer/inventory",
+        element: (
+          <RequireDealer>
+            <DealerDashboardPage>
+              <DealerInventoryPage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
+      {
+        path: "/dealer/inventory/:productId",
+        element: (
+          <RequireDealer>
+            <DealerDashboardPage>
+              <DealerInventoryDetailPage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
+      {
+        path: "/dealer/sales",
+        element: (
+          <RequireDealer>
+            <DealerDashboardPage>
+              <DealerSalesPage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
+      {
+        // Deliberately NOT wrapped in DealerDashboardPage's sidebar shell -
+        // this is the QR-scan landing page, a focused single-task
+        // confirmation screen (dealer at the counter, painter waiting),
+        // not a page for browsing the dashboard. RequireDealer alone
+        // already handles "not logged in -> /login?returnTo=/redeem/:token
+        // -> back here after login" for free.
+        path: "/redeem/:token",
+        element: (
+          <RequireDealer>
+            <CouponRedeemPage />
+          </RequireDealer>
         ),
       },
 
@@ -327,11 +398,7 @@ const router = createBrowserRouter([
       // Admin
       {
         path: "/admin/orders",
-        element: (
-          <RequireAdmin>
-            <AdminOrders />
-          </RequireAdmin>
-        ),
+        element: <Navigate to="/admin/dashboard/orders" replace />,
       },
       {
         path: "/admin/dashboard/*",
@@ -400,6 +467,22 @@ const router = createBrowserRouter([
           {
             path: "dealers",
             element: <DispatcherDealersPage />,
+          },
+          {
+            path: "stock",
+            element: <DispatcherStockPage />,
+          },
+          {
+            path: "order",
+            element: <DispatcherOrderCatalogPage />,
+          },
+          {
+            path: "order/cart",
+            element: <DispatcherOrderCartPage />,
+          },
+          {
+            path: "order/history",
+            element: <DispatcherOrderHistoryPage />,
           },
           {
             path: "notifications",

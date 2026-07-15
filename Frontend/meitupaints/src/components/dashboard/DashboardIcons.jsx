@@ -122,6 +122,13 @@ const paths = {
       <path d="m16 8-8 8" />
     </>
   ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 8h.01" />
+    </>
+  ),
   chevron: <path d="m9 6 6 6-6 6" />,
   logout: (
     <>
@@ -130,9 +137,163 @@ const paths = {
       <path d="M18 12H9" />
     </>
   ),
+  store: (
+    <>
+      <path d="M4 9 5.5 4h13L20 9" />
+      <path d="M4 9v11h16V9" />
+      <path d="M4 9h16" />
+      <path d="M9.5 20v-6h5v6" />
+    </>
+  ),
+  handshake: (
+    <>
+      <path d="M3 11l4-4 4 3 3-3 4 4" />
+      <path d="M3 11l3 6 4-2 2 2 4-1 4-6" />
+      <path d="M10 10l3 4" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M4 20V10" />
+      <path d="M11 20V4" />
+      <path d="M18 20v-7" />
+      <path d="M3 20h18" />
+    </>
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3v2.3M12 18.7V21M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3 12h2.3M18.7 12H21M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
+    </>
+  ),
+  inbox: (
+    <>
+      <path d="M4 12h4l1.8 3h4.4L16 12h4" />
+      <path d="M5.2 5h13.6L21 12v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6L5.2 5Z" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M5 7h14" />
+      <path d="M9 7V4h6v3" />
+      <path d="M7 7l1 13h8l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  ),
+  headset: (
+    <>
+      <path d="M4 13a8 8 0 0 1 16 0" />
+      <rect x="3" y="13" width="4" height="6" rx="1.6" />
+      <rect x="17" y="13" width="4" height="6" rx="1.6" />
+      <path d="M20 19v1a3 3 0 0 1-3 3h-3" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 3.2 5 6v5.4c0 4.6 3 7.8 7 9.4 4-1.6 7-4.8 7-9.4V6l-7-2.8Z" />
+      <path d="m9.3 12 2 2 3.4-4" />
+    </>
+  ),
+  award: (
+    <>
+      <circle cx="12" cy="8.5" r="4.5" />
+      <path d="M9.5 12.2 8 21l4-2.4 4 2.4-1.5-8.8" />
+      <path d="m10.2 8.5 1.2 1.2 2.4-2.5" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  minus: <path d="M5 12h14" />,
+  package: (
+    <>
+      <path d="M21 8l-9-5-9 5 9 5 9-5Z" />
+      <path d="M3 8v9l9 5 9-5V8" />
+      <path d="M12 13v9" />
+    </>
+  ),
+  list: (
+    <>
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
+    </>
+  ),
+  checkmark: <path d="m5 12 5 5L19 7" />,
+  checkSquare: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <path d="m8 12 2.6 2.6L16.5 9" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M3 10h18" />
+      <path d="M8 3v4" />
+      <path d="M16 3v4" />
+    </>
+  ),
+  close: (
+    <>
+      <path d="M6 6l12 12" />
+      <path d="M18 6 6 18" />
+    </>
+  ),
+  trend: (
+    <>
+      <path d="M4 16 10 10 14 14 20 6" />
+      <path d="M14 6h6v6" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M3 12a9 9 0 0 1 15.5-6.5L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15.5 6.5L3 16" />
+      <path d="M3 21v-5h5" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </>
+  ),
+  moreHorizontal: (
+    <>
+      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3.2" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M12 21s7-6.3 7-11.5A7 7 0 0 0 5 9.5C5 14.7 12 21 12 21Z" />
+      <circle cx="12" cy="9.5" r="2.4" />
+    </>
+  ),
 };
 
-export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = "" }) {
+export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = "", style }) {
   const path = paths[name] || paths.overview;
 
   return (
@@ -148,6 +309,7 @@ export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = 
       strokeLinecap="round"
       strokeLinejoin="round"
       focusable="false"
+      style={style}
     >
       {path}
     </svg>

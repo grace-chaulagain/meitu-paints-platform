@@ -6,6 +6,17 @@ import {
   useLazyGetAdminScopedOrderQuery,
 } from "../../../redux/api/meituApi.js";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
+import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import {
+  DashboardUIStyles,
+  EmptyState,
+  GhostButton,
+  Pill,
+  SearchField,
+  SectionHeader,
+  SegmentedControl,
+  Surface,
+} from "../../../components/dashboard/DashboardUI.jsx";
 
 const ORDER_FILTERS = [
   { key: "ALL", label: "All" },
@@ -15,573 +26,135 @@ const ORDER_FILTERS = [
   { key: "ARCHIVED", label: "Archived" },
 ];
 
-function GlassCard({ children, style = {}, ...rest }) {
-  return (
-    <div
-      {...rest}
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle, action = null }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.58)",
-            }}
-          >
-            {subtitle}
-          </div>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function SearchInput({ value, onChange, placeholder }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        height: 50,
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        padding: "0 14px",
-      }}
-    >
-      <span style={{ fontWeight: 900, color: "rgba(15,23,42,.42)" }}>⌕</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: "100%",
-          border: "none",
-          outline: "none",
-          background: "transparent",
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#0f172a",
-        }}
-      />
-    </div>
-  );
-}
-
-function FilterPill({ active, children, onClick, count }) {
+// A plain, minimal top-left back link - Apple's own back-navigation
+// convention (chevron + text, no button chrome) rather than a boxed
+// button competing with the page's real actions.
+function BackLink({ onClick, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
       style={{
-        height: 42,
-        padding: "0 14px",
-        borderRadius: 999,
-        border: active
-          ? "1px solid rgba(180,35,24,.16)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: active
-          ? "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)"
-          : "#fff",
-        color: active ? "#fff" : "#0f172a",
-        fontWeight: 900,
-        fontSize: 13,
-        cursor: "pointer",
         display: "inline-flex",
         alignItems: "center",
-        gap: 8,
+        gap: 4,
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        cursor: "pointer",
+        color: "var(--color-azure, #0071e3)",
+        fontSize: 14.5,
+        fontWeight: 600,
       }}
     >
-      <span>{children}</span>
-      {typeof count === "number" ? (
-        <span
-          style={{
-            minWidth: 22,
-            height: 22,
-            padding: "0 6px",
-            borderRadius: 999,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: active ? "rgba(255,255,255,.18)" : "rgba(15,23,42,.06)",
-            color: active ? "#fff" : "#0f172a",
-            fontSize: 11,
-            fontWeight: 900,
-          }}
-        >
-          {count}
-        </span>
-      ) : null}
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m15 6-6 6 6 6" />
+      </svg>
+      {children}
     </button>
   );
 }
 
-function ActionButton({
-  children,
-  onClick,
-  subtle = false,
-  danger = false,
-  disabled = false,
-}) {
+function CloseButton({ onClick }) {
   return (
     <button
       type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick?.(e);
-      }}
-      disabled={disabled}
-      style={{
-        height: 40,
-        padding: "0 14px",
-        borderRadius: 14,
-        border: danger
-          ? "1px solid rgba(180,35,24,.14)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: danger
-          ? "rgba(180,35,24,.06)"
-          : subtle
-            ? "#fff"
-            : "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)",
-        color: danger ? "#b42318" : subtle ? "#0f172a" : "#fff",
-        fontWeight: 900,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-      }}
+      onClick={onClick}
+      aria-label="Close"
+      style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}
     >
-      {children}
+      <DashboardIcon name="close" size={14} strokeWidth={2} />
     </button>
   );
 }
 
-function StatusBadge({ status }) {
-  const normalized = String(status || "").toUpperCase();
-
-  const tone =
-    normalized === "VERIFIED"
-      ? {
-          bg: "rgba(22,163,74,.08)",
-          color: "#15803d",
-          border: "1px solid rgba(22,163,74,.12)",
-        }
-      : normalized === "REJECTED"
-        ? {
-            bg: "rgba(180,35,24,.08)",
-            color: "#b42318",
-            border: "1px solid rgba(180,35,24,.12)",
-          }
-        : normalized === "ARCHIVED"
-          ? {
-              bg: "rgba(15,23,42,.08)",
-              color: "#334155",
-              border: "1px solid rgba(15,23,42,.12)",
-            }
-          : {
-              bg: "rgba(245,158,11,.10)",
-              color: "#b45309",
-              border: "1px solid rgba(245,158,11,.16)",
-            };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        height: 28,
-        padding: "0 10px",
-        borderRadius: 999,
-        background: tone.bg,
-        color: tone.color,
-        border: tone.border,
-        fontSize: 12,
-        fontWeight: 900,
-        letterSpacing: ".04em",
-      }}
-    >
-      {status || "—"}
-    </span>
-  );
-}
-
-function Label({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 900,
-        letterSpacing: ".08em",
-        textTransform: "uppercase",
-        color: "rgba(15,23,42,.44)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function DetailItem({ label, value }) {
-  return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <Label>{label}</Label>
-      <div
-        style={{
-          fontSize: 14,
-          lineHeight: 1.65,
-          fontWeight: 800,
-          color: "#0f172a",
-          wordBreak: "break-word",
-        }}
-      >
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {Array.from({ length: 5 }).map((_, index) => (
-        <GlassCard key={index} style={{ padding: 18 }}>
-          <div
-            style={{
-              height: 110,
-              borderRadius: 18,
-              background:
-                "linear-gradient(90deg, rgba(241,245,249,.9), rgba(248,250,252,1), rgba(241,245,249,.9))",
-            }}
-          />
-        </GlassCard>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ companyName, onReset }) {
-  return (
-    <GlassCard style={{ padding: 26 }}>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        No orders found
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          maxWidth: 620,
-          fontSize: 14,
-          lineHeight: 1.7,
-          fontWeight: 700,
-          color: "rgba(15,23,42,.56)",
-        }}
-      >
-        {companyName
-          ? `No matching order records were found for ${companyName}.`
-          : "No matching order records were found for this dealer."}
-      </div>
-      <div style={{ marginTop: 18 }}>
-        <ActionButton subtle onClick={onReset}>
-          Clear filters
-        </ActionButton>
-      </div>
-    </GlassCard>
-  );
+function statusTone(status) {
+  const s = String(status || "").toUpperCase();
+  if (s === "VERIFIED") return "positive";
+  if (s === "REJECTED") return "critical";
+  if (s === "ARCHIVED") return "neutral";
+  return "caution";
 }
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString()}`;
 }
 
-function OrderRow({ order, onOpen }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(order)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        border: "1px solid rgba(15,23,42,.06)",
-        background: "#fff",
-        borderRadius: 22,
-        padding: 18,
-        cursor: "pointer",
-        transition:
-          "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
-        boxShadow: "0 10px 26px rgba(15,23,42,.04)",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1fr) auto",
-          gap: 16,
-          alignItems: "start",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 17,
-                fontWeight: 950,
-                letterSpacing: "-0.02em",
-                color: "#0f172a",
-              }}
-            >
-              {order.orderNumber || "Unnamed Order"}
-            </div>
-            <StatusBadge status={order.status} />
-          </div>
-
-          <div
-            style={{
-              marginTop: 12,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.56)",
-            }}
-          >
-            <span>
-              {money(order?.totals?.total, order?.totals?.currency || "NPR")}
-            </span>
-            <span>•</span>
-            <span>{order?.payment?.method || "No payment method"}</span>
-            <span>•</span>
-            <span>
-              {order.createdAt
-                ? new Date(order.createdAt).toLocaleDateString()
-                : "—"}
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            justifySelf: "end",
-            textAlign: "right",
-            fontSize: 12,
-            fontWeight: 800,
-            color: "rgba(15,23,42,.52)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {Array.isArray(order.items) ? `${order.items.length} items` : "—"}
-        </div>
-      </div>
-    </button>
-  );
+function formatDate(value) {
+  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 }
 
-function OrderItemsTable({ items = [] }) {
-  if (!items.length) {
-    return (
-      <div
-        style={{
-          padding: 16,
-          borderRadius: 18,
-          border: "1px solid rgba(15,23,42,.06)",
-          background: "#fff",
-          color: "rgba(15,23,42,.56)",
-          fontWeight: 800,
-        }}
-      >
-        No items found.
-      </div>
-    );
-  }
-
+function DetailItem({ label, value }) {
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        border: "1px solid rgba(15,23,42,.06)",
-        background: "#fff",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ overflowX: "auto" }}>
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "rgba(15,23,42,.03)" }}>
-              {["Item", "Pack", "Qty", "Rate", "Amount"].map((head) => (
-                <th
-                  key={head}
-                  style={{
-                    textAlign:
-                      head === "Qty" || head === "Rate" || head === "Amount"
-                        ? "right"
-                        : "left",
-                    padding: "12px 14px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    letterSpacing: ".08em",
-                    textTransform: "uppercase",
-                    color: "rgba(15,23,42,.52)",
-                  }}
-                >
-                  {head}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, index) => (
-              <tr
-                key={`${item.sku || item.code || item.name}-${index}`}
-                style={{ borderTop: "1px solid rgba(15,23,42,.06)" }}
-              >
-                <td style={{ padding: "12px 14px" }}>
-                  <div style={{ fontWeight: 900, color: "#0f172a" }}>
-                    {item.name || "—"}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "rgba(15,23,42,.52)",
-                    }}
-                  >
-                    {item.sku || item.code || ""}
-                  </div>
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                  }}
-                >
-                  {item.packLabel || item.variantLabel || item.unit || "—"}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                  }}
-                >
-                  {Number(item.quantity || 0).toLocaleString()}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 800,
-                    color: "rgba(15,23,42,.76)",
-                  }}
-                >
-                  {Number(item.unitPrice || 0).toLocaleString()}
-                </td>
-                <td
-                  style={{
-                    padding: "12px 14px",
-                    textAlign: "right",
-                    fontWeight: 900,
-                    color: "#0f172a",
-                  }}
-                >
-                  {Number(item.lineTotal || 0).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div style={{ display: "grid", gap: 4 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, fontWeight: 500, color: "var(--color-ink, #1d1d1f)", wordBreak: "break-word" }}>
+        {value || "—"}
       </div>
     </div>
   );
 }
 
-function ModalShell({ open, onClose, children, maxWidth = 1080 }) {
-  if (!open) return null;
-
+function OrderRow({ order, onOpen }) {
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1400,
-        background: "rgba(15,23,42,.38)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 28,
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(order)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(order);
+        }
       }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className="dash-list-row dash-selectable-row"
+      style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 110px 130px 100px", gap: 12, alignItems: "center", padding: "12px 16px", cursor: "pointer" }}
     >
-      <GlassCard
-        style={{
-          width: `min(${maxWidth}px, 100%)`,
-          maxHeight: "92vh",
-          overflow: "auto",
-        }}
-      >
-        {children}
-      </GlassCard>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.orderNumber || "Unnamed Order"}</div>
+        <div style={{ marginTop: 2, fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>{order?.payment?.method || "No payment method"} · {Array.isArray(order.items) ? `${order.items.length} items` : "—"}</div>
+      </div>
+      <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDate(order.createdAt)}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{money(order?.totals?.total, order?.totals?.currency)}</span>
+      <span><Pill tone={statusTone(order.status)} size="small">{order.status || "—"}</Pill></span>
+    </div>
+  );
+}
+
+function OrderItemsTable({ items = [] }) {
+  if (!items.length) {
+    return <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>No items found.</div>;
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            {["Item", "Pack", "Qty", "Rate", "Amount"].map((head) => (
+              <th key={head} style={{ textAlign: head === "Item" || head === "Pack" ? "left" : "right", padding: "8px 10px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
+                {head}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={`${item.sku || item.code || item.name}-${index}`} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
+              <td style={{ padding: "8px 10px" }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-ink, #1d1d1f)" }}>{item.name || "—"}</div>
+                <div style={{ fontSize: 11, color: "var(--color-graphite, #707070)" }}>{item.sku || item.code || ""}</div>
+              </td>
+              <td style={{ padding: "8px 10px", fontSize: 12.5 }}>{item.packLabel || item.variantLabel || item.unit || "—"}</td>
+              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5, fontWeight: 700 }}>{Number(item.quantity || 0).toLocaleString()}</td>
+              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5 }}>{Number(item.unitPrice || 0).toLocaleString()}</td>
+              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5, fontWeight: 700 }}>{Number(item.lineTotal || 0).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -596,114 +169,51 @@ function OrderDetailModal({ open, order, dealer, loading, onClose }) {
       : [];
 
   return (
-    <ModalShell open={open} onClose={onClose} maxWidth={1120}>
-      <div style={{ padding: 24 }}>
-        <SectionHeader
-          title={order.orderNumber || "Order Detail"}
-          subtitle={
-            dealer?.companyName
-              ? `${dealer.companyName} · Full order record`
-              : "Complete order record"
-          }
-          action={
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <ActionButton
-                subtle
-                onClick={() => downloadOrderSummaryPdf({ order, dealer })}
-              >
-                Download PDF
-              </ActionButton>
-
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 14,
-                  border: "1px solid rgba(15,23,42,.08)",
-                  background: "#fff",
-                  fontSize: 20,
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  color: "#0f172a",
-                }}
-              >
-                ×
-              </button>
-            </div>
-          }
-        />
-
-        <div
-          style={{
-            marginTop: 22,
-            display: "grid",
-            gridTemplateColumns: "minmax(0,1.1fr) minmax(320px,.9fr)",
-            gap: 18,
-          }}
-        >
-          <GlassCard style={{ padding: 18, background: "#fff" }}>
-            <Label>Order Items</Label>
-            <div style={{ marginTop: 10 }}>
-              {loading ? (
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 18,
-                    border: "1px solid rgba(15,23,42,.06)",
-                    background: "#fff",
-                    color: "rgba(15,23,42,.56)",
-                    fontWeight: 800,
-                  }}
-                >
-                  Loading order items...
-                </div>
-              ) : (
-                <OrderItemsTable items={resolvedItems} />
-              )}
-            </div>
-          </GlassCard>
-
-          <div style={{ display: "grid", gap: 18 }}>
-            <GlassCard style={{ padding: 18, background: "#fff" }}>
-              <Label>Order Context</Label>
-              <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
-                <DetailItem label="Dealer" value={dealer?.companyName} />
-                <DetailItem label="Contact" value={dealer?.contactName} />
-                <DetailItem label="Phone" value={dealer?.phone} />
-                <DetailItem label="Email" value={dealer?.email} />
-                <DetailItem
-                  label="Total"
-                  value={money(
-                    order?.totals?.total,
-                    order?.totals?.currency || "NPR",
-                  )}
-                />
-                <DetailItem
-                  label="Payment Method"
-                  value={order?.payment?.method}
-                />
-                <DetailItem
-                  label="Payment Reference"
-                  value={order?.payment?.reference}
-                />
-                <DetailItem label="Dealer Note" value={order?.dealerNote} />
-                <DetailItem label="Internal Note" value={order?.internalNote} />
-                <DetailItem
-                  label="Submitted"
-                  value={
-                    order?.createdAt
-                      ? new Date(order.createdAt).toLocaleString()
-                      : "—"
-                  }
-                />
-              </div>
-            </GlassCard>
-          </div>
+    <div
+      className="dash-modal-backdrop-in"
+      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 24 }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <Surface className="dash-modal-surface-in" style={{ width: "min(920px, 100%)", maxHeight: "90vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <SectionHeader eyebrow={dealer?.companyName || "Dealer"} icon="orders" title={order.orderNumber || "Order Detail"} />
+          <CloseButton onClick={onClose} />
         </div>
-      </div>
-    </ModalShell>
+
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <Pill tone={statusTone(order.status)} size="small">{order.status || "—"}</Pill>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{money(order?.totals?.total, order?.totals?.currency)}</span>
+          <GhostButton icon="download" onClick={() => downloadOrderSummaryPdf({ order, dealer })}>
+            Download PDF
+          </GhostButton>
+        </div>
+
+        <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "minmax(0,1.1fr) minmax(280px,.9fr)", gap: 16 }}>
+          <Surface padding={0} style={{ border: "1px solid rgba(0,0,0,.06)" }}>
+            <div style={{ padding: "10px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--color-graphite, #707070)" }}>Order Items</div>
+            {loading ? (
+              <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>Loading order items…</div>
+            ) : (
+              <OrderItemsTable items={resolvedItems} />
+            )}
+          </Surface>
+
+          <Surface padding={16} style={{ display: "grid", gap: 12 }}>
+            <DetailItem label="Dealer" value={dealer?.companyName} />
+            <DetailItem label="Contact" value={dealer?.contactName} />
+            <DetailItem label="Phone" value={dealer?.phone} />
+            <DetailItem label="Email" value={dealer?.email} />
+            <DetailItem label="Payment Method" value={order?.payment?.method} />
+            <DetailItem label="Payment Reference" value={order?.payment?.reference} />
+            {order?.dealerNote ? <DetailItem label="Dealer Note" value={order.dealerNote} /> : null}
+            {order?.internalNote ? <DetailItem label="Internal Note" value={order.internalNote} /> : null}
+            <DetailItem label="Submitted" value={order?.createdAt ? new Date(order.createdAt).toLocaleString() : "—"} />
+          </Surface>
+        </div>
+      </Surface>
+    </div>
   );
 }
 
@@ -728,7 +238,7 @@ export default function AdminDealerOrdersPage() {
   const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId }, { skip: !dealerId });
   const [fetchOrderDetail] = useLazyGetAdminScopedOrderQuery();
 
-  const dealer = dealerQuery.data || null;
+  const dealer = dealerQuery.data?.item || null;
   const allDealerOrders = useMemo(() => {
     const incomingOrders = ordersQuery.data?.items || [];
     return incomingOrders.filter((order) => {
@@ -742,7 +252,7 @@ export default function AdminDealerOrdersPage() {
     !dealer &&
     allDealerOrders.length === 0 &&
     (dealerQuery.isLoading || ordersQuery.isLoading);
-  const refreshing =
+  const isRefreshing =
     Boolean(dealer || allDealerOrders.length) &&
     (dealerQuery.isFetching || ordersQuery.isFetching);
   const queryError = dealerQuery.error?.message || ordersQuery.error?.message || "";
@@ -814,130 +324,60 @@ export default function AdminDealerOrdersPage() {
     };
   }, [allDealerOrders]);
 
+  const filterOptions = ORDER_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
+
   return (
-    <div style={{ display: "grid", gap: 18 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <ActionButton
-          subtle
-          onClick={() => navigate(`/admin/dashboard/dealers`)}
-        >
-          ← Back
-        </ActionButton>
+    <div style={{ display: "grid", gap: 16 }}>
+      <DashboardUIStyles />
 
-        {dealer?.companyName ? (
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "10px 14px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,.78)",
-              border: "1px solid rgba(15,23,42,.08)",
-              color: "#0f172a",
-              fontSize: 13,
-              fontWeight: 900,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {dealer.companyName}
-          </div>
-        ) : null}
-      </div>
+      <BackLink onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}`)}>Back to Dealer Profile</BackLink>
 
-      <GlassCard style={{ padding: 18 }}>
+      <Surface padding={18} className="dash-fade-up">
         <SectionHeader
+          icon="orders"
           title="Order History"
-          subtitle={refreshing ? "Updating cached dealer orders in the background." : "Search and inspect every order submitted by this dealer."}
+          subtitle={dealer?.companyName || ""}
           action={
-            <ActionButton subtle onClick={loadPageData}>
-              Refresh
-            </ActionButton>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+              <GhostButton icon="refresh" onClick={loadPageData}>Refresh</GhostButton>
+            </div>
           }
         />
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gap: 14,
-          }}
-        >
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search order number, payment, notes..."
-          />
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {ORDER_FILTERS.map((filter) => (
-                <FilterPill
-                  key={filter.key}
-                  active={statusFilter === filter.key}
-                  onClick={() => setStatusFilter(filter.key)}
-                  count={countsByFilter[filter.key]}
-                >
-                  {filter.label}
-                </FilterPill>
-              ))}
-            </div>
-
-            <ActionButton subtle onClick={loadPageData}>
-              Apply Search
-            </ActionButton>
+        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 320, flex: "1 1 240px" }}>
+            <SearchField value={search} onChange={setSearch} placeholder="Search order number, payment, notes…" />
           </div>
+          <SegmentedControl options={filterOptions} value={statusFilter} onChange={setStatusFilter} />
         </div>
 
         {(error || queryError) ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: "rgba(180,35,24,.08)",
-              color: "#b42318",
-              border: "1px solid rgba(180,35,24,.14)",
-              fontWeight: 800,
-            }}
-          >
-            {error || queryError}
-          </div>
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>{error || queryError}</div>
         ) : null}
-      </GlassCard>
+      </Surface>
 
       {loading ? (
-        <LoadingState />
+        <Surface padding={18}>
+          <div style={{ height: 220, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
+        </Surface>
       ) : filteredOrders.length === 0 ? (
-        <EmptyState
-          companyName={dealer?.companyName}
-          onReset={() => {
-            setSearch("");
-            setStatusFilter("ALL");
-          }}
-        />
+        <Surface padding={20}>
+          <EmptyState
+            icon="orders"
+            title="No orders found"
+            subtitle={dealer?.companyName ? `No matching order records were found for ${dealer.companyName}.` : "No matching order records were found for this dealer."}
+          />
+          <div style={{ marginTop: 4 }}>
+            <GhostButton onClick={() => { setSearch(""); setStatusFilter("ALL"); }}>Clear filters</GhostButton>
+          </div>
+        </Surface>
       ) : (
-        <div style={{ display: "grid", gap: 14 }}>
+        <Surface padding={0} className="dash-fade-up">
           {filteredOrders.map((order) => (
             <OrderRow key={order._id} order={order} onOpen={handleOpenOrder} />
           ))}
-        </div>
+        </Surface>
       )}
 
       <OrderDetailModal

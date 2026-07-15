@@ -6,186 +6,60 @@ import {
   useGetDispatcherOrdersArchiveQuery,
   useGetDispatcherOrdersQuery,
 } from "../../redux/api/meituApi.js";
+import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
+import { DashboardUIStyles, MetricTile, SectionHeader, Surface } from "../../components/dashboard/DashboardUI.jsx";
 
 const RECENT_HANDLED_WINDOW_START_MS = Date.now() - 7 * 86400000;
 
-function GlassCard({ children, style = {} }) {
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function MetricCard({ label, value, helper = "", accent = false }) {
-  return (
-    <div
-      style={{
-        borderRadius: 12,
-        padding: "16px 18px",
-        background: accent ? "rgba(180,35,24,.06)" : "rgba(248,250,252,.95)",
-        border: accent
-          ? "1px solid rgba(180,35,24,.12)"
-          : "1px solid rgba(15,23,42,.06)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.46)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 30,
-          fontWeight: 950,
-          letterSpacing: "-0.04em",
-          color: accent ? "#b42318" : "#0f172a",
-        }}
-      >
-        {value}
-      </div>
-      {helper ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.54)",
-          }}
-        >
-          {helper}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }) {
-  return (
-    <div>
-      <div
-        style={{
-          fontSize: 26,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        {title}
-      </div>
-      {subtitle ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 14,
-            lineHeight: 1.65,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.58)",
-          }}
-        >
-          {subtitle}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function InfoBlock({ title, description }) {
-  return (
-    <div
-      style={{
-        padding: "14px 16px",
-        borderRadius: 18,
-        background: "rgba(248,250,252,.95)",
-        border: "1px solid rgba(15,23,42,.06)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 900,
-          color: "#0f172a",
-        }}
-      >
-        {title}
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 13,
-          lineHeight: 1.65,
-          fontWeight: 700,
-          color: "rgba(15,23,42,.62)",
-        }}
-      >
-        {description}
-      </div>
-    </div>
-  );
-}
-
 function WorkflowStep({ index, title, desc }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "36px minmax(0,1fr)",
-        gap: 14,
-        alignItems: "start",
-      }}
-    >
+    <div style={{ display: "grid", gridTemplateColumns: "30px minmax(0,1fr)", gap: 12, alignItems: "start" }}>
       <div
         style={{
-          width: 36,
-          height: 36,
+          width: 26,
+          height: 26,
           borderRadius: 999,
           display: "grid",
           placeItems: "center",
-          background: "rgba(180,35,24,.08)",
-          color: "#b42318",
-          fontWeight: 950,
-          fontSize: 13,
+          background: "rgba(0,113,227,.1)",
+          color: "var(--color-azure, #0071e3)",
+          fontWeight: 700,
+          fontSize: 12,
         }}
       >
         {index}
       </div>
-
       <div>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 13,
-            lineHeight: 1.7,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.58)",
-          }}
-        >
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>{title}</div>
+        <div style={{ marginTop: 4, fontSize: 12.5, lineHeight: 1.55, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
           {desc}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ icon, title, description }) {
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <div
+        style={{
+          width: 26,
+          height: 26,
+          flex: "0 0 auto",
+          borderRadius: 8,
+          display: "grid",
+          placeItems: "center",
+          background: "var(--color-fog, #f5f5f7)",
+          color: "var(--color-graphite, #707070)",
+        }}
+      >
+        <DashboardIcon name={icon} size={13} strokeWidth={1.8} />
+      </div>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>{title}</div>
+        <div style={{ marginTop: 3, fontSize: 12.5, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+          {description}
         </div>
       </div>
     </div>
@@ -195,18 +69,12 @@ function WorkflowStep({ index, title, desc }) {
 export default function DispatcherOverviewPage() {
   const { user } = useAuth();
   const notifications = useNotifications();
-  const pendingOrdersQuery = useGetDispatcherOrdersQuery({
-    status: "SUBMITTED",
-    limit: 1,
-  });
+  const pendingOrdersQuery = useGetDispatcherOrdersQuery({ status: "SUBMITTED", limit: 1 });
   const archiveOrdersQuery = useGetDispatcherOrdersArchiveQuery({ limit: 5 });
   const assignedDealersQuery = useGetDispatcherDealersQuery({ limit: 1 });
 
   const dispatcherName =
-    user?.name ||
-    user?.username ||
-    user?.fullName ||
-    (user?.email ? String(user.email).split("@")[0] : "Dispatcher");
+    user?.name || user?.username || user?.fullName || (user?.email ? String(user.email).split("@")[0] : "Dispatcher");
 
   const pulse = useMemo(() => {
     const pendingOrders = pendingOrdersQuery.data || {};
@@ -226,121 +94,53 @@ export default function DispatcherOverviewPage() {
     };
   }, [pendingOrdersQuery.data, archiveOrdersQuery.data, assignedDealersQuery.data]);
 
-  const hasCachedPulse = Boolean(
-    pendingOrdersQuery.data || archiveOrdersQuery.data || assignedDealersQuery.data,
-  );
+  const hasCachedPulse = Boolean(pendingOrdersQuery.data || archiveOrdersQuery.data || assignedDealersQuery.data);
   const loading =
-    !hasCachedPulse &&
-    (pendingOrdersQuery.isLoading ||
-      archiveOrdersQuery.isLoading ||
-      assignedDealersQuery.isLoading);
+    !hasCachedPulse && (pendingOrdersQuery.isLoading || archiveOrdersQuery.isLoading || assignedDealersQuery.isLoading);
   const refreshing =
-    hasCachedPulse &&
-    (pendingOrdersQuery.isFetching ||
-      archiveOrdersQuery.isFetching ||
-      assignedDealersQuery.isFetching);
+    hasCachedPulse && (pendingOrdersQuery.isFetching || archiveOrdersQuery.isFetching || assignedDealersQuery.isFetching);
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <GlassCard style={{ padding: 24 }}>
+    <div style={{ display: "grid", gap: 16 }}>
+      <DashboardUIStyles />
+
+      <Surface padding={22} className="dash-fade-up">
         <SectionHeader
           title={`Welcome, ${dispatcherName}`}
-          subtitle={refreshing ? "Updating the cached dispatcher pulse in the background." : "A focused workspace for handling assigned dealer operations, submitted order review, and dispatcher-side verification flow."}
+          subtitle={
+            refreshing
+              ? "Updating…"
+              : "Your workspace for assigned dealer operations and submitted order review."
+          }
         />
 
-        <div
-          style={{
-            marginTop: 20,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-          }}
-        >
-          <MetricCard
-            label="Pending Orders"
-            value={loading ? "…" : pulse.pendingOrders}
-            helper="Assigned submitted orders"
-            accent
-          />
-          <MetricCard
-            label="Unread"
-            value={Number(notifications?.totalUnread || 0)}
-            helper="Assigned order alerts"
-          />
-          <MetricCard
-            label="Assigned Dealers"
-            value={loading ? "…" : pulse.assignedDealers}
-            helper="Active routing scope"
-          />
-          <MetricCard
-            label="Recently Handled"
-            value={loading ? "…" : pulse.recentHandledOrders}
-            helper={`${pulse.handledOrders} handled total`}
-            accent
-          />
+        <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+          <MetricTile icon="orders" label="Pending Orders" value={loading ? "…" : pulse.pendingOrders} helper="Assigned submitted orders" tone="accent" />
+          <MetricTile icon="bell" label="Unread" value={Number(notifications?.totalUnread || 0)} helper="Assigned order alerts" />
+          <MetricTile icon="store" label="Assigned Dealers" value={loading ? "…" : pulse.assignedDealers} helper="Active routing scope" />
+          <MetricTile icon="history" label="Recently Handled" value={loading ? "…" : pulse.recentHandledOrders} helper={`${pulse.handledOrders} handled total`} />
         </div>
-      </GlassCard>
+      </Surface>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-          gap: 20,
-          alignItems: "start",
-        }}
-      >
-        <GlassCard style={{ padding: 24 }}>
-          <SectionHeader
-            title="Dispatcher Workflow"
-            subtitle="Your workspace is intentionally narrow so you can process assigned dealer orders quickly and clearly."
-          />
-
-          <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
-            <WorkflowStep
-              index={1}
-              title="Review submitted dealer orders"
-              desc="Inspect only the orders routed to your dispatcher account and verify the core product, quantity, and payment context."
-            />
-            <WorkflowStep
-              index={2}
-              title="Amend orders when required"
-              desc="Before verification, adjust eligible order details where operational correction is necessary."
-            />
-            <WorkflowStep
-              index={3}
-              title="Verify or reject"
-              desc="Use concise dispatcher review notes to approve or reject the submitted order based on actual dispatch readiness."
-            />
-            <WorkflowStep
-              index={4}
-              title="Maintain continuity"
-              desc="Track handled dealer activity through the dispatcher-side history and dealer-specific order views."
-            />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 16, alignItems: "start" }}>
+        <Surface padding={22} className="dash-fade-up">
+          <SectionHeader icon="orders" title="Dispatcher Workflow" subtitle="How assigned orders move through your workspace." />
+          <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
+            <WorkflowStep index={1} title="Review submitted dealer orders" desc="Inspect only the orders routed to your dispatcher account." />
+            <WorkflowStep index={2} title="Amend when required" desc="Adjust eligible order details before verification, if needed." />
+            <WorkflowStep index={3} title="Verify or reject" desc="Approve or reject with a concise dispatcher review note." />
+            <WorkflowStep index={4} title="Maintain continuity" desc="Track handled activity via dealer-specific and dispatcher-wide history." />
           </div>
-        </GlassCard>
+        </Surface>
 
-        <GlassCard style={{ padding: 24 }}>
-          <SectionHeader
-            title="Scope Boundaries"
-            subtitle="This role is not meant to replace admin operations."
-          />
-
-          <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-            <InfoBlock
-              title="Assigned dealers only"
-              description="You should only access dealers that are explicitly routed to your dispatcher network."
-            />
-            <InfoBlock
-              title="No global admin access"
-              description="Dealer onboarding, dispatcher approval, and system-wide operational controls remain under admin governance."
-            />
-            <InfoBlock
-              title="Order-first workflow"
-              description="The dispatcher workspace is built primarily around order review, amendment, and verification."
-            />
+        <Surface padding={22} className="dash-fade-up">
+          <SectionHeader icon="handshake" title="Scope Boundaries" subtitle="This role does not replace admin operations." />
+          <div style={{ marginTop: 16, display: "grid", gap: 14 }}>
+            <InfoRow icon="store" title="Assigned dealers only" description="Access is limited to dealers explicitly routed to your dispatcher network." />
+            <InfoRow icon="gear" title="No global admin access" description="Dealer onboarding, dispatcher approval, and system controls remain admin-governed." />
+            <InfoRow icon="checkmark" title="Order-first workflow" description="This workspace is built around order review, amendment, and verification." />
           </div>
-        </GlassCard>
+        </Surface>
       </div>
     </div>
   );

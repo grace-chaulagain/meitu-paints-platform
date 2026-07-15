@@ -1,847 +1,786 @@
-import NavBar from "../components/NavBar";
+import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import NavBar from "../components/NavBar";
 import horoscopeList from "../ProductsList/horoscopeList.json";
+import {
+  ArrowIcon,
+  PaletteIcon,
+  ShieldIcon,
+  TextureIcon,
+} from "../components/ui/ApplePageIcons.jsx";
 
-function HoroscopeDesign() {
+const ORBIT_SIGNS = horoscopeList.slice(0, 8);
+
+function Horoscope() {
   const location = useLocation();
-  const ZODIACS = useMemo(() => horoscopeList, []);
+  const pageRef = useRef(null);
+  const zodiacSectionRef = useRef(null);
 
-  const [active, setActive] = useState("all");
-  const [q, setQ] = useState("");
-
-  // Always start at the top when arriving on this page (route enter / reload)
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location.key]);
 
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return ZODIACS.filter((z) => {
-      const matchTab = active === "all" ? true : z.id === active;
-      const matchQ =
-        !query ||
-        z.name.toLowerCase().includes(query) ||
-        z.desc.toLowerCase().includes(query);
-      return matchTab && matchQ;
-    });
-  }, [ZODIACS, active, q]);
-
   useEffect(() => {
+    const root = pageRef.current;
+    if (!root) return;
+
     const prefersReduced =
       typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 
-    if (prefersReduced) return;
-
-    const nodes = Array.from(document.querySelectorAll("[data-reveal]"));
-    if (!nodes.length) return;
-
-    // Reset (helps on fast route changes)
-    nodes.forEach((el) => {
-      el.classList.remove("hz-reveal-in");
-    });
-
-    const raf = requestAnimationFrame(() => {
-      nodes.forEach((el, idx) => {
-        el.style.setProperty("--reveal-delay", `${idx * 70}ms`);
-        el.classList.add("hz-reveal-in");
+    if (prefersReduced) {
+      root.querySelectorAll("[data-horo-reveal]").forEach((node) => {
+        node.classList.add("is-in");
       });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) entry.target.classList.add("is-in");
+        });
+      },
+      { threshold: 0.12 },
+    );
+
+    root.querySelectorAll("[data-horo-reveal]").forEach((node, index) => {
+      node.style.setProperty("--horo-delay", `${Math.min(index * 42, 260)}ms`);
+      observer.observe(node);
     });
 
-    return () => cancelAnimationFrame(raf);
-  }, [active, q]);
+    return () => observer.disconnect();
+  }, []);
+
+  const featuredSign = horoscopeList[0];
+
+  const scrollToZodiacs = () => {
+    zodiacSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <>
       <NavBar />
-
-      {/* HERO */}
-      <section className="hz-hero">
-        <div className="hz-ambient" aria-hidden="true">
-          <div className="hz-a a1" />
-          <div className="hz-a a2" />
-          <div className="hz-grid" />
-          <div className="hz-vignette" />
-        </div>
-
-        <div className="container hz-heroShell">
-          <div className="hz-top" data-reveal>
-            <span className="hz-eyebrow">
-              <span className="hz-dot" aria-hidden="true" />
-              ASTRO • COLOR • DESIGN
+      <main ref={pageRef} className="apple-horoscope-page">
+        <section className="horo-hero">
+          <div className="horo-hero-copy" data-horo-reveal>
+            <p className="horo-kicker">Meitu colour horoscope</p>
+            <h1>Find a palette that feels personal.</h1>
+            <span>
+              Zodiac-inspired colour stories for walls, accents, textures, and
+              full-room moods. Built to feel calm, practical, and easy to choose.
             </span>
-            <div className="hz-links" data-reveal>
-              <Link className="hz-linkPill" to="/products">
-                Products <span aria-hidden="true">→</span>
+            <div className="horo-actions">
+              <button type="button" className="horo-primary" onClick={scrollToZodiacs}>
+                Explore palettes <ArrowIcon />
+              </button>
+              <Link to="/colors" className="horo-link">
+                Open colour studio <ArrowIcon />
               </Link>
-              <Link className="hz-linkPill ghost" to="/colors">
-                Shades <span aria-hidden="true">→</span>
-              </Link>
-              <Link className="hz-linkPill ghost" to="/ratecalculator">
-                Estimate <span aria-hidden="true">→</span>
-              </Link>
+            </div>
+            <div className="horo-metrics" aria-label="Horoscope colour summary">
+              <span>
+                <b>{horoscopeList.length}</b>
+                zodiac palettes
+              </span>
+              <span>
+                <b>48</b>
+                curated tones
+              </span>
+              <span>
+                <b>Meitu</b>
+                finish guidance
+              </span>
             </div>
           </div>
 
-          <div className="hz-heroGrid">
-            <div className="hz-copy" data-reveal>
-              <h1 className="hz-title">Where Astrology Meets Architecture</h1>
-              <p className="hz-sub">
-                Curated zodiac palettes that shape mood, energy, and spatial
-                harmony.
-              </p>
-
-              <div className="hz-actions">
-                <a className="hz-primary" href="#zodiac">
-                  <span className="hz-shine" aria-hidden="true" />
-                  Explore Zodiac Palettes <span className="hz-arrow">→</span>
-                </a>
-                <Link className="hz-secondary" to="/inquiry">
-                  Talk to a specialist
-                </Link>
+          <aside className="horo-stage" aria-label="Animated zodiac colour artwork" data-horo-reveal>
+            <div className="horo-orbit" aria-hidden="true">
+              {ORBIT_SIGNS.map((zodiac, index) => (
+                <span
+                  key={zodiac.id}
+                  className="horo-orbit-item"
+                  style={{
+                    "--orbit-index": index,
+                    "--orbit-count": ORBIT_SIGNS.length,
+                    "--orbit-color": zodiac.palette?.[0] || "#e8e8ed",
+                  }}
+                >
+                  <img src={zodiac.src} alt="" loading="eager" />
+                </span>
+              ))}
+            </div>
+            <div className="horo-feature-card">
+              <div className="horo-feature-icon">
+                <PaletteIcon />
+              </div>
+              <p>Featured shade mood</p>
+              <strong>{featuredSign.name}</strong>
+              <div className="horo-feature-swatches" aria-hidden="true">
+                {featuredSign.palette?.map((color) => (
+                  <i key={color} style={{ background: color }} />
+                ))}
               </div>
             </div>
-            <div className="hz-panel" data-reveal>
-              <div className="hz-panelHead">
-                <div className="hz-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" className="hz-svg">
-                    <path
-                      d="M12 2l1.8 5.7L20 10l-6.2 2.2L12 18l-1.8-5.8L4 10l6.2-2.3L12 2z"
-                      fill="currentColor"
-                      opacity=".9"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <div className="hz-panelTitle">Quick picker</div>
-                  <div className="hz-panelSub">
-                    Search by sign name or vibe keywords.
-                  </div>
-                </div>
-              </div>
+          </aside>
+        </section>
 
-              <div className="hz-searchWrap">
-                <input
-                  className="hz-search"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search: Aries, calm, bold, blue…"
-                />
-              </div>
-            </div>
+        <section ref={zodiacSectionRef} className="horo-zodiacs">
+          <div className="horo-section-head" data-horo-reveal>
+            <p>Zodiac palettes</p>
+            <h2>Choose by mood, then refine by room.</h2>
+            <span>
+              Every card combines symbolic energy with usable colour direction:
+              base shades, accent tones, and texture-friendly supporting colours.
+            </span>
           </div>
-        </div>
-      </section>
 
-      {/* GRID */}
-      <section id="zodiac" className="container hz-gridSec">
-        <div className="hz-secHead" data-reveal>
-          <h2 className="hz-h2">Zodiac Palettes</h2>
-          <p className="hz-p">
-            Tap a card to explore the zodiac palette and recommended color mood.
-          </p>
-        </div>
-
-        <div className="row g-4">
-          {filtered.map((zodiac) => (
-            <div key={zodiac.id} className="col-sm-6 col-lg-4 d-flex">
+          <div className="horo-grid">
+            {horoscopeList.map((zodiac) => (
               <Link
+                key={zodiac.id}
                 to={`/horoscope/${zodiac.id}`}
-                className="hz-card flex-fill"
-                style={{ "--accent": zodiac.accent }}
-                data-reveal
+                className="horo-card"
+                style={{ "--zodiac-accent": zodiac.palette?.[0] || "#0071e3" }}
+                data-horo-reveal
               >
-                <div className="hz-cardTop">
-                  <div className="hz-media">
-                    <img alt={zodiac.name} src={zodiac.src} />
+                <div className="horo-card-media">
+                  <img src={zodiac.src} alt={zodiac.name} loading="lazy" />
+                </div>
+                <div className="horo-card-body">
+                  <div>
+                    <small>Zodiac palette</small>
+                    <h3>{zodiac.name}</h3>
                   </div>
-
-                  <div className="hz-swatchRow" aria-hidden="true">
-                    {zodiac.palette.slice(0, 4).map((c) => (
-                      <span
-                        key={c}
-                        className="hz-swatch"
-                        style={{ background: c }}
-                      />
+                  <div className="horo-card-swatches" aria-label={`${zodiac.name} palette`}>
+                    {zodiac.palette?.map((color) => (
+                      <span key={color} style={{ background: color }} />
                     ))}
                   </div>
-                </div>
-
-                <div className="hz-body">
-                  <div className="hz-titleRow">
-                    <h5>{zodiac.name}</h5>
-                    <span className="hz-pill">Palette</span>
+                  <div className="horo-card-footer">
+                    <span>
+                      {(zodiac.chips || []).slice(0, 3).map((chip) => (
+                        <b key={chip}>{chip}</b>
+                      ))}
+                    </span>
+                    <em>
+                      View <ArrowIcon />
+                    </em>
                   </div>
-                  <p>{zodiac.desc}</p>
-
-                  <div className="hz-chipRow">
-                    {zodiac.chips.map((c) => (
-                      <span key={c} className="hz-miniChip">
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-
-                  <span className="hz-cta">
-                    Explore Palette <span aria-hidden="true">→</span>
-                  </span>
                 </div>
               </Link>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* PHILOSOPHY */}
-      <section className="hz-philo">
-        <div className="container hz-philoShell">
-          <div className="hz-philoCard" data-reveal>
-            <h2>Designed With Cosmic Intent</h2>
-            <p>
-              We blend symbolic mood + real-world finish logic to help you pick
-              shades that feel right under daylight, warm LEDs, and mixed
-              interiors with premium system recommendations.
-            </p>
-            <div className="hz-philoActions">
-              <Link to="/products" className="hz-primary onDark">
-                Browse Paint Systems <span aria-hidden="true">→</span>
-              </Link>
-              <Link to="/ratecalculator" className="hz-secondary onDark">
-                Estimate Cost
-              </Link>
-            </div>
+            ))}
           </div>
-        </div>
-      </section><style>{`
-        :root{
-          --red:#c1121f;
-          --red2:#e11d2e;
-          --black:#0b0b0c;
-          --ink70:rgba(11,11,12,.7);
-          --ink55:rgba(11,11,12,.55);
-          --glass:rgba(255,255,255,.78);
-          --line:rgba(0,0,0,.10);
-          --easeOut:cubic-bezier(.22,.61,.36,1);
+        </section>
+
+        <section className="horo-utility" data-horo-reveal>
+          <div>
+            <TextureIcon />
+            <p>Texture fit</p>
+            <strong>Use the palette as a mood system, not a rule.</strong>
+          </div>
+          <div>
+            <ShieldIcon />
+            <p>Practical next step</p>
+            <strong>Confirm product, finish, surface, and area before ordering.</strong>
+          </div>
+          <Link to="/ratecalculator" className="horo-dark-link">
+            Calculate estimate <ArrowIcon />
+          </Link>
+        </section>
+      </main>
+
+      <style>{`
+        .apple-horoscope-page {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at 18% 6%, rgba(0,113,227,.10), transparent 26%),
+            radial-gradient(circle at 88% 20%, rgba(245,0,180,.08), transparent 30%),
+            var(--color-fog, #f5f5f7);
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-text, Inter, system-ui, sans-serif);
+          overflow: clip;
         }
 
-        body{ overflow-x:hidden; }
+        .apple-horoscope-page svg {
+          width: 17px;
+          height: 17px;
+          fill: none;
+          stroke: currentColor;
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
 
-        /* ✅ Page reveal: Apple-like fade-up with stagger */
-        [data-reveal]{
+        .horo-hero {
+          width: min(1200px, calc(100% - 40px));
+          min-height: calc(100svh - 44px);
+          margin: 0 auto;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+          align-items: center;
+          gap: clamp(28px, 5vw, 72px);
+          padding: clamp(56px, 8vw, 96px) 0 clamp(42px, 7vw, 78px);
+        }
+
+        .horo-kicker,
+        .horo-section-head p,
+        .horo-feature-card p,
+        .horo-utility p {
+          margin: 0;
+          color: var(--color-graphite, #707070);
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: .12em;
+          text-transform: uppercase;
+        }
+
+        .horo-hero-copy h1 {
+          max-width: 820px;
+          margin: 12px 0 0;
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: clamp(56px, 8.5vw, 104px);
+          font-weight: 700;
+          line-height: .98;
+          letter-spacing: -0.055em;
+        }
+
+        .horo-hero-copy > span {
+          display: block;
+          max-width: 610px;
+          margin-top: 24px;
+          color: var(--color-slate, #474747);
+          font-size: clamp(18px, 2vw, 23px);
+          font-weight: 300;
+          line-height: 1.38;
+          letter-spacing: -0.012em;
+        }
+
+        .horo-actions {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 18px;
+          margin-top: 32px;
+        }
+
+        .horo-primary,
+        .horo-dark-link {
+          min-height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--apple-control-blue, #0071e3);
+          color: #fff;
+          padding: 10px 19px;
+          font: inherit;
+          font-size: 17px;
+          text-decoration: none;
+          letter-spacing: -0.1px;
+          cursor: pointer;
+          transition: background-color .1s ease, transform .1s ease;
+        }
+
+        .horo-primary:hover,
+        .horo-dark-link:hover {
+          background: var(--apple-control-blue-hover, #0077ed);
+          color: #fff;
+          transform: translateY(-1px);
+        }
+
+        .horo-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          color: var(--color-cobalt-link, #0066cc);
+          text-decoration: none;
+          font-size: 17px;
+          letter-spacing: -0.1px;
+        }
+
+        .horo-metrics {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          max-width: 620px;
+          margin-top: 34px;
+        }
+
+        .horo-metrics span {
+          min-height: 74px;
+          display: grid;
+          align-content: center;
+          gap: 3px;
+          border: 1px solid rgba(232,232,237,.86);
+          border-radius: 24px;
+          background: rgba(255,255,255,.72);
+          padding: 13px 16px;
+          color: var(--color-graphite, #707070);
+          font-size: 13px;
+          letter-spacing: -0.003em;
+        }
+
+        .horo-metrics b {
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 22px;
+          letter-spacing: -0.035em;
+        }
+
+        .horo-stage {
+          position: relative;
+          min-height: 540px;
+          display: grid;
+          place-items: center;
+        }
+
+        .horo-stage::before {
+          content: "";
+          position: absolute;
+          inset: 32px 0;
+          border-radius: 44px;
+          background:
+            radial-gradient(circle at 50% 36%, rgba(255,255,255,.98), rgba(255,255,255,.42) 42%, transparent 65%),
+            var(--meitu-home-hero-gradient, #f5f5f7);
+          border: 1px solid rgba(232,232,237,.88);
+        }
+
+        .horo-orbit {
+          position: relative;
+          width: min(430px, 86vw);
+          aspect-ratio: 1;
+          border-radius: 50%;
+          animation: horo-orbit 24s linear infinite;
+        }
+
+        .horo-orbit::before,
+        .horo-orbit::after {
+          content: "";
+          position: absolute;
+          inset: 13%;
+          border: 1px solid rgba(29,29,31,.08);
+          border-radius: 50%;
+        }
+
+        .horo-orbit::after {
+          inset: 28%;
+        }
+
+        .horo-orbit-item {
+          --angle: calc(360deg / var(--orbit-count) * var(--orbit-index));
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 68px;
+          height: 68px;
+          display: grid;
+          place-items: center;
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 50% 20%, rgba(255,255,255,.98), transparent 54%),
+            color-mix(in srgb, var(--orbit-color) 24%, white);
+          border: 1px solid rgba(255,255,255,.82);
+          transform:
+            translate(-50%, -50%)
+            rotate(var(--angle))
+            translateY(-178px)
+            rotate(calc(var(--angle) * -1));
+        }
+
+        .horo-orbit-item img {
+          width: 78%;
+          height: 78%;
+          object-fit: contain;
+          filter: saturate(.94);
+        }
+
+        .horo-feature-card {
+          position: absolute;
+          width: min(255px, 74%);
+          display: grid;
+          justify-items: center;
+          gap: 10px;
+          border-radius: 32px;
+          border: 1px solid rgba(232,232,237,.9);
+          background: rgba(255,255,255,.84);
+          padding: 24px;
+          text-align: center;
+          backdrop-filter: blur(22px);
+        }
+
+        .horo-feature-icon {
+          width: 52px;
+          height: 52px;
+          display: grid;
+          place-items: center;
+          border-radius: 18px;
+          background: var(--color-fog, #f5f5f7);
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .horo-feature-icon svg {
+          width: 24px;
+          height: 24px;
+        }
+
+        .horo-feature-card strong {
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 34px;
+          letter-spacing: -0.045em;
+        }
+
+        .horo-feature-swatches {
+          width: 100%;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 7px;
+          margin-top: 4px;
+        }
+
+        .horo-feature-swatches i,
+        .horo-card-swatches span {
+          display: block;
+          height: 9px;
+          border-radius: 999px;
+          border: 1px solid rgba(29,29,31,.07);
+        }
+
+        .horo-zodiacs {
+          width: min(1200px, calc(100% - 40px));
+          margin: 0 auto;
+          padding: clamp(20px, 4vw, 52px) 0 clamp(70px, 10vw, 116px);
+        }
+
+        .horo-section-head {
+          max-width: 760px;
+          margin-bottom: 28px;
+        }
+
+        .horo-section-head h2 {
+          margin: 10px 0 0;
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: clamp(38px, 5vw, 64px);
+          line-height: 1.05;
+          letter-spacing: -0.044em;
+        }
+
+        .horo-section-head > span {
+          display: block;
+          max-width: 660px;
+          margin-top: 14px;
+          color: var(--color-graphite, #707070);
+          font-size: 20px;
+          font-weight: 300;
+          line-height: 1.42;
+          letter-spacing: -0.01em;
+        }
+
+        .horo-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .horo-card {
+          min-height: 345px;
+          display: grid;
+          grid-template-rows: 168px 1fr;
+          border-radius: 30px;
+          border: 1px solid rgba(232,232,237,.92);
+          background:
+            radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--zodiac-accent) 18%, transparent), transparent 36%),
+            rgba(255,255,255,.84);
+          color: var(--color-ink, #1d1d1f);
+          text-decoration: none;
+          overflow: hidden;
+          transition: transform .16s ease, border-color .16s ease, background-color .16s ease;
+        }
+
+        .horo-card:hover {
+          transform: translateY(-3px);
+          border-color: rgba(29,29,31,.18);
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .horo-card-media {
+          display: grid;
+          place-items: center;
+          margin: 14px 14px 0;
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 50% 18%, rgba(255,255,255,.98), transparent 54%),
+            var(--color-fog, #f5f5f7);
+          overflow: hidden;
+        }
+
+        .horo-card-media img {
+          width: min(74%, 150px);
+          height: 74%;
+          object-fit: contain;
+          filter: saturate(.96);
+          transition: transform .24s ease;
+        }
+
+        .horo-card:hover .horo-card-media img {
+          transform: scale(1.045);
+        }
+
+        .horo-card-body {
+          display: grid;
+          align-content: space-between;
+          gap: 16px;
+          padding: 18px;
+        }
+
+        .horo-card small {
+          display: block;
+          color: var(--color-graphite, #707070);
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: .04em;
+          text-transform: uppercase;
+        }
+
+        .horo-card h3 {
+          margin: 5px 0 0;
+          color: var(--color-ink, #1d1d1f);
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 25px;
+          line-height: 1.1;
+          letter-spacing: -0.034em;
+        }
+
+        .horo-card-swatches {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 7px;
+        }
+
+        .horo-card-footer {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .horo-card-footer > span {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .horo-card-footer b {
+          border-radius: 999px;
+          background: var(--color-fog, #f5f5f7);
+          color: var(--color-graphite, #707070);
+          padding: 6px 9px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: -0.003em;
+        }
+
+        .horo-card-footer em {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--color-cobalt-link, #0066cc);
+          font-size: 14px;
+          font-style: normal;
+          white-space: nowrap;
+        }
+
+        .horo-utility {
+          width: min(1200px, calc(100% - 40px));
+          margin: 0 auto clamp(58px, 8vw, 96px);
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+          gap: 14px;
+          align-items: stretch;
+          border-radius: 36px;
+          background: #000;
+          color: #fff;
+          padding: 18px;
+        }
+
+        .horo-utility > div,
+        .horo-dark-link {
+          border-radius: 26px;
+          background: rgba(255,255,255,.08);
+          padding: 20px;
+        }
+
+        .horo-utility > div {
+          display: grid;
+          align-content: start;
+          gap: 10px;
+        }
+
+        .horo-utility p {
+          color: rgba(255,255,255,.58);
+        }
+
+        .horo-utility strong {
+          max-width: 360px;
+          color: #fff;
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 23px;
+          line-height: 1.16;
+          letter-spacing: -0.035em;
+        }
+
+        .horo-dark-link {
+          align-self: center;
+          background: #fff;
+          color: #000;
+        }
+
+        .horo-dark-link:hover {
+          background: rgba(255,255,255,.86);
+          color: #000;
+        }
+
+        [data-horo-reveal] {
           opacity: 0;
-          transform: translate3d(0, 14px, 0);
-          filter: blur(6px);
-          transition:
-            opacity 700ms var(--easeOut),
-            transform 700ms var(--easeOut),
-            filter 700ms var(--easeOut);
-          transition-delay: var(--reveal-delay, 0ms);
-          will-change: opacity, transform, filter;
+          transform: translateY(20px);
+          transition: opacity .72s ease, transform .72s ease;
+          transition-delay: var(--horo-delay, 0ms);
         }
 
-        .hz-reveal-in{
+        [data-horo-reveal].is-in {
           opacity: 1;
-          transform: translate3d(0, 0, 0);
-          filter: blur(0);
+          transform: translateY(0);
         }
 
-        /* Slightly longer + cinematic for hero only */
-        .hz-hero [data-reveal]{
-          transition-duration: 820ms;
+        @keyframes horo-orbit {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
         }
 
-        @media (prefers-reduced-motion: reduce){
-          [data-reveal]{
-            opacity: 1 !important;
-            transform: none !important;
-            filter: none !important;
+        @media (prefers-reduced-motion: reduce) {
+          .horo-orbit,
+          [data-horo-reveal] {
+            animation: none !important;
             transition: none !important;
           }
         }
 
-        /* HERO */
-        .hz-hero{
-          position:relative;
-          padding:120px 24px 60px;
-          background:
-            radial-gradient(900px 420px at 15% 10%, rgba(193,18,31,.10), transparent 60%),
-            radial-gradient(700px 420px at 85% 30%, rgba(0,0,0,.06), transparent 55%),
-            #fff;
-          overflow:hidden;
-        }
-
-        .hz-ambient{
-          position:absolute;
-          inset:0;
-          pointer-events:none;
-        }
-
-        .hz-a{
-          position:absolute;
-          width:720px;
-          height:520px;
-          border-radius:999px;
-          filter: blur(48px);
-          opacity:.55;
-          mix-blend-mode:multiply;
-        }
-
-        .hz-a.a1{
-          left:-180px; top:-180px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(225,29,46,.38), transparent 60%),
-            radial-gradient(circle at 70% 70%, rgba(193,18,31,.24), transparent 62%);
-          animation:float1 10s var(--easeOut) infinite alternate;
-        }
-
-        .hz-a.a2{
-          right:-220px; top:90px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(59,130,246,.24), transparent 62%),
-            radial-gradient(circle at 70% 70%, rgba(0,0,0,.10), transparent 64%);
-          animation:float2 12s var(--easeOut) infinite alternate;
-        }
-
-        .hz-grid{
-          position:absolute;
-          inset:-2px;
-          background:
-            linear-gradient(to right, rgba(0,0,0,.06) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(0,0,0,.06) 1px, transparent 1px);
-          background-size:78px 78px;
-          opacity:.07;
-          mask-image: radial-gradient(closest-side at 50% 10%, #000 42%, transparent 75%);
-        }
-
-        .hz-vignette{
-          position:absolute;
-          inset:-2px;
-          background: radial-gradient(closest-side at 50% 10%, transparent 45%, rgba(0,0,0,.06) 92%);
-          opacity:.9;
-        }
-
-        @keyframes float1{
-          from{ transform: translate3d(0,0,0) scale(1); }
-          to{ transform: translate3d(28px, 18px,0) scale(1.05); }
-        }
-        @keyframes float2{
-          from{ transform: translate3d(0,0,0) scale(1); }
-          to{ transform: translate3d(-22px, 24px,0) scale(1.04); }
-        }
-
-        .hz-heroShell{ position:relative; z-index:2; max-width:1200px; }
-
-        .hz-top{
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:16px;
-          flex-wrap:wrap;
-          margin-bottom:22px;
-        }
-
-        .hz-eyebrow{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:10px 16px;
-          border-radius:999px;
-          border:1px solid rgba(193,18,31,.35);
-          background:rgba(255,255,255,.62);
-          backdrop-filter: blur(14px);
-          font-size:12px;
-          font-weight:800;
-          letter-spacing:.18em;
-          text-transform:uppercase;
-          color:var(--red);
-          box-shadow:0 18px 44px rgba(0,0,0,.10);
-        }
-
-        .hz-dot{
-          width:8px;height:8px;border-radius:999px;
-          background: linear-gradient(180deg, var(--red2), var(--red));
-          box-shadow:0 0 0 6px rgba(193,18,31,.12);
-        }
-
-        .hz-links{
-          display:flex;
-          gap:12px;
-          flex-wrap:wrap;
-        }
-
-        .hz-linkPill{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:12px 18px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.12);
-          background:rgba(255,255,255,.78);
-          backdrop-filter: blur(14px);
-          text-decoration:none;
-          color:var(--black);
-          font-weight:800;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-          box-shadow:0 18px 46px rgba(0,0,0,.10);
-        }
-
-        .hz-linkPill:hover{
-          transform: translateY(-1px);
-          box-shadow:0 26px 70px rgba(0,0,0,.14);
-          border-color: rgba(193,18,31,.18);
-        }
-
-        .hz-linkPill.ghost{ background: rgba(255,255,255,.55); }
-
-        .hz-heroGrid{
-          display:grid;
-          grid-template-columns: 1.1fr .9fr;
-          gap:22px;
-          align-items:stretch;
-        }
-
-        .hz-title{
-          font-size:46px;
-          font-weight:520;
-          letter-spacing:-.7px;
-          color:var(--black);
-          margin:0;
-          line-height:1.12;
-        }
-
-        .hz-sub{
-          margin-top:12px;
-          font-size:17px;
-          color:var(--ink70);
-          line-height:1.75;
-          max-width:760px;
-        }
-
-        .hz-actions{
-          margin-top:18px;
-          display:flex;
-          gap:12px;
-          flex-wrap:wrap;
-          align-items:center;
-        }
-
-        .hz-primary{
-          position:relative;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          padding:16px 34px;
-          border-radius:999px;
-          background: linear-gradient(180deg, var(--red2), var(--red));
-          color:#fff;
-          font-weight:850;
-          border:none;
-          cursor:pointer;
-          text-decoration:none;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, filter 160ms ease;
-          box-shadow: 0 22px 60px rgba(193,18,31,.32), inset 0 1px 0 rgba(255,255,255,.22);
-          overflow:hidden;
-        }
-
-        .hz-primary:hover{
-          transform: translateY(-1px);
-          box-shadow: 0 30px 90px rgba(193,18,31,.40), inset 0 1px 0 rgba(255,255,255,.22);
-          filter:saturate(1.03);
-        }
-
-        .hz-shine{
-          position:absolute; inset:-2px;
-          background:
-            radial-gradient(500px 120px at 20% 40%, rgba(255,255,255,.28), transparent 60%),
-            radial-gradient(500px 120px at 80% 60%, rgba(255,255,255,.16), transparent 60%);
-          opacity:.6;
-        }
-
-        .hz-arrow{
-          margin-left:10px;
-          transition: transform 160ms var(--easeOut);
-        }
-
-        .hz-primary:hover .hz-arrow{
-          transform: translateX(2px);
-        }
-
-        .hz-secondary{
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          padding:14px 22px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.18);
-          background:rgba(255,255,255,.72);
-          backdrop-filter: blur(14px);
-          font-weight:850;
-          cursor:pointer;
-          text-decoration:none;
-          color: var(--black);
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-          box-shadow:0 18px 50px rgba(0,0,0,.10);
-        }
-
-        .hz-secondary:hover{
-          transform: translateY(-1px);
-          border-color: rgba(0,0,0,.32);
-          box-shadow:0 26px 72px rgba(0,0,0,.14);
-        }
-
-        .hz-primary.onDark{
-          box-shadow: 0 22px 70px rgba(225,29,46,.28), inset 0 1px 0 rgba(255,255,255,.18);
-        }
-
-        .hz-secondary.onDark{
-          background: rgba(255,255,255,.14);
-          border:1px solid rgba(255,255,255,.22);
-          color:#fff;
-          box-shadow:none;
-        }
-
-        .hz-trustRow{
-          margin-top:16px;
-          display:flex;
-          gap:10px;
-          flex-wrap:wrap;
-        }
-
-        .hz-chip{
-          display:inline-flex;
-          align-items:center;
-          gap:10px;
-          padding:10px 14px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.10);
-          background: rgba(255,255,255,.62);
-          backdrop-filter: blur(14px);
-          font-weight:800;
-          font-size:12px;
-          color: rgba(11,11,12,.78);
-          box-shadow:0 14px 40px rgba(0,0,0,.10);
-        }
-
-        .hz-chipDot{
-          width:8px;height:8px;border-radius:999px;
-          background: var(--red);
-          box-shadow:0 0 0 6px rgba(193,18,31,.10);
-        }
-
-        /* Panel */
-        .hz-panel{
-          background:var(--glass);
-          border-radius:28px;
-          padding:26px;
-          border:1px solid rgba(0,0,0,.08);
-          box-shadow:0 28px 60px rgba(0,0,0,.12);
-          backdrop-filter: blur(16px);
-          overflow:hidden;
-        }
-
-        .hz-panelHead{
-          display:flex;
-          align-items:flex-start;
-          gap:12px;
-          margin-bottom:14px;
-        }
-
-        .hz-icon{
-          width:44px;height:44px;
-          border-radius:14px;
-          display:grid; place-items:center;
-          color:var(--red);
-          background: linear-gradient(180deg, rgba(193,18,31,.14), rgba(193,18,31,.06));
-          border:1px solid rgba(193,18,31,.22);
-          box-shadow:0 18px 44px rgba(193,18,31,.14);
-          flex:0 0 auto;
-        }
-
-        .hz-svg{ width:22px;height:22px; }
-
-        .hz-panelTitle{ font-weight:900; color:var(--black); }
-        .hz-panelSub{ margin-top:6px; color:var(--ink55); font-size:13px; line-height:1.5; }
-
-        .hz-searchWrap{ margin-top:10px; }
-        .hz-search{
-          width:100%;
-          padding:14px 16px;
-          border-radius:16px;
-          border:1px solid rgba(0,0,0,.14);
-          background: rgba(255,255,255,.82);
-          font-size:15px;
-          outline:none;
-          transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
-        }
-        .hz-search:focus{
-          border-color:rgba(193,18,31,.55);
-          box-shadow:0 0 0 4px rgba(193,18,31,.12);
-          background:#fff;
-        }
-
-        .hz-tabs{
-          margin-top:12px;
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-        }
-
-        .hz-tab{
-          padding:10px 14px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.14);
-          background: rgba(255,255,255,.66);
-          font-weight:850;
-          font-size:13px;
-          cursor:pointer;
-          transition: transform 160ms var(--easeOut), box-shadow 160ms ease, border-color 160ms ease;
-        }
-
-        .hz-tab:hover{
-          transform: translateY(-1px);
-          box-shadow:0 14px 40px rgba(0,0,0,.10);
-        }
-
-        .hz-tab.active{
-          background: rgba(193,18,31,.08);
-          border-color: rgba(193,18,31,.40);
-          color: var(--red);
-          box-shadow:0 16px 44px rgba(193,18,31,.14);
-        }
-
-        .hz-miniNote{
-          margin-top:12px;
-          font-size:13px;
-          color: var(--ink55);
-        }
-
-        /* GRID SECTION */
-        .hz-gridSec{
-          padding:70px 24px 90px;
-          max-width:1200px;
-        }
-
-        .hz-secHead{
-          max-width:820px;
-          margin:0 auto 18px;
-          text-align:center;
-        }
-
-        .hz-h2{
-          font-size:36px;
-          font-weight:520;
-          letter-spacing:-.6px;
-          color:var(--black);
-          margin:0;
-        }
-
-        .hz-p{
-          margin-top:10px;
-          color:var(--ink70);
-          font-size:16px;
-          line-height:1.7;
-        }
-
-        .hz-card{
-          display:flex;
-          flex-direction:column;
-          background:var(--glass);
-          backdrop-filter:blur(18px);
-          border-radius:28px;
-          overflow:hidden;
-          text-decoration:none;
-          color:inherit;
-          border:1px solid rgba(0,0,0,.08);
-          box-shadow:0 28px 70px rgba(0,0,0,.12);
-          transition:transform 220ms var(--easeOut), box-shadow 220ms ease, border-color 220ms ease;
-          position:relative;
-        }
-
-        .hz-card::before{
-          content:"";
-          position:absolute;
-          inset:-120px -140px auto auto;
-          width:240px;
-          height:240px;
-          background: radial-gradient(circle, var(--accent, rgba(193,18,31,.18)), transparent 60%);
-          opacity:.9;
-          pointer-events:none;
-        }
-
-        .hz-card:hover{
-          transform:translateY(-4px) scale(1.01);
-          box-shadow:0 44px 110px rgba(0,0,0,.16);
-          border-color: rgba(193,18,31,.12);
-        }
-
-        .hz-cardTop{ padding:18px 18px 0; }
-
-        .hz-media{
-          min-height:210px;
-          height:auto;
-          border-radius:22px;
-          background: rgba(255,255,255,.65);
-          border:1px solid rgba(0,0,0,.06);
-          display:grid;
-          place-items:center;
-          padding:18px;
-          overflow:visible;
-        }
-
-        .hz-media img{
-          display:block;
-          width:100%;
-          height:auto;
-          max-width:100%;
-          max-height:260px;
-          object-fit:contain;
-          filter: drop-shadow(0 20px 26px rgba(0,0,0,.12));
-        }
-
-        .hz-swatchRow{
-          display:flex;
-          gap:10px;
-          padding:14px 6px 0;
-        }
-
-        .hz-swatch{
-          width:100%;
-          height:10px;
-          border-radius:999px;
-          border:1px solid rgba(0,0,0,.06);
-        }
-
-        .hz-body{
-          padding:22px 22px 24px;
-        }
-
-        .hz-titleRow{
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-          margin-bottom:10px;
-        }
-
-        .hz-body h5{
-          font-size:20px;
-          margin:0;
-          font-weight:900;
-          letter-spacing:-.02em;
-        }
-
-        .hz-pill{
-          font-size:11px;
-          font-weight:900;
-          letter-spacing:.16em;
-          text-transform:uppercase;
-          color:var(--red);
-          background: rgba(193,18,31,.08);
-          border:1px solid rgba(193,18,31,.18);
-          padding:8px 10px;
-          border-radius:999px;
-          white-space:nowrap;
-        }
-
-        .hz-body p{
-          font-size:14px;
-          color:var(--ink70);
-          line-height:1.7;
-          margin:0 0 14px;
-        }
-
-        .hz-chipRow{
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-          margin-bottom:14px;
-        }
-
-        .hz-miniChip{
-          padding:9px 12px;
-          border-radius:999px;
-          background: rgba(255,255,255,.70);
-          border:1px solid rgba(0,0,0,.10);
-          font-size:12px;
-          font-weight:850;
-          color: rgba(11,11,12,.78);
-        }
-
-        .hz-cta{
-          font-size:14px;
-          font-weight:850;
-          color:var(--red);
-          display:inline-flex;
-          align-items:center;
-          gap:8px;
-        }
-
-        /* PHILOSOPHY */
-        .hz-philo{
-          padding:110px 24px;
-          background: linear-gradient(180deg, rgba(193,18,31,.10), rgba(0,0,0,.92));
-          color:#fff;
-        }
-
-        .hz-philoShell{
-          max-width:1200px;
-        }
-
-        .hz-philoCard{
-          max-width:860px;
-          margin:auto;
-          text-align:center;
-          border-radius:32px;
-          border:1px solid rgba(255,255,255,.12);
-          background: rgba(255,255,255,.06);
-          backdrop-filter: blur(18px);
-          padding:50px 34px;
-          box-shadow:0 50px 120px rgba(0,0,0,.32);
-        }
-
-        .hz-philoCard h2{
-          font-size:40px;
-          margin:0 0 14px;
-          font-weight:700;
-          letter-spacing:-.02em;
-        }
-
-        .hz-philoCard p{
-          font-size:16px;
-          color: rgba(255,255,255,.75);
-          line-height:1.75;
-          margin:0;
-        }
-
-        .hz-philoActions{
-          margin-top:22px;
-          display:flex;
-          justify-content:center;
-          gap:12px;
-          flex-wrap:wrap;
-        }
-
-        /* Responsive */
-        @media(max-width:1100px){
-          .hz-heroGrid{ grid-template-columns:1fr; }
-        }
-
-        @media(max-width:768px){
-          .hz-title{ font-size:36px; }
-          .hz-h2{ font-size:30px; }
-          .hz-media{ min-height:180px; }
-          .hz-philoCard h2{ font-size:32px; }
-        }
+        @media (max-width: 1060px) {
+          .horo-hero {
+            grid-template-columns: 1fr;
+            min-height: auto;
+          }
+
+          .horo-stage {
+            min-height: 460px;
+          }
+
+          .horo-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .horo-utility {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .horo-hero,
+          .horo-zodiacs,
+          .horo-utility {
+            width: min(100% - 28px, 1200px);
+          }
+
+          .horo-hero {
+            padding-top: 62px;
+          }
+
+          .horo-hero-copy h1 {
+            font-size: clamp(46px, 13vw, 70px);
+          }
+
+          .horo-hero-copy > span,
+          .horo-section-head > span {
+            font-size: 17px;
+          }
+
+          .horo-metrics {
+            grid-template-columns: 1fr;
+          }
+
+          .horo-stage {
+            min-height: 400px;
+          }
+
+          .horo-orbit {
+            width: min(330px, 86vw);
+          }
+
+          .horo-orbit-item {
+            width: 54px;
+            height: 54px;
+            border-radius: 18px;
+            transform:
+              translate(-50%, -50%)
+              rotate(var(--angle))
+              translateY(-132px)
+              rotate(calc(var(--angle) * -1));
+          }
+
+          .horo-feature-card {
+            width: min(232px, 78%);
+            padding: 20px;
+          }
+
+          .horo-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .horo-card {
+            min-height: auto;
+            grid-template-rows: 170px auto;
+          }
+
+          .horo-actions {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .horo-primary {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .horo-stage {
+            min-height: 340px;
+          }
+
+          .horo-orbit {
+            display: none;
+          }
+
+          .horo-stage::before {
+            inset: 0;
+          }
+
+          .horo-feature-card {
+            position: relative;
+          }
 
-        @media (prefers-reduced-motion: reduce){
-          .hz-a{ animation:none; }
-          .hz-linkPill,.hz-card,.hz-primary,.hz-secondary,.hz-tab{ transition:none !important; }
         }
       `}</style>
     </>
   );
 }
 
-export default HoroscopeDesign;
+export default Horoscope;

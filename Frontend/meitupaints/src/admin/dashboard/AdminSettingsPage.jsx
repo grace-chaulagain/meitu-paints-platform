@@ -1,173 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client.js";
+import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
+import {
+  GhostButton,
+  PrimaryButton,
+  SectionHeader,
+  Surface,
+  ToggleSwitch,
+} from "../../components/dashboard/DashboardUI.jsx";
 
-function GlassCard({ children, style = {} }) {
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle, action = null }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              lineHeight: 1.65,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.58)",
-            }}
-          >
-            {subtitle}
-          </div>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function ActionButton({ children, onClick, disabled = false, subtle = false }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        minHeight: 42,
-        padding: "10px 16px",
-        borderRadius: 14,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: subtle
-          ? "#fff"
-          : "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)",
-        color: subtle ? "#0f172a" : "#fff",
-        fontWeight: 900,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        boxShadow: subtle
-          ? "inset 0 1px 0 rgba(255,255,255,.72)"
-          : "0 12px 22px rgba(180,35,24,.16)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Field({ label, helper = "", children }) {
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <label
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.44)",
-        }}
-      >
-        {label}
-      </label>
-      {children}
-      {helper ? (
-        <div
-          style={{
-            fontSize: 12,
-            lineHeight: 1.55,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.54)",
-          }}
-        >
-          {helper}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ToggleRow({ title, description, checked, onChange }) {
-  return (
-    <label
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(0,1fr) auto",
-        gap: 14,
-        alignItems: "center",
-        padding: 16,
-        borderRadius: 18,
-        background: "rgba(248,250,252,.92)",
-        border: "1px solid rgba(15,23,42,.06)",
-        cursor: "pointer",
-      }}
-    >
-      <span>
-        <span
-          style={{
-            display: "block",
-            fontSize: 14,
-            fontWeight: 900,
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </span>
-        <span
-          style={{
-            display: "block",
-            marginTop: 5,
-            fontSize: 12,
-            lineHeight: 1.55,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.56)",
-          }}
-        >
-          {description}
-        </span>
-      </span>
-
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ width: 20, height: 20, accentColor: "#b91c1c" }}
-      />
-    </label>
-  );
-}
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const EMPTY_FORM = {
   adminEmail: "",
@@ -178,6 +21,86 @@ const EMPTY_FORM = {
   factoryOrderNotificationsEnabled: true,
 };
 
+function fieldStyle(invalid) {
+  return {
+    width: "100%",
+    height: 44,
+    borderRadius: 12,
+    border: invalid ? "1px solid rgba(180,35,24,.4)" : "none",
+    background: invalid ? "rgba(180,35,24,.05)" : "var(--color-fog, #f5f5f7)",
+    padding: "0 14px",
+    outline: "none",
+    fontSize: 13.5,
+    fontWeight: 500,
+    color: "var(--color-ink, #1d1d1f)",
+  };
+}
+
+function Field({ label, helper = "", error = "", children }) {
+  return (
+    <div style={{ display: "grid", gap: 7 }}>
+      <label
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: ".04em",
+          textTransform: "uppercase",
+          color: "var(--color-graphite, #707070)",
+        }}
+      >
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 500, color: "#b42318" }}>{error}</div>
+      ) : helper ? (
+        <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+          {helper}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ToggleRow({ icon, title, description, checked, onChange }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "36px minmax(0,1fr) auto",
+        gap: 14,
+        alignItems: "center",
+        padding: 14,
+        borderRadius: 14,
+        background: "var(--color-fog, #f5f5f7)",
+      }}
+    >
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 999,
+          display: "grid",
+          placeItems: "center",
+          background: checked ? "rgba(0,113,227,.12)" : "rgba(29,29,31,.06)",
+          color: checked ? "var(--color-azure, #0071e3)" : "var(--color-graphite, #707070)",
+        }}
+      >
+        <DashboardIcon name={icon} size={16} strokeWidth={1.8} />
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>
+          {title}
+        </span>
+        <span style={{ display: "block", marginTop: 3, fontSize: 12, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+          {description}
+        </span>
+      </span>
+      <ToggleSwitch checked={checked} onChange={onChange} label={title} />
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY_FORM);
@@ -186,6 +109,7 @@ export default function AdminSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [touched, setTouched] = useState(false);
 
   async function loadSettings() {
     try {
@@ -210,30 +134,38 @@ export default function AdminSettingsPage() {
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setTouched(true);
     setSuccess("");
   };
 
+  const adminEmailTrimmed = form.adminEmail.trim();
+  const factoryEmailTrimmed = form.factoryEmail.trim();
+  const adminEmailInvalid = touched && Boolean(adminEmailTrimmed) && !EMAIL_PATTERN.test(adminEmailTrimmed);
+  const factoryEmailInvalid = touched && Boolean(factoryEmailTrimmed) && !EMAIL_PATTERN.test(factoryEmailTrimmed);
+  const missingAdminEmailWarning = form.notificationsEnabled && !adminEmailInvalid && !adminEmailTrimmed;
+  const formHasErrors = adminEmailInvalid || factoryEmailInvalid;
+
   const buildPayload = () => ({
-    adminEmail: form.adminEmail.trim().toLowerCase(),
-    factoryEmail: form.factoryEmail.trim().toLowerCase(),
+    adminEmail: adminEmailTrimmed.toLowerCase(),
+    factoryEmail: factoryEmailTrimmed.toLowerCase(),
     notificationsEnabled: form.notificationsEnabled,
-    dealerApplicationNotificationsEnabled:
-      form.dealerApplicationNotificationsEnabled,
-    dispatcherApplicationNotificationsEnabled:
-      form.dispatcherApplicationNotificationsEnabled,
+    dealerApplicationNotificationsEnabled: form.dealerApplicationNotificationsEnabled,
+    dispatcherApplicationNotificationsEnabled: form.dispatcherApplicationNotificationsEnabled,
     factoryOrderNotificationsEnabled: form.factoryOrderNotificationsEnabled,
   });
 
   async function handleSave() {
+    if (formHasErrors) {
+      setError("Fix the highlighted email address before saving.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
       setSuccess("");
 
-      const res = await api.patch(
-        "/api/admin/settings/notifications",
-        buildPayload(),
-      );
+      const res = await api.patch("/api/admin/settings/notifications", buildPayload());
 
       setForm({ ...EMPTY_FORM, ...(res?.data?.item || {}) });
       setSuccess("Notification settings saved.");
@@ -249,24 +181,22 @@ export default function AdminSettingsPage() {
   }
 
   async function handleSendTest() {
+    if (formHasErrors) {
+      setError("Fix the highlighted email address before sending a test.");
+      return;
+    }
+
     try {
       setTesting(true);
       setError("");
       setSuccess("");
 
-      const saved = await api.patch(
-        "/api/admin/settings/notifications",
-        buildPayload(),
-      );
+      const saved = await api.patch("/api/admin/settings/notifications", buildPayload());
       setForm({ ...EMPTY_FORM, ...(saved?.data?.item || {}) });
 
       const res = await api.post("/api/admin/settings/notifications/test");
       const to = res?.data?.item?.to || saved?.data?.item?.adminEmail || "";
-      setSuccess(
-        to
-          ? `Test notification sent to ${to}.`
-          : "Test notification sent.",
-      );
+      setSuccess(to ? `Test notification sent to ${to}.` : "Test notification sent.");
     } catch (err) {
       setError(
         err?.response?.data?.error ||
@@ -280,189 +210,168 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 20, marginTop: 0, paddingTop: 0 }}>
-      <GlassCard style={{ padding: 18 }}>
+    <div style={{ display: "grid", gap: 16 }}>
+      <Surface padding={20} className="dash-fade-up">
         <SectionHeader
+          eyebrow="Settings"
+          icon="gear"
           title="Notification Settings"
           subtitle="Configure operational email recipients for admin alerts. This admin email is separate from any admin login identity."
           action={
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <ActionButton
-                subtle
-                onClick={handleSendTest}
-                disabled={loading || saving || testing}
-              >
-                {testing ? "Sending..." : "Send Test Email"}
-              </ActionButton>
-              <ActionButton subtle onClick={loadSettings} disabled={loading}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <GhostButton icon="bell" onClick={handleSendTest} disabled={loading || saving || testing}>
+                {testing ? "Sending…" : "Send Test Email"}
+              </GhostButton>
+              <GhostButton icon="refresh" onClick={loadSettings} disabled={loading}>
                 Refresh
-              </ActionButton>
-              <ActionButton
-                subtle
-                onClick={() => navigate("/admin/dashboard/settings/trash")}
-              >
+              </GhostButton>
+              <GhostButton icon="trash" onClick={() => navigate("/admin/dashboard/settings/trash")}>
                 Trash
-              </ActionButton>
+              </GhostButton>
             </div>
           }
         />
 
-        {(error || success) && (
+        {(error || success) ? (
           <div
             style={{
-              marginTop: 18,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: error
-                ? "rgba(180,35,24,.08)"
-                : "rgba(22,163,74,.08)",
-              border: error
-                ? "1px solid rgba(180,35,24,.14)"
-                : "1px solid rgba(22,163,74,.14)",
+              marginTop: 16,
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: error ? "rgba(180,35,24,.08)" : "rgba(22,163,74,.08)",
               color: error ? "#b42318" : "#15803d",
-              fontWeight: 800,
+              fontSize: 13,
+              fontWeight: 500,
             }}
           >
             {error || success}
           </div>
-        )}
-      </GlassCard>
+        ) : null}
+      </Surface>
 
-      <GlassCard style={{ padding: 22 }}>
-        <SectionHeader
-          title="Admin Trash"
-          subtitle="Restore deleted dealers, dispatchers, orders, and applications before their 30-day retention window expires."
-          action={
-            <ActionButton
-              subtle
-              onClick={() => navigate("/admin/dashboard/settings/trash")}
-            >
-              Open Trash
-            </ActionButton>
-          }
-        />
-      </GlassCard>
-
-      <GlassCard style={{ padding: 24 }}>
+      <Surface padding={22}>
         {loading ? (
-          <div style={{ fontWeight: 800, color: "rgba(15,23,42,.58)" }}>
-            Loading settings...
+          <div style={{ display: "grid", gap: 14 }}>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))",
+                }}
+              />
+            ))}
           </div>
         ) : (
           <div style={{ display: "grid", gap: 20 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 16,
-              }}
-            >
+            {missingAdminEmailWarning ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  background: "rgba(182,68,0,.08)",
+                  color: "var(--color-caution, #b64400)",
+                }}
+              >
+                <DashboardIcon name="warning" size={15} strokeWidth={1.9} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.5 }}>
+                  Notification emails are enabled, but no admin notification email is set — alerts won&apos;t reach anyone until one is added below.
+                </span>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
               <Field
                 label="Factory Email"
                 helper="Existing factory recipient used for factory order bill emails."
+                error={factoryEmailInvalid ? "This doesn't look like a valid email address." : ""}
               >
                 <input
                   type="email"
                   value={form.factoryEmail}
                   onChange={(e) => updateField("factoryEmail", e.target.value)}
                   placeholder="factory@example.com"
-                  style={{
-                    width: "100%",
-                    height: 50,
-                    borderRadius: 16,
-                    border: "1px solid rgba(15,23,42,.08)",
-                    background: "#fff",
-                    padding: "0 14px",
-                    outline: "none",
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: "#0f172a",
-                  }}
+                  style={fieldStyle(factoryEmailInvalid)}
                 />
               </Field>
 
               <Field
                 label="Admin Notification Email"
                 helper="Receives new dealer applications, dispatcher applications, and factory-routed order alerts. This is not the admin login email."
+                error={adminEmailInvalid ? "This doesn't look like a valid email address." : ""}
               >
                 <input
                   type="email"
                   value={form.adminEmail}
                   onChange={(e) => updateField("adminEmail", e.target.value)}
                   placeholder="operations-admin@example.com"
-                  style={{
-                    width: "100%",
-                    height: 50,
-                    borderRadius: 16,
-                    border: "1px solid rgba(15,23,42,.08)",
-                    background: "#fff",
-                    padding: "0 14px",
-                    outline: "none",
-                    fontSize: 14,
-                    fontWeight: 800,
-                    color: "#0f172a",
-                  }}
+                  style={fieldStyle(adminEmailInvalid)}
                 />
               </Field>
             </div>
 
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 10 }}>
               <ToggleRow
+                icon="bell"
                 title="Enable admin notification email"
                 description="Master switch for all admin-facing notification emails."
                 checked={form.notificationsEnabled}
                 onChange={(value) => updateField("notificationsEnabled", value)}
               />
               <ToggleRow
+                icon="store"
                 title="Dealer application alerts"
                 description="Notify admin when a new dealer application is submitted."
                 checked={form.dealerApplicationNotificationsEnabled}
-                onChange={(value) =>
-                  updateField("dealerApplicationNotificationsEnabled", value)
-                }
+                onChange={(value) => updateField("dealerApplicationNotificationsEnabled", value)}
               />
               <ToggleRow
+                icon="handshake"
                 title="Dispatcher application alerts"
                 description="Notify admin when a new dispatcher application is submitted."
                 checked={form.dispatcherApplicationNotificationsEnabled}
-                onChange={(value) =>
-                  updateField("dispatcherApplicationNotificationsEnabled", value)
-                }
+                onChange={(value) => updateField("dispatcherApplicationNotificationsEnabled", value)}
               />
               <ToggleRow
+                icon="orders"
                 title="Factory-routed order alerts"
                 description="Notify admin only for new orders placed by factory-routed dealers. Dispatcher-routed dealer orders are excluded."
                 checked={form.factoryOrderNotificationsEnabled}
-                onChange={(value) =>
-                  updateField("factoryOrderNotificationsEnabled", value)
-                }
+                onChange={(value) => updateField("factoryOrderNotificationsEnabled", value)}
               />
             </div>
 
             <div
               style={{
-                padding: "14px 16px",
-                borderRadius: 18,
-                background: "rgba(248,250,252,.92)",
-                border: "1px solid rgba(15,23,42,.06)",
-                color: "rgba(15,23,42,.62)",
-                fontSize: 13,
-                lineHeight: 1.7,
-                fontWeight: 700,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 12,
+                background: "var(--color-fog, #f5f5f7)",
               }}
             >
-              SMTP credentials still come from the backend environment. These
-              settings only decide who receives operational admin alerts.
+              <DashboardIcon name="gear" size={15} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)", flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 12.5, lineHeight: 1.6, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                SMTP credentials still come from the backend environment. These settings only decide who receives operational admin alerts.
+              </span>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <ActionButton onClick={handleSave} disabled={saving}>
-                {saving ? "Saving..." : "Save Notification Settings"}
-              </ActionButton>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                "Send Test Email" also saves your current changes first.
+              </span>
+              <PrimaryButton icon="checkmark" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : "Save Notification Settings"}
+              </PrimaryButton>
             </div>
           </div>
         )}
-      </GlassCard>
+      </Surface>
     </div>
   );
 }

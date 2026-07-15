@@ -12,6 +12,9 @@ const SECTIONS = {
   DRAFT_ORDER: "draftOrder",
   ORDERS: "orders",
   DEALERS: "dealers",
+  STOCK: "stock",
+  ORDER_FROM_FACTORY: "orderFromFactory",
+  ORDER_HISTORY: "orderHistory",
   NOTIFICATIONS: "notifications",
   PROFILE: "profile",
 };
@@ -63,6 +66,18 @@ export default function DispatcherDashboardPage() {
       return SECTIONS.DEALERS;
     }
 
+    if (path.startsWith("/dispatcher/dashboard/stock")) {
+      return SECTIONS.STOCK;
+    }
+
+    if (path.startsWith("/dispatcher/dashboard/order/history")) {
+      return SECTIONS.ORDER_HISTORY;
+    }
+
+    if (path.startsWith("/dispatcher/dashboard/order")) {
+      return SECTIONS.ORDER_FROM_FACTORY;
+    }
+
     if (path.startsWith("/dispatcher/dashboard/notifications")) {
       return SECTIONS.NOTIFICATIONS;
     }
@@ -81,6 +96,7 @@ export default function DispatcherDashboardPage() {
         title: "Overview",
         subtitle: "Operational summary",
         badge: "Home",
+        icon: "overview",
         href: "/dispatcher/dashboard",
       },
       {
@@ -88,6 +104,7 @@ export default function DispatcherDashboardPage() {
         title: "Draft Order",
         subtitle: "Price calculator",
         badge: "Tool",
+        icon: "invoice",
         href: "/dispatcher/dashboard/draft-order",
       },
       {
@@ -100,6 +117,7 @@ export default function DispatcherDashboardPage() {
           ],
           "Live",
         ),
+        icon: "orders",
         href: "/dispatcher/dashboard/orders",
       },
       {
@@ -107,13 +125,39 @@ export default function DispatcherDashboardPage() {
         title: "Assigned Dealers",
         subtitle: "Assigned dealer network",
         badge: "Live",
+        icon: "store",
         href: "/dispatcher/dashboard/dealers",
+      },
+      {
+        key: SECTIONS.STOCK,
+        title: "My Stock",
+        subtitle: "Regional warehouse quantities",
+        badge: "",
+        icon: "stock",
+        href: "/dispatcher/dashboard/stock",
+      },
+      {
+        key: SECTIONS.ORDER_FROM_FACTORY,
+        title: "Order",
+        subtitle: "Replenish your stock",
+        badge: "",
+        icon: "package",
+        href: "/dispatcher/dashboard/order",
+      },
+      {
+        key: SECTIONS.ORDER_HISTORY,
+        title: "Order History",
+        subtitle: "Track factory orders",
+        badge: "",
+        icon: "history",
+        href: "/dispatcher/dashboard/order/history",
       },
       {
         key: SECTIONS.NOTIFICATIONS,
         title: "Notifications",
         subtitle: "Assigned order alerts",
         badge: badgeForCount(notifications?.totalUnread, ""),
+        icon: "bell",
         href: "/dispatcher/dashboard/notifications",
       },
       {
@@ -121,6 +165,7 @@ export default function DispatcherDashboardPage() {
         title: "Profile",
         subtitle: "Account and identity",
         badge: "",
+        icon: "user",
         href: "/dispatcher/dashboard/profile",
       },
     ],
@@ -141,6 +186,12 @@ export default function DispatcherDashboardPage() {
         label: "Network",
         items: navigationItems.filter((item) =>
           [SECTIONS.DEALERS].includes(item.key),
+        ),
+      },
+      {
+        label: "Inventory",
+        items: navigationItems.filter((item) =>
+          [SECTIONS.STOCK, SECTIONS.ORDER_FROM_FACTORY, SECTIONS.ORDER_HISTORY].includes(item.key),
         ),
       },
       {
@@ -168,7 +219,6 @@ export default function DispatcherDashboardPage() {
       navGroups={navigationGroups}
       activeKey={activeSection}
       onNavigate={(item) => navigate(item.href)}
-      priorityText="Keep dispatcher operations lean: process assigned submitted orders quickly, clearly, and only within the authorized network scope."
     >
       <Outlet />
     </DashboardShell>

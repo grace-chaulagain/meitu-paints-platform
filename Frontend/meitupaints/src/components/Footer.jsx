@@ -126,41 +126,12 @@ export default function Footer() {
         </div>
 
         <style>{`
-          :root{
-            --red:#c1121f;
-            --red2:#e11d2e;
-            --black:#0b0b0c;
-            --ink70:rgba(11,11,12,.72);
-            --ink55:rgba(11,11,12,.56);
-            --line:rgba(0,0,0,.10);
-            --glass:rgba(255,255,255,.88);
-            --ease:cubic-bezier(.22,.61,.36,1);
-          }
-
           .meitu-footer{
             position:relative;
             margin-top:64px;
             padding: 44px 0 26px;
-            background:
-              radial-gradient(900px 240px at 15% 0%, rgba(193,18,31,.10), transparent 55%),
-              radial-gradient(900px 240px at 100% 100%, rgba(0,0,0,.06), transparent 55%),
-              rgba(255,255,255,.55);
-            border-top: 1px solid rgba(0,0,0,.08);
-            backdrop-filter: blur(18px);
-          }
-
-          .meitu-footer::after{
-            content:"";
-            position:absolute;
-            left:0; right:0; top:0;
-            height:1px;
-            background: linear-gradient(90deg,
-              transparent,
-              rgba(193,18,31,.28),
-              transparent
-            );
-            opacity:.55;
-            pointer-events:none;
+            background: var(--surface-canvas, #f5f5f7);
+            border-top: 1px solid var(--color-silver-mist, #e8e8ed);
           }
 
           .mf-wrap{
@@ -185,7 +156,7 @@ export default function Footer() {
           }
 
           .mf-logo{
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,.12));
+            filter: none;
           }
 
           .mf-brandText{
@@ -198,7 +169,7 @@ export default function Footer() {
             font-size:16px;
             font-weight:900;
             letter-spacing:.14em;
-            color: var(--black);
+            color: var(--color-ink, #1d1d1f);
           }
 
           .mf-brandSub{
@@ -206,15 +177,15 @@ export default function Footer() {
             font-size:10px;
             font-weight:800;
             letter-spacing:.34em;
-            color: var(--red);
+            color: var(--color-graphite, #707070);
           }
 
           .mf-tagline{
             margin: 14px 0 0;
             max-width: 420px;
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.55;
-            color: var(--ink55);
+            color: var(--color-graphite, #707070);
           }
 
           .mf-pills{
@@ -229,11 +200,11 @@ export default function Footer() {
             align-items:center;
             padding: 7px 10px;
             border-radius: 999px;
-            border: 1px solid rgba(0,0,0,.10);
-            background: rgba(255,255,255,.62);
+            border: 1px solid var(--color-silver-mist, #e8e8ed);
+            background: var(--surface-card, #ffffff);
             font-size: 11px;
-            font-weight: 800;
-            color: rgba(11,11,12,.72);
+            font-weight: 600;
+            color: var(--color-slate, #86868b);
           }
 
           /* Columns */
@@ -249,43 +220,38 @@ export default function Footer() {
 
           .mf-title{
             font-size: 12px;
-            font-weight: 900;
-            letter-spacing: .10em;
+            font-weight: 600;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
-            color: rgba(11,11,12,.72);
+            color: var(--color-ink, #1d1d1f);
             margin-bottom: 12px;
           }
 
           .mf-link{
             display:block;
             text-decoration:none;
-            color: var(--ink55);
-            font-size: 13px;
-            font-weight: 650;
+            color: var(--color-graphite, #707070);
+            font-size: 14px;
+            font-weight: 400;
             padding: 8px 0;
-            transition: color .18s var(--ease), transform .18s var(--ease);
+            transition: color .18s var(--transition-smooth, cubic-bezier(.22,.61,.36,1));
           }
 
           .mf-link:hover{
-            color: var(--black);
-            transform: translateX(2px);
+            color: var(--color-ink, #1d1d1f);
           }
 
           .mf-link:focus-visible{
-            outline: none;
-            box-shadow: 0 0 0 4px rgba(193,18,31,.14);
-            border-radius: 10px;
-            padding-left: 8px;
-            padding-right: 8px;
-            margin-left: -8px;
-            margin-right: -8px;
+            outline: 2px solid var(--color-ink, #1d1d1f);
+            outline-offset: 2px;
+            border-radius: 4px;
           }
 
           /* Bottom bar */
           .mf-bottom{
             margin-top: 26px;
             padding-top: 18px;
-            border-top: 1px solid rgba(0,0,0,.08);
+            border-top: 1px solid var(--color-silver-mist, #e8e8ed);
             display:flex;
             align-items:center;
             justify-content:space-between;
@@ -301,30 +267,30 @@ export default function Footer() {
 
           .mf-copy{
             font-size: 12px;
-            font-weight: 800;
-            color: rgba(11,11,12,.72);
+            font-weight: 400;
+            color: var(--color-graphite, #707070);
           }
 
           .mf-muted{
             font-size: 12px;
-            color: rgba(11,11,12,.50);
-            font-weight: 650;
+            color: var(--color-graphite, #707070);
+            font-weight: 400;
           }
 
           .mf-mini{
             font-size: 12px;
-            font-weight: 800;
-            color: rgba(11,11,12,.62);
+            font-weight: 400;
+            color: var(--color-graphite, #707070);
             text-decoration:none;
-            transition: color .18s var(--ease);
+            transition: color .18s var(--transition-smooth, cubic-bezier(.22,.61,.36,1));
           }
 
           .mf-mini:hover{
-            color: var(--black);
+            color: var(--color-ink, #1d1d1f);
           }
 
           .mf-dot{
-            color: rgba(11,11,12,.35);
+            color: var(--color-silver-mist, #e8e8ed);
           }
 
           /* Responsive */

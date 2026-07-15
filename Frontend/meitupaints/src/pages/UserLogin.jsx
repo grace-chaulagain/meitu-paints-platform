@@ -2,63 +2,9 @@ import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider.jsx";
-import { getApiErrorMessage } from "../api/client.js";
-import { setAccessToken } from "../api/client.js";
+import { getApiErrorMessage, setAccessToken } from "../api/client.js";
 import { loginStart, loginSuccess, loginFailure } from "../redux/userSlice.js";
-
-const featureCards = [
-  {
-    title: "Fast Access",
-    desc: "Secure sign-in for approved dealer accounts.",
-  },
-  {
-    title: "Clear Workflow",
-    desc: "Professional experience from catalog to order review.",
-  },
-  {
-    title: "Enterprise Ready",
-    desc: "Built for reliable day-to-day wholesale ordering.",
-  },
-];
-
-const shellStyle = {
-  minHeight: "100vh",
-  background:
-    "radial-gradient(900px 520px at 10% 0%, rgba(255,230,160,.42), transparent 52%), radial-gradient(900px 520px at 88% 12%, rgba(255,120,80,.14), transparent 44%), linear-gradient(180deg, #f6f7f9 0%, #eef2f6 100%)",
-  padding: "96px 20px 48px",
-};
-
-const glassPanel = {
-  borderRadius: 34,
-  border: "1px solid rgba(255,255,255,.72)",
-  backdropFilter: "blur(24px)",
-  WebkitBackdropFilter: "blur(24px)",
-  boxShadow:
-    "0 24px 70px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.84)",
-};
-
-const inputStyle = {
-  width: "100%",
-  height: 56,
-  borderRadius: 18,
-  border: "1px solid rgba(0,0,0,.08)",
-  background: "rgba(255,255,255,.96)",
-  padding: "0 16px",
-  fontWeight: 800,
-  color: "#111827",
-  outline: "none",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,.88)",
-};
-
-const labelStyle = {
-  display: "block",
-  marginBottom: 8,
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: ".08em",
-  textTransform: "uppercase",
-  color: "rgba(0,0,0,.5)",
-};
+import NavBar from "../components/NavBar.jsx";
 
 function EyeIcon({ hidden = false }) {
   return (
@@ -76,6 +22,25 @@ function EyeIcon({ hidden = false }) {
       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
       <circle cx="12" cy="12" r="3" />
       {hidden ? <path d="M4 4l16 16" /> : null}
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
     </svg>
   );
 }
@@ -117,7 +82,6 @@ export default function UserLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [state, setState] = useState({ loading: false, err: "" });
   const [sessionNotice, setSessionNotice] = useState(getInitialSessionNotice);
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (!location.search.includes("session=expired")) return;
@@ -127,13 +91,6 @@ export default function UserLogin() {
       : "/login";
     window.history.replaceState(null, "", nextUrl);
   }, [location.search]);
-
-  useEffect(() => {
-    const update = () => setIsMobile(window.innerWidth < 992);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -186,377 +143,408 @@ export default function UserLogin() {
   };
 
   return (
-    <div
-      style={{
-        ...shellStyle,
-        padding: isMobile ? "84px 14px 28px" : shellStyle.padding,
-      }}
-    >
-      <div className="container" style={{ maxWidth: 1180 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1.05fr .95fr",
-            gap: isMobile ? 16 : 24,
-            alignItems: "stretch",
-          }}
-        >
-          <div
-            style={{
-              ...glassPanel,
-              position: "relative",
-              overflow: "hidden",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,.8) 0%, rgba(255,255,255,.6) 100%)",
-              padding: isMobile ? 22 : 34,
-              minHeight: isMobile ? "auto" : 640,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              order: isMobile ? 2 : 1,
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "radial-gradient(circle at 18% 16%, rgba(255,255,255,.88), transparent 24%), radial-gradient(circle at 84% 80%, rgba(209,0,0,.08), transparent 26%), linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0))",
-                pointerEvents: "none",
-              }}
-            />
+    <>
+      <NavBar />
 
-            <div style={{ position: "relative", zIndex: 1 }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,.74)",
-                  border: "1px solid rgba(0,0,0,.05)",
-                  fontSize: 11,
-                  fontWeight: 900,
-                  letterSpacing: ".08em",
-                  textTransform: "uppercase",
-                  color: "rgba(0,0,0,.56)",
-                }}
-              >
-                Meitu Dealer Portal
-              </div>
+      <main className="apple-login-page">
+        <Link to="/" className="apple-login-logo" aria-label="Back to home">
+          <img src="/meitulogo.svg" alt="Meitu Paints" />
+        </Link>
 
-              <div
-                style={{
-                  marginTop: isMobile ? 18 : 22,
-                  fontSize: isMobile ? 34 : 52,
-                  lineHeight: isMobile ? 1.02 : 0.96,
-                  letterSpacing: isMobile ? "-0.05em" : "-0.06em",
-                  fontWeight: 950,
-                  color: "#0f172a",
-                  maxWidth: 560,
-                }}
-              >
-                Professional ordering for modern dealers.
-              </div>
+        <section className="apple-login-card" aria-labelledby="login-title">
+          <div className="apple-login-kicker">Meitu Account</div>
+          <h1 id="login-title">Sign in to Meitu Paints</h1>
+          <p className="apple-login-subtitle">
+            Use your approved account to access your workspace.
+          </p>
 
-              <div
-                style={{
-                  marginTop: 18,
-                  maxWidth: 540,
-                  color: "rgba(0,0,0,.58)",
-                  fontWeight: 700,
-                  fontSize: isMobile ? 14 : 16,
-                  lineHeight: 1.65,
-                }}
-              >
-                Access your Meitu account to browse the catalog, build orders,
-                and manage dealer operations with a clean, enterprise-grade
-                experience.
-              </div>
+          {state.err ? (
+            <div className="apple-login-alert error" role="alert">
+              {state.err}
             </div>
+          ) : null}
 
-            <div
-              style={{
-                position: "relative",
-                zIndex: 1,
-                display: "grid",
-                gridTemplateColumns: isMobile
-                  ? "1fr"
-                  : "repeat(3, minmax(0, 1fr))",
-                gap: 14,
-                marginTop: isMobile ? 20 : 0,
-              }}
-            >
-              {featureCards.map((item) => (
-                <div
-                  key={item.title}
-                  style={{
-                    borderRadius: 22,
-                    padding: isMobile ? 16 : 18,
-                    background: "rgba(255,255,255,.6)",
-                    border: "1px solid rgba(255,255,255,.62)",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,.78)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 900,
-                      letterSpacing: "-0.02em",
-                      color: "#111827",
-                    }}
-                  >
-                    {item.title}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 13,
-                      lineHeight: 1.55,
-                      color: "rgba(0,0,0,.58)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {item.desc}
-                  </div>
-                </div>
-              ))}
+          {sessionNotice ? (
+            <div className="apple-login-alert notice" role="status">
+              {sessionNotice}
             </div>
-          </div>
+          ) : null}
 
-          <div
-            style={{
-              ...glassPanel,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,.86) 0%, rgba(255,255,255,.72) 100%)",
-              padding: isMobile ? 22 : 34,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              order: 1,
-            }}
-          >
-            <div style={{ maxWidth: 440, width: "100%", margin: "0 auto" }}>
-              <div
-                style={{
-                  fontSize: isMobile ? 28 : 34,
-                  fontWeight: 950,
-                  letterSpacing: "-0.05em",
-                  color: "#0f172a",
-                }}
-              >
-                Welcome back
-              </div>
-              <div
-                style={{
-                  marginTop: 10,
-                  color: "rgba(0,0,0,.56)",
-                  fontWeight: 700,
-                  lineHeight: 1.6,
-                  fontSize: isMobile ? 14 : 15,
-                }}
-              >
-                Sign in to continue to your dealer workspace.
+          <form className="apple-login-form" onSubmit={onSubmit}>
+            <div className="apple-login-input-card">
+              <div className="apple-login-field">
+                <label htmlFor="login-email">Email</label>
+                <input
+                  id="login-email"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
               </div>
 
-              <div
-                style={{
-                  marginTop: 24,
-                  padding: 18,
-                  borderRadius: 24,
-                  background: "rgba(248,248,250,.92)",
-                  border: "1px solid rgba(0,0,0,.05)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "rgba(0,0,0,.52)",
-                    fontWeight: 800,
-                    marginBottom: 12,
-                  }}
-                >
-                  Don’t have an account yet?
-                </div>
+              <div className="apple-login-divider" />
 
-                <Link
-                  to="/dealership/register"
-                  className="text-decoration-none"
-                  style={{
-                    height: 50,
-                    borderRadius: 16,
-                    border: "1px solid rgba(0,0,0,.08)",
-                    background: "rgba(255,255,255,.96)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#111827",
-                    fontWeight: 900,
-                    letterSpacing: "-0.01em",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,.9)",
-                  }}
-                >
-                  Create account
-                </Link>
-              </div>
-
-              {state.err ? (
-                <div
-                  style={{
-                    marginTop: 18,
-                    padding: "14px 16px",
-                    borderRadius: 18,
-                    background: "rgba(180,35,24,.08)",
-                    border: "1px solid rgba(180,35,24,.16)",
-                    color: "#b42318",
-                    fontWeight: 800,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {state.err}
-                </div>
-              ) : null}
-
-              {sessionNotice ? (
-                <div
-                  style={{
-                    marginTop: 18,
-                    padding: "14px 16px",
-                    borderRadius: 18,
-                    background: "rgba(180,83,9,.08)",
-                    border: "1px solid rgba(180,83,9,.16)",
-                    color: "#92400e",
-                    fontWeight: 800,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {sessionNotice}
-                </div>
-              ) : null}
-
-              <form
-                onSubmit={onSubmit}
-                style={{ marginTop: 22, display: "grid", gap: 16 }}
-              >
-                <div>
-                  <label style={labelStyle}>Email</label>
+              <div className="apple-login-field password">
+                <label htmlFor="login-password">Password</label>
+                <div className="apple-login-password-row">
                   <input
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
                     required
-                    style={inputStyle}
                   />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Password</label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      placeholder="Enter your password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="current-password"
-                      required
-                      style={{ ...inputStyle, paddingRight: 58 }}
-                    />
-                    <button
-                      type="button"
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
-                      onClick={() => setShowPassword((value) => !value)}
-                      style={{
-                        position: "absolute",
-                        right: 10,
-                        top: "50%",
-                        transform: "translateY(-50%)",
-                        width: 38,
-                        height: 38,
-                        display: "inline-grid",
-                        placeItems: "center",
-                        borderRadius: 12,
-                        border: "1px solid rgba(0,0,0,.07)",
-                        background: "rgba(255,255,255,.9)",
-                        color: "rgba(15,23,42,.72)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <EyeIcon hidden={showPassword} />
-                    </button>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      marginTop: 10,
-                      fontSize: 13,
-                      fontWeight: 800,
-                    }}
+                  <button
+                    type="button"
+                    className="apple-login-quiet-button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((value) => !value)}
                   >
-                    <Link
-                      to="/forgot-password"
-                      style={{ color: "#b42318", textDecoration: "none" }}
-                    >
-                      Forgot password?
-                    </Link>
-                    <Link
-                      to="/resend-setup-link"
-                      style={{ color: "#475467", textDecoration: "none" }}
-                    >
-                      Need a new setup link?
-                    </Link>
-                  </div>
+                    <EyeIcon hidden={showPassword} />
+                  </button>
+                  <button
+                    type="submit"
+                    className="apple-login-submit"
+                    disabled={state.loading}
+                    aria-label="Continue"
+                  >
+                    {state.loading ? "..." : <ArrowRightIcon />}
+                  </button>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={state.loading}
-                  style={{
-                    marginTop: 4,
-                    height: 58,
-                    borderRadius: 18,
-                    border: "1px solid rgba(196,0,0,.18)",
-                    background: state.loading
-                      ? "rgba(0,0,0,.10)"
-                      : "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
-                    color: "#fff",
-                    fontWeight: 950,
-                    fontSize: 15,
-                    letterSpacing: "-0.01em",
-                    cursor: state.loading ? "not-allowed" : "pointer",
-                    boxShadow: state.loading
-                      ? "none"
-                      : "0 18px 34px rgba(196,0,0,.22)",
-                  }}
-                >
-                  {state.loading ? "Logging in..." : "Login"}
-                </button>
-
-                <div
-                  style={{
-                    marginTop: 4,
-                    padding: "14px 16px",
-                    borderRadius: 18,
-                    background: "rgba(248,248,250,.9)",
-                    border: "1px solid rgba(0,0,0,.05)",
-                    color: "rgba(0,0,0,.58)",
-                    fontSize: 13,
-                    lineHeight: 1.6,
-                    fontWeight: 700,
-                  }}
-                >
-                  If you’re approved but can’t login yet, check your email for
-                  the password setup link.
-                </div>
-              </form>
+              </div>
             </div>
+          </form>
+
+          <div className="apple-login-links">
+            <Link to="/forgot-password">Forgot password?</Link>
+            <Link to="/resend-setup-link">Need a new setup link?</Link>
+            <Link to="/dealership/register">Create dealer account</Link>
+            <Link to="/dispatcher/apply">Create dispatcher account</Link>
           </div>
-        </div>
-      </div>
-    </div>
+        </section>
+
+        <p className="apple-login-footnote">
+          Admin, dealer, dispatcher, and factory accounts use the same secure
+          sign-in.
+        </p>
+
+        <style>{`
+        .apple-login-page{
+          min-height:calc(100vh - 44px);
+          padding:72px 20px 34px;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          background:#f5f5f7;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+        }
+
+        .apple-login-logo{
+          width:56px;
+          height:56px;
+          margin-bottom:30px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          text-decoration:none;
+        }
+
+        .apple-login-logo img{
+          width:52px;
+          height:52px;
+          object-fit:contain;
+          display:block;
+        }
+
+        .apple-login-card{
+          width:min(100%, 480px);
+          text-align:center;
+        }
+
+        .apple-login-kicker{
+          color:#707070;
+          font-size:14px;
+          line-height:1.3;
+          font-weight:600;
+          letter-spacing:-.003em;
+        }
+
+        .apple-login-card h1{
+          margin:8px 0 0;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-display, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+          font-size:clamp(34px, 6vw, 48px);
+          line-height:1.08;
+          font-weight:700;
+          letter-spacing:-.022em;
+        }
+
+        .apple-login-subtitle{
+          width:min(100%, 360px);
+          margin:12px auto 0;
+          color:#707070;
+          font-size:17px;
+          line-height:1.45;
+          font-weight:400;
+          letter-spacing:-.006em;
+        }
+
+        .apple-login-form{
+          margin-top:30px;
+        }
+
+        .apple-login-input-card{
+          overflow:hidden;
+          border-radius:18px;
+          background:#fff;
+          border:1px solid #d2d2d7;
+          text-align:left;
+          transition:border-color .16s ease, background-color .16s ease;
+        }
+
+        .apple-login-input-card:focus-within{
+          border-color:#86868b;
+          background:#fff;
+        }
+
+        .apple-login-field{
+          display:grid;
+          grid-template-columns:92px minmax(0, 1fr);
+          align-items:center;
+          min-height:58px;
+          padding:0 10px 0 16px;
+        }
+
+        .apple-login-field.password{
+          grid-template-columns:92px minmax(0, 1fr);
+        }
+
+        .apple-login-field label{
+          color:#707070;
+          font-size:13px;
+          line-height:1;
+          font-weight:400;
+          letter-spacing:-.003em;
+        }
+
+        .apple-login-field input{
+          width:100%;
+          height:58px;
+          border:0 !important;
+          border-radius:0 !important;
+          background:#fff !important;
+          background-color:#fff !important;
+          background-image:none !important;
+          background-clip:padding-box !important;
+          color:#1d1d1f;
+          outline:0;
+          box-shadow:none !important;
+          appearance:none;
+          -webkit-appearance:none;
+          -webkit-tap-highlight-color:transparent;
+          font-size:17px;
+          line-height:1.3;
+          font-weight:400;
+          letter-spacing:-.006em;
+          padding:0 !important;
+        }
+
+        .apple-login-field input:focus,
+        .apple-login-field input:focus-visible{
+          background:#fff !important;
+          background-color:#fff !important;
+          background-image:none !important;
+          border:0 !important;
+          outline:0 !important;
+          box-shadow:none !important;
+        }
+
+        .apple-login-field input:autofill,
+        .apple-login-field input:-webkit-autofill,
+        .apple-login-field input:-webkit-autofill:hover,
+        .apple-login-field input:-webkit-autofill:focus,
+        .apple-login-field input:-webkit-autofill:active{
+          background:#fff !important;
+          background-color:#fff !important;
+          background-image:none !important;
+          -webkit-text-fill-color:#1d1d1f !important;
+          caret-color:#1d1d1f !important;
+          box-shadow:0 0 0 1000px #fff inset !important;
+          -webkit-box-shadow:0 0 0 1000px #fff inset !important;
+          transition:background-color 9999s ease-in-out 0s !important;
+        }
+
+        .apple-login-field input:-webkit-autofill::first-line{
+          color:#1d1d1f !important;
+          font-family:var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif) !important;
+          font-size:17px !important;
+          font-weight:400 !important;
+        }
+
+        .apple-login-field input::selection{
+          background:transparent;
+          color:#1d1d1f;
+        }
+
+        .apple-login-field:focus-within label{
+          color:#1d1d1f;
+        }
+
+        .apple-login-field input::placeholder{
+          color:#86868b;
+        }
+
+        .apple-login-divider{
+          height:1px;
+          background:#e8e8ed;
+          margin-left:16px;
+        }
+
+        .apple-login-password-row{
+          display:grid;
+          grid-template-columns:minmax(0, 1fr) 36px 36px;
+          align-items:center;
+          gap:6px;
+        }
+
+        .apple-login-quiet-button,
+        .apple-login-submit{
+          width:34px;
+          height:34px;
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:0;
+          cursor:pointer;
+          transition:background-color .1s ease, color .1s ease, opacity .1s ease;
+        }
+
+        .apple-login-quiet-button:focus,
+        .apple-login-quiet-button:focus-visible,
+        .apple-login-submit:focus,
+        .apple-login-submit:focus-visible{
+          outline:0;
+          box-shadow:none;
+        }
+
+        .apple-login-quiet-button{
+          border:0;
+          background:transparent;
+          color:#707070;
+        }
+
+        .apple-login-quiet-button:hover{
+          background:#f5f5f7;
+          color:#1d1d1f;
+        }
+
+        .apple-login-submit{
+          border:1px solid #86868b;
+          background:#fff;
+          color:#1d1d1f;
+        }
+
+        .apple-login-submit:hover:not(:disabled){
+          background:#1d1d1f;
+          border-color:#1d1d1f;
+          color:#fff;
+        }
+
+        .apple-login-submit:disabled{
+          cursor:not-allowed;
+          opacity:.48;
+        }
+
+        .apple-login-alert{
+          margin:20px auto 0;
+          width:min(100%, 420px);
+          border-radius:14px;
+          padding:12px 14px;
+          text-align:left;
+          font-size:13px;
+          line-height:1.45;
+          font-weight:500;
+        }
+
+        .apple-login-alert.error{
+          background:rgba(182,68,0,.08);
+          border:1px solid rgba(182,68,0,.18);
+          color:#b64400;
+        }
+
+        .apple-login-alert.notice{
+          background:#fff;
+          border:1px solid #e8e8ed;
+          color:#474747;
+        }
+
+        .apple-login-links{
+          margin-top:22px;
+          display:grid;
+          gap:10px;
+          justify-items:center;
+          font-size:14px;
+          line-height:1.35;
+        }
+
+        .apple-login-links a{
+          color:#0066cc;
+          text-decoration:none;
+        }
+
+        .apple-login-links a:hover{
+          text-decoration:underline;
+        }
+
+        .apple-login-footnote{
+          width:min(100%, 420px);
+          margin:28px auto 0;
+          color:#707070;
+          text-align:center;
+          font-size:12px;
+          line-height:1.45;
+        }
+
+        @media (max-width:560px){
+          .apple-login-page{
+            justify-content:flex-start;
+            padding-top:64px;
+          }
+
+          .apple-login-logo{
+            margin-bottom:24px;
+          }
+
+          .apple-login-field,
+          .apple-login-field.password{
+            grid-template-columns:1fr;
+            align-items:start;
+            gap:4px;
+            padding:10px 12px 8px;
+          }
+
+          .apple-login-field input{
+            height:38px;
+          }
+
+          .apple-login-password-row{
+            width:100%;
+          }
+
+          .apple-login-divider{
+            margin-left:12px;
+          }
+        }
+      `}</style>
+      </main>
+    </>
   );
 }

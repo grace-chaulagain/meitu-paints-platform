@@ -11,16 +11,60 @@ import {
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
-import AdminEntityCard, {
-  AdminEntityCardStyles,
-} from "../components/AdminEntityCard.jsx";
+import {
+  Avatar,
+  BulkActionBar,
+  DashboardUIStyles,
+  EmptyState,
+  GhostButton,
+  ListRow,
+  Pill,
+  PrimaryButton,
+  RowCheckbox,
+  SearchField,
+  SectionHeader,
+  Surface,
+} from "../../../components/dashboard/DashboardUI.jsx";
+import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
+import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { exportToCsv } from "../../../utils/exportToCsv.js";
 
-const STATUS_TABS = [
-  { key: "ALL", label: "All" },
+const STATUS_FILTERS = [
+  { key: "ALL", label: "All Status" },
   { key: "PENDING", label: "Pending" },
   { key: "VERIFIED", label: "Verified" },
   { key: "REJECTED", label: "Rejected" },
 ];
+
+const ACTIVE_FILTERS = [
+  { key: "ALL", label: "All Dispatchers" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "INACTIVE", label: "Inactive" },
+];
+
+const ACCESS_FILTERS = [
+  { key: "ALL", label: "All Access" },
+  { key: "READY", label: "Access Ready" },
+  { key: "PENDING", label: "Setup Pending" },
+];
+
+const DISPATCHER_SORTS = [
+  { key: "assignedDealers", label: "Most dealers assigned" },
+  { key: "handledOrders", label: "Most orders handled" },
+  { key: "latestActivity", label: "Latest activity" },
+  { key: "pendingOrders", label: "Most pending orders" },
+];
+
+const VIEW_STORAGE_KEY = "meitu.admin.dispatchers.view";
+
+function getInitialView() {
+  if (typeof window === "undefined") return "list";
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) || "list";
+  } catch {
+    return "list";
+  }
+}
 
 function getDispatcherForm(dispatcher) {
   return {
@@ -33,184 +77,36 @@ function getDispatcherForm(dispatcher) {
   };
 }
 
-function GlassCard({ children, style = {} }) {
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
+// Unlike dealers (only Active/Suspended), dispatchers carry four operationally
+// distinct states admins scan for at a glance - so instead of the hash-based
+// decorative palette dealers use, the avatar/dot color here is state-driven.
+function dispatcherStateColor(dispatcher) {
+  if (dispatcher.deletion?.pending) return { bg: "rgba(107,114,128,.12)", fg: "#6b7280" };
+  if (dispatcher.status === "REJECTED") return { bg: "rgba(220,38,38,.12)", fg: "#dc2626" };
+  if (dispatcher.status === "PENDING") return { bg: "rgba(217,119,6,.12)", fg: "#d97706" };
+  if (dispatcher.status === "VERIFIED") {
+    return dispatcher.isActive
+      ? { bg: "rgba(22,163,74,.12)", fg: "#16a34a" }
+      : { bg: "rgba(220,38,38,.12)", fg: "#dc2626" };
+  }
+  return { bg: "rgba(75,85,99,.12)", fg: "#4b5563" };
 }
 
-function SectionHeader({ title, subtitle, action = null }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        gap: 16,
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 950,
-            letterSpacing: "-0.03em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </div>
-        {subtitle ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontWeight: 700,
-              color: "rgba(15,23,42,.58)",
-            }}
-          >
-            {subtitle}
-          </div>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  );
+function dispatcherInitials(dispatcher) {
+  const name = String(dispatcher.name || dispatcher.companyName || "Dispatcher").trim();
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
 }
 
-function SearchInput({ value, onChange }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        height: 50,
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        padding: "0 14px",
-      }}
-    >
-      <span style={{ fontWeight: 900, color: "rgba(15,23,42,.42)" }}>⌕</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search dispatcher, company, phone, email..."
-        style={{
-          width: "100%",
-          border: "none",
-          outline: "none",
-          background: "transparent",
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#0f172a",
-        }}
-      />
-    </div>
-  );
+function dispatcherLocation(dispatcher) {
+  const address = String(dispatcher.address || "").trim();
+  if (!address) return "No address on file";
+  return address.split(",")[0].trim();
 }
 
-function TabButton({ active, children, onClick, count }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        height: 42,
-        padding: "0 14px",
-        borderRadius: 999,
-        border: active
-          ? "1px solid rgba(180,35,24,.16)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: active
-          ? "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)"
-          : "#fff",
-        color: active ? "#fff" : "#0f172a",
-        fontWeight: 900,
-        fontSize: 13,
-        cursor: "pointer",
-        boxShadow: active ? "0 12px 24px rgba(180,35,24,.16)" : "none",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-      }}
-    >
-      <span>{children}</span>
-      {typeof count === "number" ? (
-        <span
-          style={{
-            minWidth: 22,
-            height: 22,
-            padding: "0 6px",
-            borderRadius: 999,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: active ? "rgba(255,255,255,.18)" : "rgba(15,23,42,.06)",
-            color: active ? "#fff" : "#0f172a",
-            fontSize: 11,
-            fontWeight: 900,
-          }}
-        >
-          {count}
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function ActionButton({
-  children,
-  onClick,
-  danger = false,
-  subtle = false,
-  disabled = false,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        minHeight: 42,
-        padding: "10px 14px",
-        borderRadius: 14,
-        border: danger
-          ? "1px solid rgba(180,35,24,.14)"
-          : "1px solid rgba(15,23,42,.08)",
-        background: danger
-          ? "rgba(180,35,24,.06)"
-          : subtle
-            ? "#fff"
-            : "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)",
-        color: danger ? "#b42318" : subtle ? "#0f172a" : "#fff",
-        fontWeight: 900,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        whiteSpace: "normal",
-        lineHeight: 1.2,
-      }}
-    >
-      {children}
-    </button>
-  );
+function accessTone(dispatcher) {
+  return dispatcher.accessState?.passwordSet ? "positive" : "caution";
 }
 
 function InlineLabel({ children }) {
@@ -218,181 +114,14 @@ function InlineLabel({ children }) {
     <div
       style={{
         fontSize: 11,
-        fontWeight: 900,
-        letterSpacing: ".08em",
+        fontWeight: 600,
+        letterSpacing: ".02em",
         textTransform: "uppercase",
-        color: "rgba(15,23,42,.44)",
+        color: "var(--color-graphite,#707070)",
       }}
     >
       {children}
     </div>
-  );
-}
-
-function DispatchersCard({
-  dispatcher,
-  busyAction,
-  onApprove,
-  onReject,
-  onViewProfile,
-  onEdit,
-  onToggleActive,
-  onDelete,
-}) {
-  const initial = String(dispatcher.name || dispatcher.companyName || "D")
-    .trim()
-    .charAt(0)
-    .toUpperCase();
-  const access = dispatcher.accessState || {};
-  const deletionPending = Boolean(dispatcher.deletion?.pending);
-  const isVerified = dispatcher.status === "VERIFIED";
-  const isPending = dispatcher.status === "PENDING";
-  const isRejected = dispatcher.status === "REJECTED";
-
-  return (
-    <AdminEntityCard
-      accent={isVerified ? "success" : isRejected ? "danger" : "neutral"}
-      initial={initial}
-      title={dispatcher.name || "Unnamed Dispatcher"}
-      subtitle={dispatcher.companyName || "No company name"}
-      line={dispatcher.email || "No email"}
-      badges={[
-        {
-          label: dispatcher.status || "Pending",
-          tone: isVerified ? "success" : isRejected ? "danger" : "muted",
-        },
-        isVerified
-          ? {
-              label: dispatcher.isActive ? "Active" : "Inactive",
-              tone: dispatcher.isActive ? "success" : "danger",
-            }
-          : null,
-        deletionPending ? { label: "Trash Pending", tone: "danger" } : null,
-        isVerified
-          ? {
-              label: access.passwordSet ? "Access Ready" : "Setup Pending",
-              tone: access.passwordSet ? "success" : "danger",
-            }
-          : null,
-      ]}
-      actions={[
-        isPending
-          ? {
-              key: "approve",
-              label: "Approve",
-              busyLabel: "Approving...",
-              busy: busyAction === `approve-${dispatcher._id}`,
-              disabled: busyAction === `approve-${dispatcher._id}`,
-              variant: "primary",
-              onClick: onApprove,
-            }
-          : null,
-        isPending
-          ? {
-              key: "reject",
-              label: "Reject",
-              busyLabel: "Rejecting...",
-              busy: busyAction === `reject-${dispatcher._id}`,
-              disabled: busyAction === `reject-${dispatcher._id}`,
-              variant: "danger",
-              onClick: onReject,
-            }
-          : null,
-        isVerified
-          ? {
-              key: "profile",
-              label: "Profile",
-              variant: "primary",
-              onClick: onViewProfile,
-            }
-          : null,
-        { key: "edit", label: "Edit", onClick: onEdit },
-        isVerified
-          ? {
-              key: "active",
-              label: dispatcher.isActive ? "Deactivate" : "Activate",
-              busyLabel: "Saving...",
-              busy: busyAction === `active-${dispatcher._id}`,
-              disabled:
-                busyAction === `active-${dispatcher._id}` || deletionPending,
-              variant: dispatcher.isActive ? "danger" : "",
-              onClick: onToggleActive,
-            }
-          : null,
-        deletionPending
-          ? {
-              key: "undo-delete",
-              label: "Undo",
-              busyLabel: "Restoring...",
-              busy: busyAction === `undo-delete-${dispatcher._id}`,
-              disabled: busyAction === `undo-delete-${dispatcher._id}`,
-              onClick: onDelete,
-            }
-          : {
-              key: "delete",
-              label: "Delete",
-              busyLabel: "Moving...",
-              busy: busyAction === `delete-${dispatcher._id}`,
-              disabled: busyAction === `delete-${dispatcher._id}`,
-              variant: "danger",
-              onClick: onDelete,
-            },
-      ]}
-    />
-  );
-}
-
-function LoadingState() {
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {Array.from({ length: 6 }).map((_, index) => (
-        <GlassCard key={index} style={{ padding: 18 }}>
-          <div
-            style={{
-              height: 86,
-              borderRadius: 18,
-              background:
-                "linear-gradient(90deg, rgba(241,245,249,.9), rgba(248,250,252,1), rgba(241,245,249,.9))",
-            }}
-          />
-        </GlassCard>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ onReset }) {
-  return (
-    <GlassCard style={{ padding: 26 }}>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        No dispatchers found
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          maxWidth: 620,
-          fontSize: 14,
-          lineHeight: 1.7,
-          fontWeight: 700,
-          color: "rgba(15,23,42,.56)",
-        }}
-      >
-        Try adjusting the current search or status filters to view dispatcher
-        applications and approved dispatch partners.
-      </div>
-      <div style={{ marginTop: 18 }}>
-        <ActionButton subtle onClick={onReset}>
-          Clear filters
-        </ActionButton>
-      </div>
-    </GlassCard>
   );
 }
 
@@ -408,13 +137,13 @@ function FormField({ label, value, onChange, placeholder, textarea = false }) {
           rows={4}
           style={{
             width: "100%",
-            borderRadius: 16,
-            border: "1px solid rgba(15,23,42,.08)",
-            background: "#fff",
-            padding: 14,
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#0f172a",
+            borderRadius: 10,
+            border: "none",
+            background: "var(--color-fog,#f5f5f7)",
+            padding: 12,
+            fontSize: 13.5,
+            fontWeight: 500,
+            color: "var(--color-ink,#1d1d1f)",
             outline: "none",
             resize: "vertical",
           }}
@@ -426,19 +155,201 @@ function FormField({ label, value, onChange, placeholder, textarea = false }) {
           placeholder={placeholder}
           style={{
             width: "100%",
-            height: 48,
-            borderRadius: 16,
-            border: "1px solid rgba(15,23,42,.08)",
-            background: "#fff",
-            padding: "0 14px",
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#0f172a",
+            height: 40,
+            borderRadius: 10,
+            border: "none",
+            background: "var(--color-fog,#f5f5f7)",
+            padding: "0 12px",
+            fontSize: 13.5,
+            fontWeight: 500,
+            color: "var(--color-ink,#1d1d1f)",
             outline: "none",
           }}
         />
       )}
     </div>
+  );
+}
+
+function DispatcherListRow({ dispatcher, selectionMode, selected, onSelectChange, onOpen }) {
+  const initial = String(dispatcher.name || dispatcher.companyName || "D")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  const isVerified = dispatcher.status === "VERIFIED";
+  const isRejected = dispatcher.status === "REJECTED";
+  const summary = dispatcher.operationalSummary || {};
+
+  return (
+    <ListRow
+      onClick={selectionMode ? () => onSelectChange(!selected) : onOpen}
+      selected={selectionMode && selected}
+    >
+      {selectionMode ? <RowCheckbox checked={selected} onChange={onSelectChange} /> : null}
+      <Avatar label={initial} size={34} />
+
+      <div style={{ minWidth: 0, flex: "1 1 220px" }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
+          {dispatcher.name || "Unnamed Dispatcher"}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
+          {dispatcher.companyName || "No company name"}
+        </div>
+      </div>
+
+      <div style={{ flex: "0 0 90px" }}>
+        <Pill tone={isVerified ? "positive" : isRejected ? "critical" : "neutral"} size="small">
+          {dispatcher.status || "Pending"}
+        </Pill>
+      </div>
+
+      <div style={{ flex: "0 0 90px" }}>
+        {isVerified ? (
+          <Pill tone={dispatcher.isActive ? "positive" : "critical"} size="small">
+            {dispatcher.isActive ? "Active" : "Inactive"}
+          </Pill>
+        ) : null}
+      </div>
+
+      <div style={{ flex: "0 0 120px" }}>
+        <Pill tone={accessTone(dispatcher)} size="small">
+          {dispatcher.accessState?.passwordSet ? "Access Ready" : "Setup Pending"}
+        </Pill>
+      </div>
+
+      <div style={{ flex: "0 0 150px", textAlign: "right" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
+          {summary.assignedDealerCount || 0} dealer{summary.assignedDealerCount === 1 ? "" : "s"}
+        </div>
+        <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
+          {summary.handledOrders || 0} orders handled
+        </div>
+      </div>
+    </ListRow>
+  );
+}
+
+function DispatchersGridCard({
+  dispatcher,
+  selectionMode,
+  selected,
+  onSelectChange,
+  onReview,
+  onViewProfile,
+  onEdit,
+  onToggleActive,
+  onDelete,
+  busy,
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const palette = dispatcherStateColor(dispatcher);
+  const isVerified = dispatcher.status === "VERIFIED";
+  const isPending = dispatcher.status === "PENDING";
+  const deletionPending = Boolean(dispatcher.deletion?.pending);
+
+  return (
+    <article
+      className={`dispatcher-grid-card ${selected ? "selected" : ""}`}
+      onClick={selectionMode ? () => onSelectChange(!selected) : onViewProfile}
+    >
+      <div className="dispatcher-grid-card-top">
+        {selectionMode ? (
+          <RowCheckbox checked={selected} onChange={onSelectChange} />
+        ) : (
+          <div
+            className="dispatcher-grid-avatar"
+            style={{ "--avatar-bg": palette.bg, "--avatar-fg": palette.fg }}
+          >
+            {dispatcherInitials(dispatcher)}
+          </div>
+        )}
+
+        {!selectionMode ? (
+          <div className="dispatcher-grid-menu-wrap" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="dispatcher-grid-menu-btn"
+              onClick={() => setMenuOpen((value) => !value)}
+              aria-label="More actions"
+              aria-expanded={menuOpen}
+            >
+              <DashboardIcon name="moreHorizontal" size={16} strokeWidth={2} />
+            </button>
+            {menuOpen ? (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setMenuOpen(false)} />
+                <div className="dispatcher-grid-menu dash-modal-surface-in">
+                  {isVerified ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onToggleActive();
+                      }}
+                    >
+                      {dispatcher.isActive ? "Deactivate dispatcher" : "Activate dispatcher"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDelete();
+                    }}
+                  >
+                    {deletionPending ? "Undo delete" : "Delete dispatcher"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="dispatcher-grid-copy">
+        <h3>{dispatcher.name || "Unnamed Dispatcher"}</h3>
+        <div className="dispatcher-grid-location">
+          <span className="dispatcher-grid-dot" style={{ "--dot-color": palette.fg }} aria-hidden="true" />
+          {dispatcherLocation(dispatcher)}
+        </div>
+      </div>
+
+      {!selectionMode ? (
+        <div className="dispatcher-grid-actions" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            className="dispatcher-grid-action-btn"
+            onClick={isPending ? onReview : onViewProfile}
+            aria-label={isPending ? "Review dispatcher application" : "View dispatcher profile"}
+            title={isPending ? "Review application" : "View profile"}
+          >
+            <DashboardIcon name={isPending ? "inbox" : "eye"} size={15} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            className="dispatcher-grid-action-btn"
+            onClick={onEdit}
+            aria-label="Edit dispatcher details"
+            title="Edit details"
+          >
+            <DashboardIcon name="edit" size={15} strokeWidth={1.8} />
+          </button>
+          {isVerified ? (
+            <button
+              type="button"
+              className="dispatcher-grid-action-btn"
+              onClick={onToggleActive}
+              aria-label={dispatcher.isActive ? "Deactivate dispatcher" : "Activate dispatcher"}
+              title={dispatcher.isActive ? "Deactivate" : "Activate"}
+            >
+              <DashboardIcon name="shield" size={15} strokeWidth={1.8} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -452,49 +363,38 @@ function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
 
   return (
     <div
+      className="dash-modal-backdrop-in"
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 1400,
-        background: "rgba(15,23,42,.38)",
+        background: "rgba(0,0,0,.4)",
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",
         display: "grid",
         placeItems: "center",
         padding: 28,
       }}
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <GlassCard
+      <Surface
+        className="dash-modal-surface-in"
         style={{
           width: "min(760px, 100%)",
           maxHeight: "90vh",
           overflow: "auto",
-          padding: 22,
         }}
-        onClick={(e) => e.stopPropagation()}
+        padding={22}
       >
         <SectionHeader
           title="Edit Dispatcher"
           subtitle="Update operational and contact details for this dispatcher."
           action={
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: "1px solid rgba(15,23,42,.08)",
-                background: "#fff",
-                fontSize: 20,
-                fontWeight: 900,
-                cursor: "pointer",
-                color: "#0f172a",
-              }}
-            >
-              ×
-            </button>
+            <GhostButton onClick={onClose} icon="reject">
+              Close
+            </GhostButton>
           }
         />
 
@@ -570,10 +470,10 @@ function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
             flexWrap: "wrap",
           }}
         >
-          <ActionButton subtle onClick={onClose} disabled={saving}>
+          <GhostButton onClick={onClose} disabled={saving}>
             Cancel
-          </ActionButton>
-          <ActionButton
+          </GhostButton>
+          <PrimaryButton
             onClick={() =>
               onSave({
                 name: form.name.trim(),
@@ -587,9 +487,9 @@ function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
             disabled={!canSave}
           >
             {saving ? "Saving..." : "Save Changes"}
-          </ActionButton>
+          </PrimaryButton>
         </div>
-      </GlassCard>
+      </Surface>
     </div>
   );
 }
@@ -598,18 +498,34 @@ export default function AdminDispatchersPage() {
   const navigate = useNavigate();
   const [busyAction, setBusyAction] = useState("");
   const [search, setSearch] = useState("");
-  const [statusTab, setStatusTab] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [activeFilter, setActiveFilter] = useState("ALL");
+  const [accessFilter, setAccessFilter] = useState("ALL");
+  const [dispatcherSort, setDispatcherSort] = useState("assignedDealers");
   const [actionError, setActionError] = useState("");
   const [editingDispatcher, setEditingDispatcher] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [pendingDecision, setPendingDecision] = useState(null);
   const [confirmationText, setConfirmationText] = useState("");
+  const [view, setView] = useState(getInitialView);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
-  const dispatcherParams = useMemo(() => {
-    const params = {};
-    if (statusTab !== "ALL") params.status = statusTab;
-    return params;
-  }, [statusTab]);
+  function updateView(next) {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // View preference is a nice-to-have; storage failures should not block browsing.
+    }
+  }
+
+  // Status/active/access are filtered client-side alongside search below,
+  // rather than passed to the backend - otherwise switching filters would
+  // replace the fetched set entirely, making counts for the *other* filter
+  // values collapse to whatever happened to be in the last response.
+  const dispatcherParams = useMemo(() => ({ limit: 1000 }), []);
 
   const dispatchersQuery = useGetAdminDispatchersQuery(dispatcherParams);
   const [approveDispatcher] = useApproveDispatcherMutation();
@@ -637,29 +553,110 @@ export default function AdminDispatchersPage() {
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
 
-    return items.filter((item) =>
-      [
-        item.name,
-        item.companyName,
-        item.phone,
-        item.email,
-        item.address,
-        item.notes,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q)),
-    );
-  }, [items, search]);
+    return items
+      .filter((item) => {
+        const matchesSearch =
+          !q ||
+          [item.name, item.companyName, item.phone, item.email, item.address, item.notes]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(q));
 
-  const metrics = useMemo(() => {
-    const total = items.length;
-    const pending = items.filter((item) => item.status === "PENDING").length;
-    const verified = items.filter((item) => item.status === "VERIFIED").length;
-    const rejected = items.filter((item) => item.status === "REJECTED").length;
-    return { total, pending, verified, rejected };
-  }, [items]);
+        const matchesStatus = statusFilter === "ALL" || item.status === statusFilter;
+
+        const matchesActive =
+          activeFilter === "ALL" ||
+          (activeFilter === "ACTIVE" && item.isActive) ||
+          (activeFilter === "INACTIVE" && !item.isActive);
+
+        const hasAccess = Boolean(item.accessState?.passwordSet);
+        const matchesAccess =
+          accessFilter === "ALL" ||
+          (accessFilter === "READY" && hasAccess) ||
+          (accessFilter === "PENDING" && !hasAccess);
+
+        return matchesSearch && matchesStatus && matchesActive && matchesAccess;
+      })
+      .sort((a, b) => {
+        const aSummary = a.operationalSummary || {};
+        const bSummary = b.operationalSummary || {};
+        if (dispatcherSort === "handledOrders") {
+          return Number(bSummary.handledOrders || 0) - Number(aSummary.handledOrders || 0);
+        }
+        if (dispatcherSort === "latestActivity") {
+          const aTime = new Date(
+            aSummary.latestHandledOrderAt || aSummary.latestAssignedOrderAt || 0,
+          ).getTime();
+          const bTime = new Date(
+            bSummary.latestHandledOrderAt || bSummary.latestAssignedOrderAt || 0,
+          ).getTime();
+          return bTime - aTime;
+        }
+        if (dispatcherSort === "pendingOrders") {
+          return Number(bSummary.pendingAssignedOrders || 0) - Number(aSummary.pendingAssignedOrders || 0);
+        }
+        return Number(bSummary.assignedDealerCount || 0) - Number(aSummary.assignedDealerCount || 0);
+      });
+  }, [accessFilter, activeFilter, dispatcherSort, items, search, statusFilter]);
+
+  const selectedItems = useMemo(
+    () => filteredItems.filter((item) => selectedIds.has(item._id)),
+    [filteredItems, selectedIds],
+  );
+
+  function toggleSelect(dispatcherId, checked) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(dispatcherId);
+      else next.delete(dispatcherId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelectionMode() {
+    setSelectionMode((current) => {
+      if (current) clearSelection();
+      return !current;
+    });
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setStatusFilter("ALL");
+    setActiveFilter("ALL");
+    setAccessFilter("ALL");
+    setDispatcherSort("assignedDealers");
+  }
+
+  function handleExport(itemsToExport) {
+    exportToCsv("dispatchers", [
+      { key: "name", label: "Name" },
+      { key: "companyName", label: "Company" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Phone" },
+      { key: "status", label: "Status" },
+      {
+        key: "isActive",
+        label: "Active",
+        value: (item) => (item.isActive ? "Yes" : "No"),
+      },
+      { key: "address", label: "Address" },
+      {
+        key: "assignedDealers",
+        label: "Assigned Dealers",
+        value: (item) => item.operationalSummary?.assignedDealerCount || 0,
+      },
+      {
+        key: "handledOrders",
+        label: "Handled Orders",
+        value: (item) => item.operationalSummary?.handledOrders || 0,
+      },
+    ], itemsToExport);
+  }
 
   async function runAction(actionKey, request) {
     try {
@@ -673,6 +670,27 @@ export default function AdminDispatchersPage() {
     } finally {
       setBusyAction("");
     }
+  }
+
+  async function handleBulkActive(nextActive) {
+    const targets = selectedItems.filter((item) => item.status === "VERIFIED");
+    if (!targets.length) return;
+
+    const success = await runAction("bulk-active", async () => {
+      const results = await Promise.allSettled(
+        targets.map((item) =>
+          setDispatcherActive({ dispatcherId: item._id, isActive: nextActive }).unwrap(),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        throw new Error(
+          `${failed} of ${targets.length} dispatcher${targets.length === 1 ? "" : "s"} failed to update.`,
+        );
+      }
+    });
+
+    if (success) clearSelection();
   }
 
   const handleApprove = (dispatcher) =>
@@ -736,120 +754,180 @@ export default function AdminDispatchersPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <AdminEntityCardStyles />
-      <GlassCard style={{ padding: 18 }}>
-        <SectionHeader
-          title="Dispatcher Register"
-          subtitle="Filter, review, and manage dispatcher applications and approved dispatch partners."
-          action={
-            <ActionButton subtle onClick={refetchDispatchers}>
-              Refresh
-            </ActionButton>
-          }
-        />
+    <div style={{ display: "grid", gap: 16 }}>
+      <DashboardUIStyles />
+      <Surface padding={0} className="dispatcher-nav-panel dash-fade-up">
+        <div className="dispatcher-nav-top">
+          <div className="dispatcher-nav-heading">
+            <h1>Dispatchers</h1>
+            <p>Manage and monitor all dispatch partners across Meitu Paints.</p>
+          </div>
 
-        <div
-          style={{
-            marginTop: 18,
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
-            gap: 12,
-            alignItems: "center",
-          }}
-        >
-          <SearchInput value={search} onChange={setSearch} />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {STATUS_TABS.map((tab) => {
-              const counts = {
-                ALL: metrics.total,
-                PENDING: metrics.pending,
-                VERIFIED: metrics.verified,
-                REJECTED: metrics.rejected,
-              };
-
-              return (
-                <TabButton
-                  key={tab.key}
-                  active={statusTab === tab.key}
-                  onClick={() => setStatusTab(tab.key)}
-                  count={counts[tab.key]}
-                >
-                  {tab.label}
-                </TabButton>
-              );
-            })}
+          <div className="dispatcher-nav-actions">
+            <div className="dispatcher-nav-search">
+              <SearchField value={search} onChange={setSearch} placeholder="Search dispatchers…" />
+            </div>
+            <button
+              type="button"
+              className={`dispatcher-nav-icon-btn ${advancedOpen ? "active" : ""}`}
+              onClick={() => setAdvancedOpen((value) => !value)}
+              aria-label="More filters"
+              aria-expanded={advancedOpen}
+            >
+              <DashboardIcon name="filter" size={16} strokeWidth={1.9} />
+            </button>
+            <button
+              type="button"
+              className="dispatcher-nav-icon-btn"
+              onClick={() => handleExport(filteredItems)}
+              aria-label="Export dispatchers"
+            >
+              <DashboardIcon name="download" size={16} strokeWidth={1.9} />
+            </button>
+            <button
+              type="button"
+              className={`dispatcher-nav-icon-btn ${view === "list" ? "active" : ""}`}
+              onClick={() => updateView("list")}
+              aria-label="List view"
+              aria-pressed={view === "list"}
+            >
+              <DashboardIcon name="list" size={16} strokeWidth={1.9} />
+            </button>
+            <button
+              type="button"
+              className={`dispatcher-nav-icon-btn ${view === "grid" ? "active" : ""}`}
+              onClick={() => updateView("grid")}
+              aria-label="Grid view"
+              aria-pressed={view === "grid"}
+            >
+              <DashboardIcon name="overview" size={16} strokeWidth={1.9} />
+            </button>
           </div>
         </div>
 
-        {error ? (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "14px 16px",
-              borderRadius: 16,
-              background: "rgba(180,35,24,.08)",
-              color: "#b42318",
-              border: "1px solid rgba(180,35,24,.14)",
-              fontWeight: 800,
-            }}
-          >
-            {error}
+        <div className="dispatcher-nav-filters">
+          <div className="dispatcher-nav-filters-left">
+            <AppleDropdown value={statusFilter} options={STATUS_FILTERS} onChange={setStatusFilter} style={{ width: 150 }} />
+            <AppleDropdown value={activeFilter} options={ACTIVE_FILTERS} onChange={setActiveFilter} style={{ width: 166 }} />
           </div>
+          <div className="dispatcher-nav-filters-right">
+            <span className="dispatcher-nav-count">
+              {filteredItems.length.toLocaleString()} Dispatcher{filteredItems.length === 1 ? "" : "s"}
+            </span>
+            <button type="button" className="dispatcher-nav-clear" onClick={resetFilters}>
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {advancedOpen ? (
+          <div className="dispatcher-nav-advanced dash-fade-up">
+            <AppleDropdown value={accessFilter} options={ACCESS_FILTERS} onChange={setAccessFilter} style={{ width: 166 }} />
+            <AppleDropdown value={dispatcherSort} options={DISPATCHER_SORTS} onChange={setDispatcherSort} style={{ width: 208 }} />
+            <GhostButton onClick={refetchDispatchers} icon="sort">
+              Refresh
+            </GhostButton>
+            <button
+              type="button"
+              className={`dispatcher-select-mini ${selectionMode ? "active" : ""}`}
+              onClick={toggleSelectionMode}
+            >
+              <DashboardIcon name="checkSquare" size={13} strokeWidth={2} />
+              {selectionMode ? "Done" : "Select"}
+            </button>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="dispatcher-nav-error">{error}</div>
         ) : null}
 
         {isRefreshing ? (
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: 12,
-              fontWeight: 900,
-              color: "rgba(15,23,42,.46)",
-            }}
-          >
-            Updating dispatchers...
-          </div>
+          <div className="dispatcher-nav-updating">Updating dispatchers…</div>
         ) : null}
-      </GlassCard>
+      </Surface>
+
+      <BulkActionBar count={selectedIds.size} onClear={clearSelection}>
+        <GhostButton onClick={() => handleBulkActive(true)} disabled={busyAction === "bulk-active"}>
+          Activate
+        </GhostButton>
+        <GhostButton onClick={() => handleBulkActive(false)} disabled={busyAction === "bulk-active"}>
+          Deactivate
+        </GhostButton>
+        <GhostButton onClick={() => handleExport(selectedItems)} icon="download">
+          Export Selected
+        </GhostButton>
+      </BulkActionBar>
 
       {loading ? (
-        <LoadingState />
+        <Surface padding={18}>
+          <div style={{ display: "grid", gap: 10 }}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                style={{
+                  height: 60,
+                  borderRadius: 12,
+                  background:
+                    "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))",
+                }}
+              />
+            ))}
+          </div>
+        </Surface>
       ) : filteredItems.length === 0 ? (
         <EmptyState
-          onReset={() => {
-            setSearch("");
-            setStatusTab("ALL");
-          }}
+          icon="truck"
+          title="No dispatchers found"
+          subtitle="Try adjusting the search or status filters to view dispatch partners."
         />
+      ) : view === "list" ? (
+        <Surface padding={0} className="dash-fade-up">
+          {filteredItems.map((dispatcher) => (
+            <DispatcherListRow
+              key={dispatcher._id}
+              dispatcher={dispatcher}
+              selectionMode={selectionMode}
+              selected={selectedIds.has(dispatcher._id)}
+              onSelectChange={(checked) => toggleSelect(dispatcher._id, checked)}
+              onOpen={() => {
+                if (dispatcher.status === "VERIFIED") {
+                  navigate(`/admin/dashboard/dispatchers/${dispatcher._id}`);
+                } else {
+                  navigate("/admin/dashboard/applications", {
+                    state: { openDispatcherId: dispatcher._id },
+                  });
+                }
+              }}
+            />
+          ))}
+        </Surface>
       ) : (
         <div
           style={{
             display: "grid",
             gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-            gap: 14,
+              "repeat(auto-fill, minmax(min(100%, 264px), 1fr))",
+            gap: 16,
             alignItems: "start",
           }}
         >
           {filteredItems.map((dispatcher) => (
-            <DispatchersCard
+            <DispatchersGridCard
               key={dispatcher._id}
               dispatcher={dispatcher}
-              busyAction={busyAction}
-              onApprove={() =>
-                setPendingDecision({ type: "approve", dispatcher })
+              selectionMode={selectionMode}
+              selected={selectedIds.has(dispatcher._id)}
+              onSelectChange={(checked) => toggleSelect(dispatcher._id, checked)}
+              busy={busyAction === `active-${dispatcher._id}` || busyAction === `delete-${dispatcher._id}`}
+              onReview={() =>
+                navigate("/admin/dashboard/applications", {
+                  state: { openDispatcherId: dispatcher._id },
+                })
               }
-              onReject={() =>
-                setPendingDecision({ type: "reject", dispatcher })
-              }
-              onViewProfile={() =>
-                navigate(`/admin/dashboard/dispatchers/${dispatcher._id}`)
-              }
+              onViewProfile={() => navigate(`/admin/dashboard/dispatchers/${dispatcher._id}`)}
               onEdit={() => setEditingDispatcher(dispatcher)}
-              onToggleActive={() =>
-                setPendingDecision({ type: "active", dispatcher })
-              }
+              onToggleActive={() => setPendingDecision({ type: "active", dispatcher })}
               onDelete={() => {
                 setPendingDecision({
                   type: dispatcher.deletion?.pending ? "undoDelete" : "delete",
@@ -971,6 +1049,366 @@ export default function AdminDispatchersPage() {
           }
         }}
       />
+
+      <style>{`
+        .dispatcher-nav-panel{
+          overflow:visible;
+          border-radius:20px !important;
+          background:#fff !important;
+        }
+        .dispatcher-nav-top{
+          padding:20px 24px;
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:18px;
+          flex-wrap:wrap;
+        }
+        .dispatcher-nav-heading{
+          min-width:0;
+        }
+        .dispatcher-nav-heading h1{
+          margin:0;
+          color:var(--color-ink,#1d1d1f);
+          font-family:var(--font-sf-pro-display, inherit);
+          font-size:30px;
+          line-height:1.1;
+          font-weight:800;
+          letter-spacing:-.03em;
+        }
+        .dispatcher-nav-heading p{
+          margin:4px 0 0;
+          color:var(--color-graphite,#707070);
+          font-size:13.5px;
+          line-height:1.45;
+          font-weight:500;
+        }
+        .dispatcher-nav-actions{
+          flex:0 0 auto;
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+        }
+        .dispatcher-nav-search{
+          width:220px;
+        }
+        .dispatcher-nav-icon-btn{
+          width:38px;
+          height:38px;
+          flex:0 0 auto;
+          border:1px solid rgba(29,29,31,.1);
+          border-radius:11px;
+          background:#fff;
+          color:var(--color-graphite,#707070);
+          display:grid;
+          place-items:center;
+          cursor:pointer;
+          transition:background .14s ease, color .14s ease, border-color .14s ease, transform .14s var(--ease-out, ease);
+        }
+        .dispatcher-nav-icon-btn:hover{
+          background:var(--color-fog,#f5f5f7);
+          color:var(--color-ink,#1d1d1f);
+        }
+        .dispatcher-nav-icon-btn:active{
+          transform:scale(.93);
+        }
+        .dispatcher-nav-icon-btn.active{
+          border-color:rgba(220,38,38,.24);
+          background:rgba(220,38,38,.08);
+          color:#dc2626;
+        }
+        .dispatcher-nav-filters{
+          padding:14px 24px;
+          border-top:1px solid rgba(29,29,31,.06);
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:14px;
+          flex-wrap:wrap;
+        }
+        .dispatcher-nav-filters-left{
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+        }
+        .dispatcher-nav-filters-right{
+          display:flex;
+          align-items:center;
+          gap:14px;
+          flex:0 0 auto;
+        }
+        .dispatcher-nav-count{
+          color:var(--color-graphite,#707070);
+          font-size:13px;
+          font-weight:600;
+          white-space:nowrap;
+        }
+        .dispatcher-nav-clear{
+          border:0;
+          background:transparent;
+          padding:0;
+          color:#dc2626;
+          font-size:13px;
+          font-weight:700;
+          cursor:pointer;
+        }
+        .dispatcher-nav-clear:hover{
+          text-decoration:underline;
+        }
+        .dispatcher-nav-advanced{
+          padding:0 24px 16px;
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+        }
+        .dispatcher-nav-error{
+          margin:0 24px 16px;
+          padding:12px 14px;
+          border-radius:12px;
+          background:rgba(180,35,24,.08);
+          color:#b42318;
+          border:1px solid rgba(180,35,24,.14);
+          font-size:13px;
+          font-weight:600;
+        }
+        .dispatcher-nav-updating{
+          padding:0 24px 14px;
+          font-size:12px;
+          font-weight:500;
+          color:var(--color-graphite,#707070);
+        }
+        .dispatcher-select-mini{
+          min-height:34px;
+          border:0;
+          border-radius:999px;
+          padding:0 12px;
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          cursor:pointer;
+          color:var(--color-ink,#1d1d1f);
+          background:var(--color-fog,#f5f5f7);
+          font-size:12px;
+          font-weight:800;
+          letter-spacing:-.01em;
+          transition:background .16s ease, color .16s ease;
+        }
+        .dispatcher-select-mini:hover,
+        .dispatcher-select-mini.active{
+          color:#fff;
+          background:var(--color-azure,#0071e3);
+        }
+        .dispatcher-grid-card{
+          position:relative;
+          height:208px;
+          display:flex;
+          flex-direction:column;
+          border-radius:20px;
+          border:1px solid rgba(29,29,31,.07);
+          background:#fff;
+          padding:18px;
+          cursor:pointer;
+          transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+        .dispatcher-grid-card:hover{
+          transform:translateY(-2px);
+          border-color:rgba(0,113,227,.16);
+          box-shadow:0 14px 30px rgba(0,0,0,.06);
+        }
+        .dispatcher-grid-card.selected{
+          border-color:rgba(0,113,227,.3);
+          background:rgba(0,113,227,.04);
+        }
+        .dispatcher-grid-card-top{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:8px;
+        }
+        .dispatcher-grid-avatar{
+          width:44px;
+          height:44px;
+          border-radius:13px;
+          flex:0 0 44px;
+          display:grid;
+          place-items:center;
+          color:var(--avatar-fg, var(--color-azure,#0071e3));
+          background:var(--avatar-bg, rgba(0,113,227,.08));
+          font-size:15px;
+          font-weight:800;
+          letter-spacing:-.01em;
+        }
+        .dispatcher-grid-menu-wrap{
+          position:relative;
+          flex:0 0 auto;
+        }
+        .dispatcher-grid-menu-btn{
+          width:28px;
+          height:28px;
+          border:0;
+          border-radius:999px;
+          display:grid;
+          place-items:center;
+          background:transparent;
+          color:var(--color-graphite,#707070);
+          cursor:pointer;
+          transition:background .14s ease, color .14s ease, transform .14s var(--ease-out, ease);
+        }
+        .dispatcher-grid-menu-btn:hover{
+          background:var(--color-fog,#f5f5f7);
+          color:var(--color-ink,#1d1d1f);
+        }
+        .dispatcher-grid-menu-btn:active{
+          transform:scale(.9);
+        }
+        .dispatcher-grid-menu{
+          position:absolute;
+          top:calc(100% + 6px);
+          right:0;
+          z-index:50;
+          min-width:172px;
+          padding:6px;
+          border-radius:14px;
+          background:#fff;
+          border:1px solid rgba(0,0,0,.06);
+          box-shadow:0 12px 32px rgba(0,0,0,.16), 0 1px 0 rgba(0,0,0,.04);
+          display:grid;
+          gap:2px;
+          transform-origin:top right;
+        }
+        .dispatcher-grid-menu button{
+          border:0;
+          background:transparent;
+          text-align:left;
+          padding:9px 10px;
+          border-radius:9px;
+          font-size:12.5px;
+          font-weight:650;
+          color:var(--color-ink,#1d1d1f);
+          cursor:pointer;
+        }
+        .dispatcher-grid-menu button:hover:not(:disabled){
+          background:rgba(0,113,227,.08);
+        }
+        .dispatcher-grid-menu button:disabled{
+          opacity:.5;
+          cursor:not-allowed;
+        }
+        .dispatcher-grid-copy{
+          min-width:0;
+          margin-top:14px;
+          flex:1 1 auto;
+          display:grid;
+          align-content:start;
+          gap:6px;
+        }
+        .dispatcher-grid-copy h3{
+          margin:0;
+          color:var(--color-ink,#1d1d1f);
+          font-family:var(--font-sf-pro-display, inherit);
+          font-size:15.5px;
+          line-height:1.28;
+          font-weight:700;
+          letter-spacing:-.02em;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+        .dispatcher-grid-location{
+          display:flex;
+          align-items:center;
+          gap:7px;
+          color:var(--color-graphite,#707070);
+          font-size:12.5px;
+          font-weight:600;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+        .dispatcher-grid-dot{
+          flex:0 0 auto;
+          width:7px;
+          height:7px;
+          border-radius:999px;
+          background:var(--dot-color, var(--color-azure,#0071e3));
+        }
+        .dispatcher-grid-actions{
+          margin-top:16px;
+          padding-top:14px;
+          border-top:1px solid rgba(29,29,31,.06);
+          display:flex;
+          align-items:center;
+          gap:8px;
+        }
+        .dispatcher-grid-action-btn{
+          width:34px;
+          height:34px;
+          border:0;
+          border-radius:11px;
+          display:grid;
+          place-items:center;
+          background:var(--color-fog,#f5f5f7);
+          color:var(--color-graphite,#707070);
+          cursor:pointer;
+          transition:background .14s ease, color .14s ease, transform .14s var(--ease-out, ease);
+        }
+        .dispatcher-grid-action-btn:hover{
+          background:rgba(0,113,227,.1);
+          color:var(--color-azure,#0071e3);
+        }
+        .dispatcher-grid-action-btn:active{
+          transform:scale(.92);
+        }
+        @media (prefers-reduced-motion: reduce){
+          .dispatcher-grid-menu-btn,
+          .dispatcher-grid-action-btn{
+            transition:none!important;
+          }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .dispatcher-nav-icon-btn{
+            transition:none!important;
+          }
+        }
+        @media (max-width:900px){
+          .dispatcher-nav-top{
+            flex-direction:column;
+            align-items:stretch;
+          }
+          .dispatcher-nav-actions{
+            justify-content:space-between;
+          }
+          .dispatcher-nav-search{
+            width:100%;
+            flex:1 1 auto;
+          }
+        }
+        @media (max-width:760px){
+          .dispatcher-nav-top{
+            padding:16px 18px;
+          }
+          .dispatcher-nav-filters{
+            padding:12px 18px;
+            flex-direction:column;
+            align-items:stretch;
+          }
+          .dispatcher-nav-filters-left{
+            width:100%;
+          }
+          .dispatcher-nav-filters-left > *{
+            flex:1 1 auto;
+          }
+          .dispatcher-nav-filters-right{
+            justify-content:space-between;
+          }
+          .dispatcher-nav-advanced{
+            padding:0 18px 14px;
+          }
+        }
+      `}</style>
     </div>
   );
 }

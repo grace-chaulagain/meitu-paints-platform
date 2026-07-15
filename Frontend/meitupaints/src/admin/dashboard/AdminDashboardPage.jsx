@@ -1,7 +1,14 @@
 import { useEffect, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
+import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
+import {
+  DashboardUIStyles,
+  MetricTile,
+  SectionHeader,
+  Surface,
+} from "../../components/dashboard/DashboardUI.jsx";
 import {
   useGetAdminDealerApplicationsQuery,
   useGetAdminDispatcherApplicationsQuery,
@@ -15,18 +22,29 @@ import {
 
 import NotificationCenterPage from "../../notifications/NotificationCenterPage.jsx";
 import AdminApplicationsPage from "./applications/AdminApplicationsPage.jsx";
-import AdminDealerApplicationsPage from "./dealers/AdminDealerApplicationsPage.jsx";
 import AdminDealersPage from "./dealers/AdminDealersPage.jsx";
+import AdminPaintersPage from "./painters/AdminPaintersPage.jsx";
+import AdminPainterProfilePage from "./painters/AdminPainterProfilePage.jsx";
 import AdminDispatcherProfilePage from "./dispatchers/AdminDispatcherProfilePage.jsx";
 import AdminDispatchersPage from "./dispatchers/AdminDispatchersPage.jsx";
+import AdminDispatcherStockPage from "./dispatchers/AdminDispatcherStockPage.jsx";
+import AdminDispatcherOrdersPage from "./dispatchers/AdminDispatcherOrdersPage.jsx";
+import AdminDispatcherSalesPurchasesPage from "./dispatchers/AdminDispatcherSalesPurchasesPage.jsx";
+import AdminDispatcherProductHistoryPage from "./dispatchers/AdminDispatcherProductHistoryPage.jsx";
 import AdminInsightsPage from "./insights/AdminInsightsPage.jsx";
-import AdminOrderReportsPage from "./orders/AdminOrderReportsPage.jsx";
+import AdminOrderDetailPage from "./orders/AdminOrderDetailPage.jsx";
 import AdminOrdersPage from "./orders/AdminOrdersPage.jsx";
+import AdminSalesPage from "./sales/AdminSalesPage.jsx";
+import AdminCouponsPage from "./coupons/AdminCouponsPage.jsx";
+import AdminCouponBatchDetailPage from "./coupons/AdminCouponBatchDetailPage.jsx";
 import AdminSettingsPage from "./AdminSettingsPage.jsx";
 import AdminTrashPage from "./settings/AdminTrashPage.jsx";
 
 import AdminDealerProfilePage from "./dealers/AdminDealerProfilePage.jsx";
 import AdminDealerOrdersPage from "./dealers/AdminDealerOrdersPage.jsx";
+import AdminDealerStockPage from "./dealers/AdminDealerStockPage.jsx";
+import AdminDealerSalesPurchasesPage from "./dealers/AdminDealerSalesPurchasesPage.jsx";
+import AdminDealerProductHistoryPage from "./dealers/AdminDealerProductHistoryPage.jsx";
 
 const SECTIONS = {
   OVERVIEW: "overview",
@@ -34,7 +52,10 @@ const SECTIONS = {
   APPLICATIONS: "applications",
   DEALERS: "dealers",
   DISPATCHERS: "dispatchers",
+  PAINTERS: "painters",
   ORDERS: "orders",
+  SALES: "sales",
+  COUPONS: "coupons",
   NOTIFICATIONS: "notifications",
   INSIGHTS: "insights",
   SETTINGS: "settings",
@@ -46,7 +67,10 @@ const SECTION_ROUTE_MAP = {
   [SECTIONS.APPLICATIONS]: "/admin/dashboard/applications",
   [SECTIONS.DEALERS]: "/admin/dashboard/dealers",
   [SECTIONS.DISPATCHERS]: "/admin/dashboard/dispatchers",
+  [SECTIONS.PAINTERS]: "/admin/dashboard/painters",
   [SECTIONS.ORDERS]: "/admin/dashboard/orders",
+  [SECTIONS.SALES]: "/admin/dashboard/sales",
+  [SECTIONS.COUPONS]: "/admin/dashboard/coupons",
   [SECTIONS.NOTIFICATIONS]: "/admin/dashboard/notifications",
   [SECTIONS.INSIGHTS]: "/admin/dashboard/insights",
   [SECTIONS.SETTINGS]: "/admin/dashboard/settings",
@@ -56,103 +80,6 @@ function badgeForCount(count, fallback = "") {
   const value = Number(count || 0);
   if (value <= 0) return fallback;
   return value > 99 ? "99+" : String(value);
-}
-
-function GlassCard({ children, style = {} }) {
-  return (
-    <div
-      style={{
-        borderRadius: 16,
-        border: "1px solid rgba(15,23,42,.08)",
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(15,23,42,.04)",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function MetricCard({ label, value, helper = "", accent = false }) {
-  return (
-    <div
-      style={{
-        borderRadius: 12,
-        padding: "16px 18px",
-        background: accent ? "rgba(180,35,24,.06)" : "rgba(248,250,252,.95)",
-        border: accent
-          ? "1px solid rgba(180,35,24,.12)"
-          : "1px solid rgba(15,23,42,.06)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          letterSpacing: ".08em",
-          textTransform: "uppercase",
-          color: "rgba(15,23,42,.46)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          fontSize: 30,
-          fontWeight: 950,
-          letterSpacing: "-0.04em",
-          color: accent ? "#b42318" : "#0f172a",
-        }}
-      >
-        {value}
-      </div>
-      {helper ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.54)",
-          }}
-        >
-          {helper}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }) {
-  return (
-    <div>
-      <div
-        style={{
-          fontSize: 28,
-          fontWeight: 950,
-          letterSpacing: "-0.03em",
-          color: "#0f172a",
-        }}
-      >
-        {title}
-      </div>
-      {subtitle ? (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 14,
-            lineHeight: 1.65,
-            fontWeight: 700,
-            color: "rgba(15,23,42,.58)",
-          }}
-        >
-          {subtitle}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) {
@@ -200,6 +127,11 @@ function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) 
     (dealerApplicationsQuery.isFetching ||
       dispatcherApplicationsQuery.isFetching ||
       factoryOrdersQuery.isFetching);
+  const loadError =
+    dealerApplicationsQuery.error?.message ||
+    dispatcherApplicationsQuery.error?.message ||
+    factoryOrdersQuery.error?.message ||
+    "";
 
   const applicationUnread =
     Number(
@@ -212,229 +144,371 @@ function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) 
       ] || 0,
     );
 
+  const navCards = [
+    {
+      icon: "inbox",
+      title: "Review applications",
+      desc: "Process dealer and dispatcher intake from one queue, then decide in a focused review workspace.",
+      action: () => onNavigate(SECTIONS.APPLICATIONS),
+      cta: "Open applications",
+    },
+    {
+      icon: "orders",
+      title: "Handle factory orders",
+      desc: "Factory-routed submitted orders stay with admin; dispatcher-routed orders stay out of this lane.",
+      action: () => onNavigate(SECTIONS.ORDERS),
+      cta: "Open orders",
+    },
+    {
+      icon: "store",
+      title: "Review commercial accounts",
+      desc: "Use dealer intelligence and rankings to prioritize high-value accounts and routing quality.",
+      action: () => onNavigate(SECTIONS.DEALERS),
+      cta: "Open dealers",
+    },
+  ];
+
   return (
-    <div style={{ display: "grid", gap: 20, marginTop: 0, paddingTop: 0 }}>
-      <GlassCard style={{ padding: 18 }}>
-        <SectionHeader
-          title="Operations Overview"
-          subtitle={refreshing ? "Updating the cached operations pulse in the background." : "The focus layer for what needs attention now: applications, factory-routed orders, and unread operational notifications."}
-        />
+    <div className="admin-overview-page">
+      <Surface padding={26} className="admin-overview-hero dash-fade-up">
+        <div className="admin-overview-hero-copy">
+          <div className="admin-overview-eyebrow">
+            <DashboardIcon name="overview" size={14} strokeWidth={2} />
+            Admin Operations
+          </div>
+          <h1>Control center for today’s work.</h1>
+          <p>
+            {refreshing
+              ? "Updating the cached operations pulse in the background."
+              : "Applications, factory-routed orders, dealer network health, and unread notices in one calm workspace."}
+          </p>
+        </div>
 
         <div
-          style={{
-            marginTop: 20,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-          }}
+          className="admin-overview-metrics"
         >
-          <MetricCard
+          <MetricTile
+            icon="inbox"
             label="Dealer Applications"
             value={loading ? "…" : pulse.pendingDealerApplications}
             helper="Pending review"
-            accent
+            tone="accent"
           />
-          <MetricCard
+          <MetricTile
+            icon="handshake"
             label="Dispatcher Applications"
             value={loading ? "…" : pulse.pendingDispatcherApplications}
             helper="Pending review"
           />
-          <MetricCard
+          <MetricTile
+            icon="orders"
             label="Factory Orders"
             value={loading ? "…" : pulse.pendingFactoryOrders}
             helper="Submitted and factory-routed"
           />
-          <MetricCard
+          <MetricTile
+            icon="bell"
             label="Unread"
             value={Number(totalUnread || 0)}
             helper={`${applicationUnread} application notices`}
-            accent
+            tone="accent"
           />
         </div>
-      </GlassCard>
+      </Surface>
+
+      {loadError ? (
+        <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
+          {loadError}
+        </div>
+      ) : null}
 
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-          gap: 20,
-          alignItems: "start",
-        }}
+        className="admin-overview-grid dash-fade-up"
       >
-        <GlassCard style={{ padding: 24 }}>
+        <Surface padding={22} className="admin-overview-panel">
           <SectionHeader
             title="Operational Navigation"
-            subtitle="The workspace is intentionally shallow here. Deep work lives inside the module pages."
+            subtitle="Shortcuts to the work queues admins use most."
+            size="small"
+            icon="overview"
           />
 
-          <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
-            {[
-              {
-                title: "Review applications",
-                desc: "Process dealer and dispatcher applications from one intake point, then use focused review workspaces for decisions.",
-                action: () => onNavigate(SECTIONS.APPLICATIONS),
-                cta: "Open applications",
-              },
-              {
-                title: "Handle factory orders",
-                desc: "Factory-routed submitted orders stay with admin. Dispatcher-routed orders stay out of this lane.",
-                action: () => onNavigate(SECTIONS.ORDERS),
-                cta: "Open orders",
-              },
-              {
-                title: "Review commercial accounts",
-                desc: "Use dealer intelligence and rankings to prioritize high-value accounts, inactive dealers, and routing quality.",
-                action: () => onNavigate(SECTIONS.DEALERS),
-                cta: "Open dealers",
-              },
-            ].map((item, index) => (
-              <div
-                key={index}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "36px minmax(0,1fr) auto",
-                  gap: 14,
-                  alignItems: "start",
-                  padding: "14px 0",
-                  borderTop:
-                    index === 0 ? "none" : "1px solid rgba(15,23,42,.06)",
-                }}
+          <div className="admin-overview-shortcuts">
+            {navCards.map((item, index) => (
+              <button
+                key={item.title}
+                type="button"
+                onClick={item.action}
+                className={`admin-nav-card-row ${index === 0 ? "first" : ""}`}
               >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 999,
-                    display: "grid",
-                    placeItems: "center",
-                    background: "rgba(180,35,24,.08)",
-                    color: "#b42318",
-                    fontWeight: 950,
-                    fontSize: 13,
-                  }}
-                >
-                  {index + 1}
+                <div className="admin-nav-card-icon">
+                  <DashboardIcon name={item.icon} size={16} />
                 </div>
 
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 900,
-                      color: "#0f172a",
-                    }}
-                  >
+                <div style={{ minWidth: 0 }}>
+                  <div className="admin-nav-card-title">
                     {item.title}
                   </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 13,
-                      lineHeight: 1.7,
-                      fontWeight: 700,
-                      color: "rgba(15,23,42,.58)",
-                    }}
-                  >
+                  <div className="admin-nav-card-desc">
                     {item.desc}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={item.action}
-                  style={{
-                    height: 38,
-                    padding: "0 14px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(15,23,42,.08)",
-                    background: "#fff",
-                    color: "#0f172a",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <div className="admin-nav-card-cta">
                   {item.cta}
-                </button>
-              </div>
+                  <DashboardIcon name="chevron" size={13} />
+                </div>
+              </button>
             ))}
           </div>
-        </GlassCard>
+        </Surface>
 
-        <GlassCard style={{ padding: 24 }}>
+        <Surface padding={22} className="admin-overview-panel">
           <SectionHeader
             title="Recent Factory Queue"
-            subtitle="A compact snapshot of the factory-routed orders currently waiting for admin attention."
+            subtitle="Factory-routed orders currently waiting for admin attention."
+            size="small"
+            icon="orders"
           />
 
-          <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-            {pulse.recentFactoryOrders.length ? (
+          <div className="admin-factory-queue">
+            {loading ? (
+              <div style={{ height: 120, borderRadius: 18, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
+            ) : pulse.recentFactoryOrders.length ? (
               pulse.recentFactoryOrders.map((order) => (
                 <button
                   key={order._id}
                   type="button"
                   onClick={() => onNavigate(SECTIONS.ORDERS)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "14px 16px",
-                    borderRadius: 18,
-                    background: "rgba(248,250,252,.95)",
-                    border: "1px solid rgba(15,23,42,.06)",
-                    cursor: "pointer",
-                  }}
+                  className="admin-factory-row"
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      flexWrap: "wrap",
-                      fontSize: 13,
-                      fontWeight: 950,
-                      color: "#0f172a",
-                    }}
-                  >
-                    <span>{order.orderNumber || "Factory order"}</span>
-                    <span>
+                  <div className="admin-factory-row-main">
+                    <span className="admin-factory-row-icon">
+                      <DashboardIcon name="orders" size={15} strokeWidth={2} />
+                    </span>
+                    <span className="admin-factory-row-order">{order.orderNumber || "Factory order"}</span>
+                    <span className="admin-factory-row-total">
                       {Number(order?.totals?.total || 0).toLocaleString()}{" "}
                       {order?.totals?.currency || "NPR"}
                     </span>
                   </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      fontSize: 12,
-                      lineHeight: 1.55,
-                      fontWeight: 700,
-                      color: "rgba(15,23,42,.56)",
-                    }}
-                  >
+                  <div className="admin-factory-row-meta">
                     {order?.dealerId?.companyName || "Dealer"} ·{" "}
                     {order?.payment?.method || "No payment method"}
                   </div>
                 </button>
               ))
             ) : (
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 18,
-                  background: "rgba(248,250,252,.95)",
-                  border: "1px solid rgba(15,23,42,.06)",
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                  fontWeight: 700,
-                  color: "rgba(15,23,42,.62)",
-                }}
-              >
+              <div className="admin-factory-empty">
                 No submitted factory-routed orders need attention.
               </div>
             )}
           </div>
-        </GlassCard>
+        </Surface>
       </div>
+
+      <style>{`
+        .admin-overview-page{
+          display:grid;
+          gap:20px;
+        }
+        .admin-overview-hero{
+          position:relative;
+          overflow:hidden;
+          min-height:250px;
+          background:
+            radial-gradient(circle at 82% 12%, rgba(0,113,227,.15), transparent 28%),
+            radial-gradient(circle at 72% 74%, rgba(89,102,128,.12), transparent 26%),
+            linear-gradient(145deg, #ffffff 0%, #f5f5f7 100%) !important;
+        }
+        .admin-overview-hero-copy{
+          position:relative;
+          z-index:1;
+          max-width:720px;
+        }
+        .admin-overview-eyebrow{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          color:var(--color-graphite,#707070);
+          font-size:11px;
+          font-weight:800;
+          letter-spacing:.08em;
+          text-transform:uppercase;
+        }
+        .admin-overview-hero h1{
+          margin:10px 0 0;
+          max-width:680px;
+          color:var(--color-ink,#1d1d1f);
+          font-size:clamp(34px, 5vw, 64px);
+          line-height:1.03;
+          letter-spacing:-.055em;
+          font-weight:800;
+        }
+        .admin-overview-hero p{
+          margin:14px 0 0;
+          max-width:620px;
+          color:var(--color-graphite,#707070);
+          font-size:16px;
+          line-height:1.55;
+          font-weight:600;
+        }
+        .admin-overview-metrics{
+          position:relative;
+          z-index:1;
+          margin-top:24px;
+          display:grid;
+          grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));
+          gap:12px;
+        }
+        .admin-overview-grid{
+          display:grid;
+          grid-template-columns:repeat(auto-fit, minmax(min(100%, 390px), 1fr));
+          gap:20px;
+          align-items:start;
+        }
+        .admin-overview-panel{
+          min-height:100%;
+        }
+        .admin-overview-shortcuts,
+        .admin-factory-queue{
+          margin-top:16px;
+          display:grid;
+          gap:8px;
+        }
+        .admin-nav-card-row{
+          display:grid;
+          grid-template-columns:38px minmax(0,1fr) auto;
+          gap:12px;
+          align-items:center;
+          padding:13px 10px;
+          border:0;
+          border-top:1px solid rgba(29,29,31,.06);
+          background:transparent;
+          text-align:left;
+          cursor:pointer;
+          border-radius:16px;
+          transition:background .16s ease, transform .16s ease;
+        }
+        .admin-nav-card-row.first{
+          border-top-color:transparent;
+        }
+        .admin-nav-card-row:hover{
+          background:rgba(0,113,227,.045);
+          transform:translateX(2px);
+        }
+        .admin-nav-card-row:active{
+          transform:scale(.97);
+        }
+        .admin-nav-card-icon,
+        .admin-factory-row-icon{
+          width:38px;
+          height:38px;
+          border-radius:999px;
+          display:grid;
+          place-items:center;
+          background:rgba(0,113,227,.08);
+          color:var(--color-azure,#0071e3);
+        }
+        .admin-nav-card-title{
+          color:var(--color-ink,#1d1d1f);
+          font-size:14.5px;
+          line-height:1.25;
+          font-weight:800;
+          letter-spacing:-.02em;
+        }
+        .admin-nav-card-desc{
+          margin-top:3px;
+          color:var(--color-graphite,#707070);
+          font-size:12.5px;
+          line-height:1.5;
+          font-weight:600;
+        }
+        .admin-nav-card-cta{
+          display:flex;
+          align-items:center;
+          gap:4px;
+          color:var(--color-cobalt-link,#0066cc);
+          font-size:12.5px;
+          font-weight:700;
+          white-space:nowrap;
+        }
+        .admin-factory-row{
+          width:100%;
+          text-align:left;
+          padding:13px 14px;
+          border-radius:18px;
+          background:var(--color-fog,#f5f5f7);
+          border:1px solid transparent;
+          cursor:pointer;
+          transition:background .16s ease, border-color .16s ease, transform .16s ease;
+        }
+        .admin-factory-row:hover{
+          background:#fff;
+          border-color:rgba(29,29,31,.08);
+          transform:translateY(-1px);
+        }
+        .admin-factory-row:active{
+          transform:scale(.98);
+        }
+        .admin-factory-row-main{
+          display:grid;
+          grid-template-columns:38px minmax(0,1fr) auto;
+          gap:10px;
+          align-items:center;
+        }
+        .admin-factory-row-order{
+          color:var(--color-ink,#1d1d1f);
+          font-size:13.5px;
+          font-weight:800;
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+        .admin-factory-row-total{
+          color:var(--color-ink,#1d1d1f);
+          font-size:13px;
+          font-weight:800;
+          white-space:nowrap;
+        }
+        .admin-factory-row-meta{
+          margin:5px 0 0 48px;
+          color:var(--color-graphite,#707070);
+          font-size:12px;
+          line-height:1.5;
+          font-weight:600;
+        }
+        .admin-factory-empty{
+          padding:16px;
+          border-radius:20px;
+          background:var(--color-fog,#f5f5f7);
+          color:var(--color-graphite,#707070);
+          font-size:13px;
+          line-height:1.6;
+          font-weight:600;
+        }
+        @media (max-width:720px){
+          .admin-overview-hero{ min-height:0; }
+          .admin-nav-card-row,
+          .admin-factory-row-main{
+            grid-template-columns:34px minmax(0,1fr);
+          }
+          .admin-nav-card-cta,
+          .admin-factory-row-total{
+            grid-column:2;
+            justify-self:start;
+          }
+          .admin-factory-row-meta{ margin-left:44px; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .admin-nav-card-row,
+          .admin-factory-row{ transition:none!important; }
+          .admin-nav-card-row:hover,
+          .admin-nav-card-row:active,
+          .admin-factory-row:hover,
+          .admin-factory-row:active{ transform:none!important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -465,8 +539,17 @@ export default function AdminDashboard() {
     if (path.startsWith("/admin/dashboard/dispatchers")) {
       return SECTIONS.DISPATCHERS;
     }
+    if (path.startsWith("/admin/dashboard/painters")) {
+      return SECTIONS.PAINTERS;
+    }
     if (path.startsWith("/admin/dashboard/orders")) {
       return SECTIONS.ORDERS;
+    }
+    if (path.startsWith("/admin/dashboard/sales")) {
+      return SECTIONS.SALES;
+    }
+    if (path.startsWith("/admin/dashboard/coupons")) {
+      return SECTIONS.COUPONS;
     }
     if (path.startsWith("/admin/dashboard/notifications")) {
       return SECTIONS.NOTIFICATIONS;
@@ -506,18 +589,19 @@ export default function AdminDashboard() {
         key: SECTIONS.OVERVIEW,
         title: "Overview",
         subtitle: "Operations summary",
-        badge: "Home",
+        icon: "overview",
       },
       {
         key: SECTIONS.DRAFT_ORDER,
         title: "Draft Order",
         subtitle: "Price calculator",
-        badge: "Tool",
+        icon: "invoice",
       },
       {
         key: SECTIONS.APPLICATIONS,
         title: "Applications",
         subtitle: "Dealer and dispatcher intake",
+        icon: "inbox",
         badge: badgeForCount(
           Number(
             notificationCategories?.[
@@ -527,53 +611,74 @@ export default function AdminDashboard() {
             Number(
               notificationCategories?.[
                 NOTIFICATION_CATEGORIES.DISPATCHER_REGISTRATION
-              ] || 0,
+            ] || 0,
             ),
-          "Live",
         ),
       },
       {
         key: SECTIONS.ORDERS,
         title: "Orders",
         subtitle: "Factory and routing control",
+        icon: "orders",
         badge: badgeForCount(
           notificationCategories?.[NOTIFICATION_CATEGORIES.FACTORY_ORDER],
-          "Live",
         ),
+      },
+      {
+        key: SECTIONS.SALES,
+        title: "Sales",
+        subtitle: "Fleet-wide dealer sales",
+        icon: "chart",
+      },
+      {
+        key: SECTIONS.COUPONS,
+        title: "Coupons",
+        subtitle: "QR coupon generation and redemptions",
+        icon: "invoice",
       },
       {
         key: SECTIONS.DEALERS,
         title: "Dealers",
         subtitle: "Accounts and intelligence",
-        badge: "Live",
+        icon: "store",
       },
       {
         key: SECTIONS.DISPATCHERS,
         title: "Dispatchers",
         subtitle: "Partner operations",
+        icon: "handshake",
         badge: badgeForCount(
           notificationCategories?.[
             NOTIFICATION_CATEGORIES.DISPATCHER_REGISTRATION
           ],
-          "Live",
         ),
+      },
+      {
+        key: SECTIONS.PAINTERS,
+        title: "Painters",
+        subtitle: "Contact directory",
+        icon: "user",
+        badge: "",
       },
       {
         key: SECTIONS.NOTIFICATIONS,
         title: "Notifications",
         subtitle: "Unread operational events",
+        icon: "bell",
         badge: badgeForCount(notifications?.totalUnread, ""),
       },
       {
         key: SECTIONS.INSIGHTS,
         title: "Insights",
         subtitle: "Business intelligence workspace",
+        icon: "chart",
         badge: "",
       },
       {
         key: SECTIONS.SETTINGS,
         title: "Settings",
         subtitle: "Email and notification config",
+        icon: "gear",
         badge: "",
       },
     ],
@@ -585,7 +690,7 @@ export default function AdminDashboard() {
       {
         label: "Workspace",
         items: navigationItems.filter((item) =>
-          [SECTIONS.OVERVIEW, SECTIONS.APPLICATIONS, SECTIONS.ORDERS].includes(
+          [SECTIONS.OVERVIEW, SECTIONS.APPLICATIONS, SECTIONS.ORDERS, SECTIONS.SALES, SECTIONS.COUPONS].includes(
             item.key,
           ) || item.key === SECTIONS.DRAFT_ORDER,
         ),
@@ -593,7 +698,7 @@ export default function AdminDashboard() {
       {
         label: "Network",
         items: navigationItems.filter((item) =>
-          [SECTIONS.DEALERS, SECTIONS.DISPATCHERS, SECTIONS.INSIGHTS].includes(
+          [SECTIONS.DEALERS, SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.INSIGHTS].includes(
             item.key,
           ),
         ),
@@ -618,24 +723,84 @@ export default function AdminDashboard() {
       return <AdminDealerOrdersPage />;
     }
 
+    if (
+      path.startsWith("/admin/dashboard/sales/") &&
+      path.endsWith("/stock")
+    ) {
+      return <AdminDealerStockPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dealers/") &&
+      path.endsWith("/stock")
+    ) {
+      return <AdminDealerStockPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dealers/") &&
+      /\/sales-purchases\/[^/]+\/(purchases|sales|all)$/.test(path)
+    ) {
+      return <AdminDealerProductHistoryPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dealers/") &&
+      path.endsWith("/sales-purchases")
+    ) {
+      return <AdminDealerSalesPurchasesPage />;
+    }
+
     if (path.startsWith("/admin/dashboard/dealers/")) {
       return <AdminDealerProfilePage />;
+    }
+
+    if (path.startsWith("/admin/dashboard/painters/")) {
+      return <AdminPainterProfilePage />;
+    }
+
+    if (path.startsWith("/admin/dashboard/coupons/batches/")) {
+      return <AdminCouponBatchDetailPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dispatchers/") &&
+      /\/sales-purchases\/[^/]+\/(purchases|sales)$/.test(path)
+    ) {
+      return <AdminDispatcherProductHistoryPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dispatchers/") &&
+      path.endsWith("/sales-purchases")
+    ) {
+      return <AdminDispatcherSalesPurchasesPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dispatchers/") &&
+      path.endsWith("/stock")
+    ) {
+      return <AdminDispatcherStockPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dispatchers/") &&
+      path.endsWith("/orders")
+    ) {
+      return <AdminDispatcherOrdersPage />;
     }
 
     if (path.startsWith("/admin/dashboard/dispatchers/")) {
       return <AdminDispatcherProfilePage />;
     }
 
-    if (path === "/admin/dashboard/applications/dealers") {
-      return <AdminDealerApplicationsPage />;
-    }
-
-    if (path === "/admin/dashboard/applications/dispatchers") {
-      return <AdminDispatchersPage />;
-    }
-
     if (path === "/admin/dashboard/orders/reports") {
-      return <AdminOrderReportsPage />;
+      return <Navigate to="/admin/dashboard/orders" replace />;
+    }
+
+    if (path.startsWith("/admin/dashboard/orders/")) {
+      return <AdminOrderDetailPage />;
     }
 
     if (path === "/admin/dashboard/settings/trash") {
@@ -658,6 +823,7 @@ export default function AdminDashboard() {
             roleLabel="Admin Utility"
             title="Draft Order"
             subtitle="Calculate product totals for internal quoting and order preparation. This page does not submit dealer orders."
+            enableOfficeExport
           />
         );
 
@@ -670,8 +836,17 @@ export default function AdminDashboard() {
       case SECTIONS.DISPATCHERS:
         return <AdminDispatchersPage />;
 
+      case SECTIONS.PAINTERS:
+        return <AdminPaintersPage />;
+
       case SECTIONS.ORDERS:
         return <AdminOrdersPage />;
+
+      case SECTIONS.SALES:
+        return <AdminSalesPage />;
+
+      case SECTIONS.COUPONS:
+        return <AdminCouponsPage />;
 
       case SECTIONS.NOTIFICATIONS:
         return <NotificationCenterPage embedded />;
@@ -701,8 +876,8 @@ export default function AdminDashboard() {
       navGroups={navigationGroups}
       activeKey={activeSection}
       onNavigate={(item) => handleNavigate(item.key)}
-      priorityText="Onboarding, dealer intelligence, and order handling are live. Keep the workspace focused on routing clarity, notification hygiene, and dealer-specific admin decisions."
     >
+      <DashboardUIStyles />
       {renderContent()}
     </DashboardShell>
   );

@@ -1,3 +1,9 @@
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { GhostButton, Pill, PrimaryButton } from "../../../components/dashboard/DashboardUI.jsx";
+
+const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
+
 export default function AdminDecisionModal({
   open,
   title,
@@ -15,97 +21,73 @@ export default function AdminDecisionModal({
   onConfirm,
   children = null,
 }) {
-  if (!open) return null;
-
   const isDanger = tone === "danger";
   const isConfirmBlocked =
     disabled ||
     busy ||
     (requireText &&
       String(confirmationText || "").trim() !== String(requireText).trim());
+  const shouldReduceMotion = useReducedMotion();
+  const scale = shouldReduceMotion ? 1 : 0.95;
+  const fast = shouldReduceMotion ? 0.001 : 0.16;
+  const slow = shouldReduceMotion ? 0.001 : 0.22;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1600,
-        background: "rgba(15,23,42,.42)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 28,
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose?.();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={{
-          width: "min(640px, 100%)",
-          borderRadius: 28,
-          border: "1px solid rgba(15,23,42,.10)",
-          background: "rgba(255,255,255,.94)",
-          boxShadow:
-            "0 34px 90px rgba(15,23,42,.22), inset 0 1px 0 rgba(255,255,255,.88)",
-          overflow: "hidden",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: fast, ease: "easeOut" }}
           style={{
-            height: 5,
-            background: isDanger
-              ? "linear-gradient(90deg, #b91c1c 0%, #dd5127 100%)"
-              : "linear-gradient(90deg, #0f172a 0%, rgba(15,23,42,.38) 100%)",
+            position: "fixed",
+            inset: 0,
+            zIndex: 1600,
+            background: "rgba(245,245,247,.76)",
+            backdropFilter: "blur(22px)",
+            WebkitBackdropFilter: "blur(22px)",
+            display: "grid",
+            placeItems: "center",
+            padding: 28,
           }}
-        />
-
-        <div style={{ padding: 24, display: "grid", gap: 18 }}>
-          <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !busy) onClose?.();
+          }}
+        >
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            initial={{ opacity: 0, scale }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale }}
+            transition={{ duration: slow, ease: MODAL_EASE_OUT }}
             style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0,1fr) auto",
-              gap: 16,
-              alignItems: "start",
+              width: "min(560px, 100%)",
+              borderRadius: 30,
+              border: "1px solid rgba(29,29,31,.1)",
+              background: "linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.94))",
+              overflow: "hidden",
+              transformOrigin: "center",
             }}
+            onClick={(e) => e.stopPropagation()}
           >
+            <div style={{ padding: 24, display: "grid", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 14, alignItems: "start" }}>
             <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  height: 28,
-                  padding: "0 10px",
-                  borderRadius: 999,
-                  background: isDanger
-                    ? "rgba(180,35,24,.08)"
-                    : "rgba(15,23,42,.05)",
-                  color: isDanger ? "#b42318" : "#475569",
-                  border: isDanger
-                    ? "1px solid rgba(180,35,24,.12)"
-                    : "1px solid rgba(15,23,42,.08)",
-                  fontSize: 11,
-                  fontWeight: 900,
-                  letterSpacing: ".06em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Admin confirmation
-              </div>
+              <Pill tone={isDanger ? "critical" : "neutral"} size="small">
+                {isDanger ? "Confirm removal" : "Confirm action"}
+              </Pill>
 
               <div
                 style={{
-                  marginTop: 12,
-                  fontSize: 28,
-                  fontWeight: 950,
+                  marginTop: 10,
+                  fontSize: 24,
+                  fontWeight: 800,
                   letterSpacing: "-0.04em",
-                  lineHeight: 1.05,
-                  color: "#0f172a",
+                  lineHeight: 1.15,
+                  color: "var(--color-ink, #1d1d1f)",
                 }}
               >
                 {title}
@@ -114,11 +96,11 @@ export default function AdminDecisionModal({
               {subtitle ? (
                 <div
                   style={{
-                    marginTop: 8,
-                    fontSize: 14,
-                    lineHeight: 1.65,
-                    fontWeight: 700,
-                    color: "rgba(15,23,42,.58)",
+                    marginTop: 6,
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    fontWeight: 500,
+                    color: "var(--color-graphite, #707070)",
                   }}
                 >
                   {subtitle}
@@ -130,20 +112,22 @@ export default function AdminDecisionModal({
               type="button"
               onClick={onClose}
               disabled={busy}
+              aria-label="Close"
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: "1px solid rgba(15,23,42,.08)",
-                background: "#fff",
-                color: "#0f172a",
-                fontSize: 20,
-                fontWeight: 900,
+                width: 34,
+                height: 34,
+                borderRadius: 999,
+                border: "none",
+                background: "var(--color-fog, #f5f5f7)",
+                color: "var(--color-graphite, #707070)",
                 cursor: busy ? "not-allowed" : "pointer",
                 opacity: busy ? 0.55 : 1,
+                display: "grid",
+                placeItems: "center",
+                flexShrink: 0,
               }}
             >
-              ×
+              <DashboardIcon name="close" size={14} strokeWidth={2} />
             </button>
           </div>
 
@@ -151,11 +135,10 @@ export default function AdminDecisionModal({
             <div
               style={{
                 display: "grid",
-                gap: 10,
+                gap: 8,
                 padding: 14,
-                borderRadius: 18,
-                background: "rgba(248,250,252,.92)",
-                border: "1px solid rgba(15,23,42,.06)",
+                borderRadius: 20,
+                background: "var(--color-fog, #f5f5f7)",
               }}
             >
               {details.map((item) => (
@@ -163,7 +146,7 @@ export default function AdminDecisionModal({
                   key={item.label}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "150px minmax(0,1fr)",
+                    gridTemplateColumns: "130px minmax(0,1fr)",
                     gap: 12,
                     alignItems: "baseline",
                   }}
@@ -171,10 +154,10 @@ export default function AdminDecisionModal({
                   <div
                     style={{
                       fontSize: 11,
-                      fontWeight: 900,
-                      letterSpacing: ".08em",
+                      fontWeight: 600,
+                      letterSpacing: ".04em",
                       textTransform: "uppercase",
-                      color: "rgba(15,23,42,.44)",
+                      color: "var(--color-graphite, #707070)",
                     }}
                   >
                     {item.label}
@@ -182,10 +165,10 @@ export default function AdminDecisionModal({
                   <div
                     style={{
                       minWidth: 0,
-                      fontSize: 14,
-                      lineHeight: 1.55,
-                      fontWeight: 800,
-                      color: "#0f172a",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      fontWeight: 600,
+                      color: "var(--color-ink, #1d1d1f)",
                       wordBreak: "break-word",
                     }}
                   >
@@ -200,15 +183,8 @@ export default function AdminDecisionModal({
 
           {requireText ? (
             <div style={{ display: "grid", gap: 8 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  fontWeight: 800,
-                  color: "rgba(15,23,42,.62)",
-                }}
-              >
-                Type <strong>{requireText}</strong> to confirm.
+              <div style={{ fontSize: 12.5, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                Type <strong style={{ color: "var(--color-ink, #1d1d1f)", fontWeight: 700 }}>{requireText}</strong> to confirm.
               </div>
               <input
                 value={confirmationText}
@@ -216,75 +192,59 @@ export default function AdminDecisionModal({
                 disabled={busy}
                 style={{
                   width: "100%",
-                  height: 48,
-                  borderRadius: 16,
-                  border: "1px solid rgba(15,23,42,.10)",
-                  background: "#fff",
+                  height: 42,
+                  borderRadius: 18,
+                  border: "none",
+                  background: "rgba(232,232,237,.72)",
                   padding: "0 14px",
                   outline: "none",
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#0f172a",
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                  color: "var(--color-ink, #1d1d1f)",
                 }}
               />
             </div>
           ) : null}
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              style={{
-                minHeight: 42,
-                padding: "10px 16px",
-                borderRadius: 14,
-                border: "1px solid rgba(15,23,42,.08)",
-                background: "#fff",
-                color: "#0f172a",
-                fontWeight: 900,
-                cursor: busy ? "not-allowed" : "pointer",
-                opacity: busy ? 0.55 : 1,
-              }}
-            >
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+            <GhostButton onClick={onClose} disabled={busy}>
               {cancelLabel}
-            </button>
+            </GhostButton>
 
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={isConfirmBlocked}
-              style={{
-                minHeight: 42,
-                padding: "10px 16px",
-                borderRadius: 14,
-                border: isDanger
-                  ? "1px solid rgba(180,35,24,.16)"
-                  : "1px solid rgba(15,23,42,.08)",
-                background: isDanger
-                  ? "linear-gradient(135deg, #b91c1c 0%, #dd5127 100%)"
-                  : "linear-gradient(135deg, #0f172a 0%, #334155 100%)",
-                color: "#fff",
-                fontWeight: 900,
-                cursor: isConfirmBlocked ? "not-allowed" : "pointer",
-                opacity: isConfirmBlocked ? 0.55 : 1,
-                boxShadow: isDanger
-                  ? "0 14px 24px rgba(180,35,24,.18)"
-                  : "0 14px 24px rgba(15,23,42,.14)",
-              }}
-            >
-              {busy ? "Processing..." : confirmLabel}
-            </button>
+            {isDanger ? (
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={isConfirmBlocked}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 38,
+                  padding: "0 16px",
+                  borderRadius: 999,
+                  border: "none",
+                  background: "#b42318",
+                  color: "#fff",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: isConfirmBlocked ? "not-allowed" : "pointer",
+                  opacity: isConfirmBlocked ? 0.55 : 1,
+                }}
+              >
+                <DashboardIcon name="trash" size={14} strokeWidth={2} />
+                {busy ? "Processing…" : confirmLabel}
+              </button>
+            ) : (
+              <PrimaryButton icon="checkmark" onClick={onConfirm} disabled={isConfirmBlocked}>
+                {busy ? "Processing…" : confirmLabel}
+              </PrimaryButton>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }

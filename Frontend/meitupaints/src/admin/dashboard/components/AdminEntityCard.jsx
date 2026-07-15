@@ -1,7 +1,21 @@
+import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+
 function toneClass(tone = "neutral") {
   return ["success", "danger", "accent", "muted"].includes(tone)
     ? tone
     : "neutral";
+}
+
+function iconForAction(action = {}) {
+  const key = String(action.key || action.label || "").toLowerCase();
+  if (action.icon) return action.icon;
+  if (key.includes("profile") || key.includes("view") || key.includes("review")) return "user";
+  if (key.includes("order")) return "orders";
+  if (key.includes("route") || key.includes("routing")) return "truck";
+  if (key.includes("edit")) return "edit";
+  if (key.includes("delete") || key.includes("deactivate")) return "trash";
+  if (key.includes("activate") || key.includes("approve") || key.includes("restore") || key.includes("undo")) return "check";
+  return "chevron";
 }
 
 export function AdminEntityCardStyles() {
@@ -9,59 +23,66 @@ export function AdminEntityCardStyles() {
     <style>{`
       .admin-entity-card{
         position:relative;
-        border-radius:18px;
-        border:1px solid rgba(15,23,42,.07);
-        background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(250,250,252,.96));
-        box-shadow:0 14px 34px rgba(15,23,42,.055), inset 0 1px 0 rgba(255,255,255,.92);
+        border-radius:24px;
+        border:1px solid rgba(29,29,31,.08);
+        background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.92));
         overflow:hidden;
+        transition:transform .18s ease, border-color .18s ease, background .18s ease;
+      }
+      .admin-entity-card:hover{
+        transform:translateY(-2px);
+        border-color:rgba(29,29,31,.14);
       }
       .admin-entity-card::before{
         content:"";
         position:absolute;
-        inset:0 auto 0 0;
-        width:3px;
-        background:rgba(15,23,42,.14);
+        inset:0 0 auto;
+        height:3px;
+        background:linear-gradient(90deg, rgba(29,29,31,.14), transparent);
       }
-      .admin-entity-card.accent::before{ background:#b42318; }
+      .admin-entity-card.accent::before{ background:var(--color-azure,#0071e3); }
       .admin-entity-card.success::before{ background:#16a34a; }
       .admin-entity-card.danger::before{ background:#b91c1c; }
+      .admin-entity-card.is-selected{
+        background:rgba(0,113,227,.06);
+        border-color:rgba(0,113,227,.28);
+      }
       .admin-entity-inner{
-        padding:16px;
+        padding:17px;
         display:grid;
         gap:14px;
       }
       .admin-entity-main{
         min-width:0;
         display:grid;
-        grid-template-columns:44px minmax(0,1fr) auto;
+        grid-template-columns:auto 44px minmax(0,1fr) auto;
         gap:12px;
         align-items:start;
       }
       .admin-entity-avatar{
         width:44px;
         height:44px;
-        border-radius:14px;
+        border-radius:999px;
         display:grid;
         place-items:center;
-        background:linear-gradient(135deg,#0f172a,#334155);
-        color:#fff;
-        font-size:17px;
-        font-weight:950;
-        box-shadow:0 10px 22px rgba(15,23,42,.14);
+        background:rgba(0,113,227,.1);
+        color:var(--color-azure,#0071e3);
+        font-size:16px;
+        font-weight:800;
       }
       .admin-entity-copy{
         min-width:0;
         display:grid;
-        gap:5px;
+        gap:4px;
       }
       .admin-entity-title{
         min-width:0;
         margin:0;
-        font-size:17px;
-        line-height:1.18;
-        font-weight:950;
-        letter-spacing:-.03em;
-        color:#0f172a;
+        font-size:15.5px;
+        line-height:1.25;
+        font-weight:800;
+        letter-spacing:-.025em;
+        color:var(--color-ink, #1d1d1f);
         overflow:hidden;
         text-overflow:ellipsis;
         white-space:nowrap;
@@ -70,14 +91,14 @@ export function AdminEntityCardStyles() {
       .admin-entity-line{
         min-width:0;
         font-size:12px;
-        line-height:1.45;
-        font-weight:750;
-        color:rgba(15,23,42,.56);
+        line-height:1.4;
+        font-weight:600;
+        color:var(--color-graphite, #707070);
         overflow:hidden;
         text-overflow:ellipsis;
         white-space:nowrap;
       }
-      .admin-entity-line{ color:rgba(15,23,42,.46); }
+      .admin-entity-line{ color:rgba(0,0,0,.38); }
       .admin-entity-badges{
         display:flex;
         flex-wrap:wrap;
@@ -86,90 +107,85 @@ export function AdminEntityCardStyles() {
         max-width:210px;
       }
       .admin-entity-badge{
-        min-height:25px;
-        padding:0 9px;
+        min-height:23px;
+        padding:0 8px;
         border-radius:999px;
         display:inline-flex;
         align-items:center;
-        border:1px solid rgba(15,23,42,.08);
-        background:rgba(15,23,42,.045);
-        color:rgba(15,23,42,.58);
-        font-size:10px;
-        font-weight:950;
-        letter-spacing:.05em;
-        text-transform:uppercase;
+        background:rgba(0,0,0,.05);
+        color:var(--color-graphite, #707070);
+        font-size:10.5px;
+        font-weight:750;
         white-space:nowrap;
       }
       .admin-entity-badge.success{
-        background:rgba(22,163,74,.08);
-        border-color:rgba(22,163,74,.12);
+        background:rgba(22,163,74,.1);
         color:#15803d;
       }
       .admin-entity-badge.danger{
-        background:rgba(180,35,24,.08);
-        border-color:rgba(180,35,24,.12);
+        background:rgba(180,35,24,.1);
         color:#b42318;
       }
       .admin-entity-badge.accent{
-        background:rgba(180,35,24,.07);
-        border-color:rgba(180,35,24,.12);
-        color:#b42318;
+        background:rgba(0,113,227,.1);
+        color:var(--color-azure,#0071e3);
       }
       .admin-entity-badge.muted{
-        background:rgba(248,250,252,.92);
-        color:rgba(15,23,42,.48);
+        background:rgba(0,0,0,.04);
+        color:rgba(0,0,0,.42);
       }
       .admin-entity-actions{
         display:flex;
         align-items:center;
-        gap:6px;
+        gap:7px;
         flex-wrap:wrap;
-        padding:8px;
-        border-radius:14px;
-        background:rgba(248,250,252,.86);
-        border:1px solid rgba(15,23,42,.055);
+        padding-top:13px;
+        border-top:1px solid rgba(29,29,31,.06);
       }
       .admin-entity-action{
         min-height:34px;
-        padding:0 10px;
-        border-radius:10px;
-        border:1px solid rgba(15,23,42,.07);
-        background:#fff;
-        color:#0f172a;
-        font-size:12px;
-        font-weight:900;
+        padding:0 12px;
+        border-radius:999px;
+        border:none;
+        background:var(--color-fog, #f5f5f7);
+        color:var(--color-ink, #1d1d1f);
+        font-size:12.5px;
+        font-weight:750;
         cursor:pointer;
-        transition:background .16s ease, border-color .16s ease, transform .16s ease;
+        transition:background .14s ease;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:6px;
       }
-      .admin-entity-action:hover{
-        transform:translateY(-1px);
-        background:rgba(255,255,255,.96);
-        border-color:rgba(15,23,42,.12);
+      .admin-entity-action:hover:not(:disabled){
+        background:rgba(0,0,0,.08);
       }
       .admin-entity-action.primary{
-        background:#0f172a;
+        background:var(--color-azure,#0071e3);
         color:#fff;
-        border-color:#0f172a;
+      }
+      .admin-entity-action.primary:hover:not(:disabled){
+        background:var(--color-azure,#0071e3);
+        opacity:.9;
       }
       .admin-entity-action.danger{
-        background:rgba(180,35,24,.06);
+        background:rgba(180,35,24,.08);
         color:#b42318;
-        border-color:rgba(180,35,24,.12);
       }
       .admin-entity-action:disabled{
         cursor:not-allowed;
-        opacity:.55;
-        transform:none;
+        opacity:.5;
       }
       @media (max-width:720px){
         .admin-entity-inner{ padding:14px; }
         .admin-entity-main{
-          grid-template-columns:40px minmax(0,1fr);
+          grid-template-columns:auto 36px minmax(0,1fr);
         }
         .admin-entity-avatar{
-          width:40px;
-          height:40px;
-          border-radius:13px;
+          width:36px;
+          height:36px;
+          border-radius:999px;
         }
         .admin-entity-badges{
           grid-column:1 / -1;
@@ -195,11 +211,48 @@ export default function AdminEntityCard({
   line = "",
   badges = [],
   actions = [],
+  selectable = false,
+  selectionMode = false,
+  selected = false,
+  onSelectChange = null,
 }) {
   return (
-    <article className={`admin-entity-card ${toneClass(accent)}`}>
+    <article
+      className={`admin-entity-card ${toneClass(accent)} ${selected ? "is-selected" : ""}`}
+      onClick={
+        selectable && selectionMode ? () => onSelectChange?.(!selected) : undefined
+      }
+      style={selectable && selectionMode ? { cursor: "pointer" } : undefined}
+    >
       <div className="admin-entity-inner">
         <div className="admin-entity-main">
+          {selectable ? (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={selected}
+              aria-label="Select row"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectChange?.(!selected);
+              }}
+              style={{
+                width: 18,
+                height: 18,
+                marginTop: 2,
+                borderRadius: 5,
+                border: selected ? "none" : "1.5px solid rgba(0,0,0,.2)",
+                background: selected ? "var(--color-azure,#0071e3)" : "transparent",
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            />
+          ) : (
+            <span />
+          )}
           <div className="admin-entity-avatar">{initial || "M"}</div>
           <div className="admin-entity-copy">
             <h3 className="admin-entity-title">{title || "Unnamed record"}</h3>
@@ -226,10 +279,14 @@ export default function AdminEntityCard({
               key={action.key || action.label}
               type="button"
               className={`admin-entity-action ${action.variant || ""}`}
-              onClick={action.onClick}
+              onClick={(event) => {
+                event.stopPropagation();
+                action.onClick?.(event);
+              }}
               disabled={action.disabled}
               title={action.title || action.label}
             >
+              <DashboardIcon name={iconForAction(action)} size={13} strokeWidth={2} />
               {action.busy ? action.busyLabel || "Working..." : action.label}
             </button>
           ))}
