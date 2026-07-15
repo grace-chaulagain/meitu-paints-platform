@@ -1,8 +1,27 @@
+import mongoose from "mongoose";
+
 import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Dealer from "../models/DealerProfile.model.js";
-import Order from "../models/Order.model.js";
-import { notifyDispatcherApplicationSubmitted } from "./adminNotification.service.js";
+import Order, { ORDER_ORIGIN } from "../models/Order.model.js";
+import Product from "../models/Product.model.js";
+import DispatcherProductPrice from "../models/DispatcherProductPrice.model.js";
+import { listMyReplenishmentCatalog as fetchMyReplenishmentCatalog } from "./dispatcherPricing.service.js";
+import ApiError from "../utils/apiError.js";
+import {
+  notifyDispatcherApplicationSubmitted,
+  notifyFactoryOrderSubmitted,
+} from "./adminNotification.service.js";
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
+import { sendDealerStatusEmail } from "./factory.service.js";
+import {
+  consumeDispatcherStockForOrder,
+  listDispatcherStock,
+} from "./dispatcherStock.service.js";
+import { recordPurchaseMovement } from "./dealerInventory.service.js";
+
+function generateOrderNumber() {
+  return `ORD-${Date.now()}`;
+}
 
 function normalizeEmail(email = "") {
   return String(email || "")
@@ -145,6 +164,7 @@ export async function createDispatcherApplication(payload = {}) {
   const notes = normalizeText(payload.notes);
 
   if (!name) throw new Error("Name is required");
+  if (!companyName) throw new Error("Company name is required");
   if (!phone) throw new Error("Phone is required");
   if (!email) throw new Error("Email is required");
 
@@ -194,34 +214,6 @@ export async function getPendingDispatchers() {
 export async function getDispatcherById(dispatcherId) {
   const dispatcher = await Dispatcher.findById(dispatcherId);
   if (!dispatcher) throw new Error("Dispatcher not found");
-  return dispatcher;
-}
-
-export async function verifyDispatcher(dispatcherId, payload = {}) {
-  const dispatcher = await getDispatcherById(dispatcherId);
-
-  dispatcher.status = DISPATCHER_STATUS.VERIFIED;
-  dispatcher.isActive = true;
-
-  if (payload.notes !== undefined) {
-    dispatcher.notes = normalizeText(payload.notes);
-  }
-
-  await dispatcher.save();
-  return dispatcher;
-}
-
-export async function rejectDispatcher(dispatcherId, payload = {}) {
-  const dispatcher = await getDispatcherById(dispatcherId);
-
-  dispatcher.status = DISPATCHER_STATUS.REJECTED;
-  dispatcher.isActive = false;
-
-  if (payload.notes !== undefined) {
-    dispatcher.notes = normalizeText(payload.notes);
-  }
-
-  await dispatcher.save();
   return dispatcher;
 }
 
@@ -304,6 +296,23 @@ export async function listMyAssignedDealers({
   };
 }
 
+export async function getMyAssignedDealerById({ user, dealerId } = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const dealer = await Dealer.findOne({
+    _id: dealerId,
+    dispatcherId,
+    fulfillmentMode: "DISPATCHER",
+  }).lean();
+
+  if (!dealer) {
+    throw new Error("Assigned dealer not found");
+  }
+
+  return dealer;
+}
+
 export async function listMyOrders({
   user,
   status,
@@ -311,6 +320,7 @@ export async function listMyOrders({
   page = 1,
   limit = 20,
   archive = false,
+  dealerId,
 } = {}) {
   const dispatcherId = ensureDispatcherId(user);
   await getVerifiedActiveDispatcher(dispatcherId);
@@ -321,10 +331,18 @@ export async function listMyOrders({
 
   const query = { dispatcherId };
 
+  if (dealerId) {
+    query.dealerId = dealerId;
+  }
+
   if (archive) {
-    query.status = { $in: ["VERIFIED", "REJECTED", "ARCHIVED"] };
+    query.status = { $in: ["VERIFIED", "REJECTED", "DISPATCHED"] };
   } else if (status) {
-    query.status = normalizeStatus(status);
+    const statuses = String(status)
+      .split(",")
+      .map((value) => normalizeStatus(value))
+      .filter(Boolean);
+    query.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
   } else {
     query.status = "SUBMITTED";
   }
@@ -375,6 +393,86 @@ export async function getMyOrderById({ user, orderId } = {}) {
   return order;
 }
 
+export async function getMyReplenishmentCatalog({ user, q } = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  return fetchMyReplenishmentCatalog({ dispatcherId, q });
+}
+
+export async function listMyReplenishmentOrders({
+  user,
+  status,
+  q,
+  page = 1,
+  limit = 20,
+  archive = false,
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const currentPage = toPositiveInt(page, 1);
+  const perPage = Math.min(100, toPositiveInt(limit, 20));
+  const skip = (currentPage - 1) * perPage;
+
+  const query = {
+    dispatcherCustomerId: dispatcherId,
+    orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+  };
+
+  if (archive) {
+    query.status = { $in: ["COMPLETED", "REJECTED", "CANCELLED"] };
+  } else if (status) {
+    const statuses = String(status)
+      .split(",")
+      .map((value) => normalizeStatus(value))
+      .filter(Boolean);
+    query.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
+  } else {
+    query.status = {
+      $in: ["SUBMITTED", "VERIFIED", "DISPATCHED"],
+    };
+  }
+
+  const searchQuery = buildOrderSearchQuery(q);
+  if (searchQuery) {
+    Object.assign(query, searchQuery);
+  }
+
+  const [items, total] = await Promise.all([
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(perPage)
+      .lean(),
+    Order.countDocuments(query),
+  ]);
+
+  return {
+    items,
+    total,
+    page: currentPage,
+    limit: perPage,
+  };
+}
+
+export async function getMyReplenishmentOrderById({ user, orderId } = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const order = await Order.findOne({
+    _id: orderId,
+    dispatcherCustomerId: dispatcherId,
+    orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+  }).lean();
+
+  if (!order) {
+    throw new Error("Replenishment order not found");
+  }
+
+  return order;
+}
+
 export async function verifyAssignedOrder({
   user,
   orderId,
@@ -393,35 +491,58 @@ export async function verifyAssignedOrder({
     normalizeText(payload.reviewNote) ||
     normalizeText(payload.note) ||
     normalizeText(payload.reason);
+  const previousStatus = order.status;
+  const actorId = user?.sub || user?.id || null;
 
-  order.status = "VERIFIED";
-  order.review = {
-    ...(order.review || {}),
-    reviewedByRole: "DISPATCHER",
-    reviewedByDispatcherId: dispatcherId,
-    reviewedAt: new Date(),
-    reviewNote,
-  };
+  // Conditional on status still being SUBMITTED at write time - this is
+  // what prevents two concurrent verify/reject calls on the same order
+  // from both succeeding.
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, dispatcherId, status: "SUBMITTED" },
+    {
+      $set: {
+        status: "VERIFIED",
+        review: {
+          ...(order.review?.toObject?.() || order.review || {}),
+          reviewedByRole: "DISPATCHER",
+          reviewedByUserId: actorId,
+          reviewedAt: new Date(),
+          reviewNote,
+        },
+        ...(payload.internalNote !== undefined
+          ? { internalNote: normalizeText(payload.internalNote) }
+          : {}),
+        updatedBy: actorId,
+      },
+      $push: {
+        statusHistory: {
+          fromStatus: previousStatus || "",
+          toStatus: "VERIFIED",
+          note: reviewNote || "Order verified by dispatcher.",
+          changedByUserId: actorId,
+          changedByRole: "DISPATCHER",
+          changedAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
 
-  if (payload.internalNote !== undefined) {
-    order.internalNote = normalizeText(payload.internalNote);
+  if (!updated) {
+    throw new Error(
+      "This order was already reviewed by someone else. Please refresh and try again.",
+    );
   }
 
-  if ("updatedBy" in order) {
-    order.updatedBy = user?.sub || null;
-  }
-
-  await order.save();
-
-  archiveVerifiedOrderToGoogleSheets(order).catch((error) => {
+  archiveVerifiedOrderToGoogleSheets(updated).catch((error) => {
     console.error("[google-sheets-archive] Failed to archive verified order", {
-      orderId: String(order._id),
-      orderNumber: order.orderNumber,
+      orderId: String(updated._id),
+      orderNumber: updated.orderNumber,
       message: error?.message,
     });
   });
 
-  return order;
+  return updated;
 }
 
 export async function rejectAssignedOrder({
@@ -442,26 +563,47 @@ export async function rejectAssignedOrder({
     normalizeText(payload.reviewNote) ||
     normalizeText(payload.note) ||
     normalizeText(payload.reason);
+  const previousStatus = order.status;
+  const actorId = user?.sub || user?.id || null;
 
-  order.status = "REJECTED";
-  order.review = {
-    ...(order.review || {}),
-    reviewedByRole: "DISPATCHER",
-    reviewedByDispatcherId: dispatcherId,
-    reviewedAt: new Date(),
-    reviewNote,
-  };
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, dispatcherId, status: "SUBMITTED" },
+    {
+      $set: {
+        status: "REJECTED",
+        review: {
+          ...(order.review?.toObject?.() || order.review || {}),
+          reviewedByRole: "DISPATCHER",
+          reviewedByUserId: actorId,
+          reviewedAt: new Date(),
+          reviewNote,
+        },
+        ...(payload.internalNote !== undefined
+          ? { internalNote: normalizeText(payload.internalNote) }
+          : {}),
+        updatedBy: actorId,
+      },
+      $push: {
+        statusHistory: {
+          fromStatus: previousStatus || "",
+          toStatus: "REJECTED",
+          note: reviewNote || "Order rejected by dispatcher.",
+          changedByUserId: actorId,
+          changedByRole: "DISPATCHER",
+          changedAt: new Date(),
+        },
+      },
+    },
+    { new: true },
+  );
 
-  if (payload.internalNote !== undefined) {
-    order.internalNote = normalizeText(payload.internalNote);
+  if (!updated) {
+    throw new Error(
+      "This order was already reviewed by someone else. Please refresh and try again.",
+    );
   }
 
-  if ("updatedBy" in order) {
-    order.updatedBy = user?.sub || null;
-  }
-
-  await order.save();
-  return order;
+  return updated;
 }
 
 export async function amendAssignedOrder({ user, orderId, payload = {} } = {}) {
@@ -556,4 +698,225 @@ export async function listMyOrderArchive({
     limit,
     archive: true,
   });
+}
+
+// ----------------------------
+// Dispatcher's own replenishment ordering (from the central Factory)
+// ----------------------------
+
+export async function createDispatcherReplenishmentOrder({
+  user,
+  payload = {},
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  const dispatcher = await getVerifiedActiveDispatcher(dispatcherId);
+
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  if (items.length === 0) {
+    throw new Error("Order must contain at least one item.");
+  }
+
+  const productIds = items.map((item) => item.productId).filter(Boolean);
+  const [products, priceRows] = await Promise.all([
+    Product.find({
+      _id: { $in: productIds },
+      isActive: { $ne: false },
+    }),
+    // Each dispatcher has their own flat price per SKU (no tiers, unlike
+    // dealer pricing) - configured by an admin via the Dispatcher Price
+    // workspace, never shared across dispatchers.
+    DispatcherProductPrice.find({ dispatcherId, productId: { $in: productIds } }).lean(),
+  ]);
+  const productMap = new Map(products.map((p) => [String(p._id), p]));
+  const priceMap = new Map(priceRows.map((row) => [String(row.productId), row]));
+
+  const orderItems = [];
+  let subtotal = 0;
+
+  for (const item of items) {
+    const product = productMap.get(String(item.productId));
+    if (!product) {
+      throw new Error(`Product not found for id ${item.productId}`);
+    }
+
+    const priceRow = priceMap.get(String(product._id));
+    if (!priceRow) {
+      throw new ApiError(400, `No dispatcher price configured for SKU ${product.sku}`);
+    }
+
+    const quantity = Number(item.quantity || 0);
+    if (!quantity || quantity <= 0) {
+      throw new ApiError(400, `Invalid quantity for SKU ${product.sku}`);
+    }
+
+    const unitPrice = Number(priceRow.price || 0);
+    const lineTotal = unitPrice * quantity;
+
+    orderItems.push({
+      productId: product._id,
+      name: product.name,
+      sku: product.sku,
+      code: product.code || "",
+      packLabel: product.pack?.label || "",
+      quantity,
+      unit: product.uom?.base || product.pack?.unit || "PCS",
+      unitPrice,
+      lineTotal,
+    });
+
+    subtotal += lineTotal;
+  }
+
+  const paymentMethod = normalizeText(
+    payload.paymentMethod || payload.payment?.method,
+  );
+  if (!paymentMethod) {
+    throw new Error("Payment method is required before placing order");
+  }
+
+  const order = await Order.create({
+    orderNumber: generateOrderNumber(),
+    orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+    dispatcherCustomerId: dispatcher._id,
+    // Reuses the dealer-shaped snapshot with the dispatcher's own profile
+    // so every existing dealer-facing notification/email/PDF code path
+    // (which reads order.dealerSnapshot) works unchanged for this order
+    // type too - the dispatcher IS the customer being notified.
+    dealerSnapshot: {
+      companyName: dispatcher.companyName || "",
+      contactName: dispatcher.name || "",
+      email: dispatcher.email || "",
+      phone: dispatcher.phone || "",
+      address: dispatcher.address || "",
+      panVat: "",
+      fulfillmentMode: "FACTORY",
+    },
+    status: "SUBMITTED",
+    items: orderItems,
+    totals: {
+      subtotal,
+      discount: 0,
+      tax: 0,
+      total: subtotal,
+      currency: "NPR",
+    },
+    payment: { method: paymentMethod },
+    dealerNote: normalizeText(payload.note || payload.dealerNote),
+    submittedByUserId: user?.sub || user?.id || null,
+  });
+
+  notifyFactoryOrderSubmitted(order).catch((error) => {
+    console.warn(
+      "[admin-notification] dispatcher replenishment order:",
+      error.message,
+    );
+  });
+
+  return order;
+}
+
+export async function getMyDispatcherStock({
+  user,
+  page = 1,
+  limit = 100,
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+  return listDispatcherStock({ dispatcherId, page, limit });
+}
+
+// ----------------------------
+// Single-step fulfillment for a dispatcher's assigned dealer orders:
+// Verified -> Dispatched (goods leave the dispatcher's warehouse - deducts
+// the dispatcher's own stock and credits the dealer's received-quantity
+// counter). Dispatched is terminal for these orders - there is no separate
+// delivery confirmation, since the dispatcher is the local final-mile
+// handoff.
+// ----------------------------
+
+export async function dispatchAssignedOrder({
+  user,
+  orderId,
+  payload = {},
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
+  if (normalizeStatus(order.status) !== "VERIFIED") {
+    throw new Error("Order must be verified before it can be dispatched");
+  }
+
+  const note = normalizeText(payload.note);
+  const actorUserId = user?.sub || user?.id || null;
+  const previousStatus = order.status;
+
+  let dealerEmailSentAt = null;
+  try {
+    dealerEmailSentAt = await sendDealerStatusEmail({
+      order,
+      status: "DISPATCHED",
+    });
+  } catch (error) {
+    console.warn(
+      "[dispatcher-email] dispatched status email failed:",
+      error.message,
+    );
+  }
+
+  let updatedOrder;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const updated = await Order.findOneAndUpdate(
+        { _id: order._id, dispatcherId, status: "VERIFIED" },
+        {
+          $set: { status: "DISPATCHED" },
+          $push: {
+            statusHistory: {
+              fromStatus: previousStatus || "",
+              toStatus: "DISPATCHED",
+              note,
+              changedByUserId: actorUserId,
+              changedByRole: "DISPATCHER",
+              changedAt: new Date(),
+              dealerEmailSentAt,
+            },
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!updated) {
+        throw new Error(
+          "Order status changed before it could be dispatched. Please refresh and try again.",
+        );
+      }
+
+      // Both stock movements share this transaction with the status
+      // transition: if either the dispatcher doesn't have enough stock,
+      // or something else fails, the status change rolls back too.
+      await consumeDispatcherStockForOrder({
+        dispatcherId,
+        items: updated.items,
+        actorUser: user,
+        session,
+      });
+
+      await recordPurchaseMovement({
+        dealerId: updated.dealerId,
+        items: updated.items,
+        orderId: updated._id,
+        actorUser: user,
+        actorRole: "DISPATCHER",
+        session,
+      });
+
+      updatedOrder = updated;
+    });
+  } finally {
+    session.endSession();
+  }
+
+  return updatedOrder;
 }

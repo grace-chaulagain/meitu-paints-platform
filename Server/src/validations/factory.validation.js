@@ -10,18 +10,21 @@ export const factoryOrderParamsSchema = z
 export const factoryOrderListQuerySchema = z
   .object({
     stage: z
-      .enum(["ALL", "INBOX", "PREPARING", "SHIPMENT", "COMPLETED", "all", "inbox", "preparing", "shipment", "completed"])
+      .enum(["ALL", "INBOX", "SHIPMENT", "COMPLETED", "all", "inbox", "shipment", "completed"])
       .optional(),
     status: optionalTrimmedString(40),
+    origin: z
+      .enum([
+        "DEALER",
+        "DISPATCHER_REPLENISHMENT",
+        "dealer",
+        "dispatcher_replenishment",
+      ])
+      .optional(),
+    dealerId: objectIdSchema.optional(),
     q: optionalTrimmedString(120),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
-  })
-  .strict();
-
-export const factoryPrepareOrderBodySchema = z
-  .object({
-    note: optionalTrimmedString(1000),
   })
   .strict();
 

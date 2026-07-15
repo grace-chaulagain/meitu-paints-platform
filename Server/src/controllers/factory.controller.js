@@ -11,20 +11,16 @@ export const listFactoryOrdersController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, ...out });
 });
 
+export const listFactoryDealersController = asyncHandler(async (_req, res) => {
+  const out = await factoryService.listVerifiedDealersForFactory();
+  res.status(200).json({ ok: true, ...out });
+});
+
 export const getFactoryOrderController = asyncHandler(async (req, res) => {
   const item = await factoryService.getFactoryOrder({
     orderId: req.params.orderId,
   });
   res.status(200).json({ ok: true, item });
-});
-
-export const startPreparingOrderController = asyncHandler(async (req, res) => {
-  const item = await factoryService.startPreparingOrder({
-    orderId: req.params.orderId,
-    factoryUser: req.user,
-    note: req.body?.note || "",
-  });
-  res.status(200).json({ ok: true, message: "Order moved to preparing.", item });
 });
 
 export const markOutForDeliveryController = asyncHandler(async (req, res) => {
@@ -78,4 +74,12 @@ export const getProformaInvoiceController = asyncHandler(async (req, res) => {
     orderId: req.params.orderId,
   });
   res.status(200).json({ ok: true, item });
+});
+
+export const issueFactoryInvoiceController = asyncHandler(async (req, res) => {
+  const item = await factoryService.issueFactoryInvoice({
+    orderId: req.params.orderId,
+    factoryUser: req.user,
+  });
+  res.status(200).json({ ok: true, message: "Invoice issued.", item });
 });

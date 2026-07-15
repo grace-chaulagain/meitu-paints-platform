@@ -21,7 +21,7 @@ export const dealerApplicationBodySchema = z
 export const dispatcherApplicationBodySchema = z
   .object({
     name: trimmedString(120),
-    companyName: optionalTrimmedString(120),
+    companyName: trimmedString(120),
     phone: phoneSchema,
     email: emailSchema,
     address: optionalTrimmedString(200),

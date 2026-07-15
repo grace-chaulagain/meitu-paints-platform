@@ -41,8 +41,18 @@ export const createOrderController = asyncHandler(async (req, res) => {
 // ----------------------------
 
 export const listOrdersController = asyncHandler(async (req, res) => {
-  const { status, archive, q, fulfillmentMode, dispatcherId, page, limit } =
-    req.query || {};
+  const {
+    status,
+    archive,
+    q,
+    fulfillmentMode,
+    dispatcherId,
+    orderOrigin,
+    from,
+    to,
+    page,
+    limit,
+  } = req.query || {};
 
   const out = await orderService.listOrdersForActor({
     actorUser: req.user,
@@ -51,6 +61,9 @@ export const listOrdersController = asyncHandler(async (req, res) => {
     q,
     fulfillmentMode,
     dispatcherId,
+    orderOrigin,
+    from,
+    to,
     page,
     limit,
   });

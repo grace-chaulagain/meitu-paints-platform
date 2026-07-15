@@ -139,6 +139,13 @@ const ProductSchema = new mongoose.Schema(
     // Keep this for quick UI defaults. For tiered SKUs, you can set it to Tier-1 price.
     basePrice: { type: Number, default: 0 },
 
+    // Independent per-SKU pricing for Dispatchers replenishing their own
+    // regional stock from the Factory. Same shape as `pricing` so the
+    // existing tier-computation logic (Frontend/meitupaints/src/dealer/pricing.js)
+    // works unchanged against either field.
+    dispatcherPricing: { type: PricingSchema, default: () => ({}) },
+    dispatcherBasePrice: { type: Number, default: 0 },
+
     stock: {
       type: ProductStockSchema,
       default: () => ({}),

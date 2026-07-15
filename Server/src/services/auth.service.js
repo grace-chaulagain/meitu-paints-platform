@@ -22,7 +22,66 @@ import { IS_PRODUCTION, JWT_REFRESH_SECRET } from "../config/env.js";
 // ----------------------------
 
 const REFRESH_TTL_DAYS = Number(process.env.REFRESH_TTL_DAYS || 7);
-const REFRESH_ROTATION_GRACE_MS = 60 * 1000;
+// Widened from 60s: the frontend now coordinates refreshes across tabs (see
+// api/client.js) so simultaneous rotation races should be rare, but this
+// window is the fallback safety net for when that coordination doesn't land
+// (e.g. BroadcastChannel unavailable) - it only affects how long an
+// already-superseded refresh token is still accepted, not how long a
+// legitimate session lasts.
+const REFRESH_ROTATION_GRACE_MS = 2 * 60 * 1000;
+
+// Refresh tokens rotate on every use (single-use) within a given session,
+// which is safe for that one session but races when the same session is
+// open in two tabs: both may present the same still-current token within
+// milliseconds of each other. Only one can win the atomic rotation below;
+// the loser must not be treated as a stale/replayed token (that would
+// silently and permanently invalidate one of the two tabs on its very next
+// refresh, well before its refresh token was actually meant to expire).
+// This short-lived, in-process cache lets the losing request converge on
+// the exact same newly-issued refresh token the winner already received,
+// instead of minting a competing one or being rejected outright. Keyed by
+// the specific old token hash being presented (effectively unique per
+// session), so it can't leak a rotation result across different sessions.
+// Entries are swept lazily since they only ever live for
+// REFRESH_ROTATION_GRACE_MS.
+const recentRotations = new Map();
+
+function cacheRotation(previousHash, refreshToken) {
+  recentRotations.set(previousHash, {
+    refreshToken,
+    expiresAt: Date.now() + REFRESH_ROTATION_GRACE_MS,
+  });
+}
+
+function getCachedRotation(previousHash) {
+  const entry = recentRotations.get(previousHash);
+  if (!entry) return null;
+
+  if (entry.expiresAt <= Date.now()) {
+    recentRotations.delete(previousHash);
+    return null;
+  }
+
+  return entry.refreshToken;
+}
+
+// Sessions carry their own expiry and (during a rotation race) a short grace
+// window for the just-superseded token - a session is worth keeping as long
+// as either is still alive. Called on login/refresh so abandoned sessions
+// don't accumulate forever on the user document.
+function pruneExpiredSessions(sessions) {
+  const now = Date.now();
+  return (sessions || []).filter((session) => {
+    const expiresAt = session.expiresAt?.getTime?.() || 0;
+    const graceUntil = session.previousTokenValidUntil?.getTime?.() || 0;
+    return expiresAt > now || graceUntil > now;
+  });
+}
+
+// Caps how many concurrent sessions (tabs/devices/automated clients) a
+// single account can accumulate - old logins are evicted first so a
+// forgotten-open tab from weeks ago can't outlive this indefinitely.
+const MAX_SESSIONS_PER_USER = 8;
 const SETUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 const NEUTRAL_AUTH_RESPONSE = {
@@ -74,6 +133,7 @@ const toPublicUser = (u) => ({
   dispatcherId: u.dispatcherId || null,
   accountStatus: u.accountStatus || USER_ACCOUNT_STATUS.ACTIVE,
   passwordSetAt: u.passwordSetAt || null,
+  avatarUrl: u.avatar?.url || null,
 });
 
 const toPublicDealerProfile = (dealer) => {
@@ -499,7 +559,7 @@ async function loginCore({
     .trim();
 
   const user = await User.findOne({ email: normalizedEmail }).select(
-    "+passwordHash",
+    "+passwordHash +sessions",
   );
 
   if (
@@ -553,12 +613,23 @@ async function loginCore({
     role: user.role,
   });
 
-  user.refreshTokenHash = hashToken(refreshToken);
-  user.refreshTokenExpiresAt = new Date(
-    Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000,
-  );
-  user.previousRefreshTokenHash = null;
-  user.previousRefreshTokenValidUntil = null;
+  // A new login adds its own session rather than replacing whatever the
+  // account's other tabs/devices/automated clients are already using - see
+  // the SessionSchema comment in User.model.js for why.
+  const sessions = pruneExpiredSessions(user.sessions);
+  sessions.push({
+    tokenHash: hashToken(refreshToken),
+    previousTokenHash: null,
+    previousTokenValidUntil: null,
+    expiresAt: new Date(Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000),
+    ip: ip || "",
+    userAgent: userAgent || "",
+    lastUsedAt: new Date(),
+  });
+  while (sessions.length > MAX_SESSIONS_PER_USER) {
+    sessions.shift();
+  }
+  user.sessions = sessions;
   user.lastLoginAt = new Date();
   await user.save();
 
@@ -591,9 +662,7 @@ export async function refresh({ refreshToken }) {
   const userId = decoded?.sub;
   if (!userId) throw new ApiError(401, "Invalid refresh token");
 
-  const user = await User.findById(userId).select(
-    "+refreshTokenHash +previousRefreshTokenHash",
-  );
+  const user = await User.findById(userId).select("+sessions");
   if (
     !user ||
     !user.isActive ||
@@ -614,30 +683,7 @@ export async function refresh({ refreshToken }) {
     dealerProfile = toPublicDealerProfile(dealer);
   }
 
-  if (!user.refreshTokenHash || !user.refreshTokenExpiresAt) {
-    throw new ApiError(401, "Refresh token not found", {
-      code: "REFRESH_TOKEN_REVOKED",
-    });
-  }
-
-  if (user.refreshTokenExpiresAt.getTime() < Date.now()) {
-    throw new ApiError(401, "Refresh token expired", {
-      code: "REFRESH_TOKEN_EXPIRED",
-    });
-  }
-
   const incomingHash = hashToken(refreshToken);
-  const previousTokenStillValid =
-    user.previousRefreshTokenHash &&
-    incomingHash === user.previousRefreshTokenHash &&
-    user.previousRefreshTokenValidUntil?.getTime?.() > Date.now();
-
-  if (incomingHash !== user.refreshTokenHash && !previousTokenStillValid) {
-    throw new ApiError(401, "Refresh token not found", {
-      code: "REFRESH_TOKEN_REVOKED",
-    });
-  }
-
   const accessToken = signAccessToken({
     sub: user._id.toString(),
     role: user.role,
@@ -645,50 +691,110 @@ export async function refresh({ refreshToken }) {
     dispatcherId: user.dispatcherId || null,
   });
 
-  let newRefreshToken = null;
+  const session = (user.sessions || []).find(
+    (s) => s.tokenHash === incomingHash,
+  );
 
-  if (!previousTokenStillValid) {
-    newRefreshToken = signRefreshToken({
+  // Fast path: this request believes it holds this session's current token.
+  // Rotate it atomically - the filter re-checks that session's tokenHash at
+  // write time, so if a second request (e.g. a second tab sharing this same
+  // session) is racing on the exact same token, only one of the two
+  // `findOneAndUpdate` calls can actually match and win. The loser falls
+  // through instead of treating the race as a revoked/replayed token. Other
+  // sessions on this account (other logins/devices) are untouched either way.
+  if (session) {
+    if (session.expiresAt.getTime() < Date.now()) {
+      throw new ApiError(401, "Refresh token expired", {
+        code: "REFRESH_TOKEN_EXPIRED",
+      });
+    }
+
+    const candidateRefreshToken = signRefreshToken({
       sub: user._id.toString(),
       role: user.role,
     });
 
-    user.previousRefreshTokenHash = user.refreshTokenHash;
-    user.previousRefreshTokenValidUntil = new Date(
-      Date.now() + REFRESH_ROTATION_GRACE_MS,
+    const rotated = await User.findOneAndUpdate(
+      { _id: user._id, "sessions.tokenHash": incomingHash },
+      {
+        $set: {
+          "sessions.$.previousTokenHash": incomingHash,
+          "sessions.$.previousTokenValidUntil": new Date(
+            Date.now() + REFRESH_ROTATION_GRACE_MS,
+          ),
+          "sessions.$.tokenHash": hashToken(candidateRefreshToken),
+          "sessions.$.expiresAt": new Date(
+            Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000,
+          ),
+          "sessions.$.lastUsedAt": new Date(),
+        },
+      },
     );
-    user.refreshTokenHash = hashToken(newRefreshToken);
-    user.refreshTokenExpiresAt = new Date(
-      Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000,
-    );
-    await user.save();
+
+    if (rotated) {
+      cacheRotation(incomingHash, candidateRefreshToken);
+
+      return {
+        user: toPublicUser(user),
+        dealerProfile,
+        accessToken,
+        refreshToken: candidateRefreshToken,
+      };
+    }
+    // Lost the race - another request already rotated this session between
+    // our read above and this write. Re-read fresh state and fall through to
+    // the grace-window check below rather than failing this request outright.
   }
 
+  const fresh = session ? await User.findById(user._id).select("+sessions") : user;
+
+  const supersededSession = (fresh?.sessions || []).find(
+    (s) =>
+      s.previousTokenHash === incomingHash &&
+      s.previousTokenValidUntil?.getTime?.() > Date.now(),
+  );
+
+  if (!supersededSession) {
+    throw new ApiError(401, "Refresh token not found", {
+      code: "REFRESH_TOKEN_REVOKED",
+    });
+  }
+
+  // This request's token was already the superseded one for its session
+  // (either it always was, or it just lost the rotation race above). Hand
+  // back the exact same new refresh token the winning request already
+  // received, if it's still cached, so both tabs converge on one valid
+  // cookie instead of one of them being silently doomed to fail its next
+  // refresh.
   return {
     user: toPublicUser(user),
     dealerProfile,
     accessToken,
-    refreshToken: newRefreshToken,
+    refreshToken: getCachedRotation(incomingHash),
   };
 }
 
 export async function logout({ refreshToken }) {
   if (!refreshToken) return { ok: true };
 
+  // Removes only the one session this cookie belongs to - logging out in one
+  // tab/device must not affect any other active session on the account.
   const refreshTokenHash = hashToken(refreshToken);
   await User.updateOne(
     {
       $or: [
-        { refreshTokenHash },
-        { previousRefreshTokenHash: refreshTokenHash },
+        { "sessions.tokenHash": refreshTokenHash },
+        { "sessions.previousTokenHash": refreshTokenHash },
       ],
     },
     {
-      $set: {
-        refreshTokenHash: null,
-        refreshTokenExpiresAt: null,
-        previousRefreshTokenHash: null,
-        previousRefreshTokenValidUntil: null,
+      $pull: {
+        sessions: {
+          $or: [
+            { tokenHash: refreshTokenHash },
+            { previousTokenHash: refreshTokenHash },
+          ],
+        },
       },
     },
   );
@@ -785,10 +891,9 @@ export async function resetPassword(token, newPassword) {
   if (user.accountStatus !== USER_ACCOUNT_STATUS.ACTIVE) {
     user.accountStatus = USER_ACCOUNT_STATUS.ACTIVE;
   }
-  user.refreshTokenHash = null;
-  user.refreshTokenExpiresAt = null;
-  user.previousRefreshTokenHash = null;
-  user.previousRefreshTokenValidUntil = null;
+  // A password reset invalidates every active session everywhere, not just
+  // the one making this request.
+  user.sessions = [];
   await user.save();
 
   record.usedAt = new Date();
@@ -954,10 +1059,9 @@ export async function setPasswordFromSetupToken(token, newPassword) {
   user.passwordSetAt = new Date();
   user.accountStatus = USER_ACCOUNT_STATUS.ACTIVE;
   user.invitationExpiresAt = null;
-  user.refreshTokenHash = null;
-  user.refreshTokenExpiresAt = null;
-  user.previousRefreshTokenHash = null;
-  user.previousRefreshTokenValidUntil = null;
+  // A fresh password setup invalidates any stray sessions (there shouldn't
+  // normally be any yet, but this keeps the invariant simple).
+  user.sessions = [];
   await user.save();
 
   record.usedAt = new Date();

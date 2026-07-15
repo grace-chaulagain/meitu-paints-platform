@@ -5,11 +5,12 @@ import {
   getFactoryDashboardController,
   getFactoryOrderController,
   getProformaInvoiceController,
+  issueFactoryInvoiceController,
+  listFactoryDealersController,
   listFactoryOrdersController,
   markDeliveredController,
   markOutForDeliveryController,
   rejectFactoryOrderController,
-  startPreparingOrderController,
 } from "../controllers/factory.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
@@ -23,7 +24,6 @@ import {
   factoryDeliveryBodySchema,
   factoryOrderListQuerySchema,
   factoryOrderParamsSchema,
-  factoryPrepareOrderBodySchema,
   factoryRejectBodySchema,
   factoryShipmentBodySchema,
 } from "../validations/factory.validation.js";
@@ -38,16 +38,11 @@ router.get(
   validateQuery(factoryOrderListQuerySchema),
   listFactoryOrdersController,
 );
+router.get("/dealers", listFactoryDealersController);
 router.get(
   "/orders/:orderId",
   validateParams(factoryOrderParamsSchema),
   getFactoryOrderController,
-);
-router.post(
-  "/orders/:orderId/start-preparing",
-  validateParams(factoryOrderParamsSchema),
-  validateBody(factoryPrepareOrderBodySchema),
-  startPreparingOrderController,
 );
 router.post(
   "/orders/:orderId/mark-out-for-delivery",
@@ -77,6 +72,11 @@ router.get(
   "/orders/:orderId/proforma",
   validateParams(factoryOrderParamsSchema),
   getProformaInvoiceController,
+);
+router.post(
+  "/orders/:orderId/invoice",
+  validateParams(factoryOrderParamsSchema),
+  issueFactoryInvoiceController,
 );
 
 export default router;

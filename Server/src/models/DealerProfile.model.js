@@ -32,6 +32,13 @@ const DealerProfileSchema = new mongoose.Schema(
       index: true,
     },
 
+    statusChangedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    statusChangedAt: { type: Date, default: null },
+
     fulfillmentMode: {
       type: String,
       enum: ["FACTORY", "DISPATCHER"],
@@ -46,6 +53,13 @@ const DealerProfileSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+
+    routingChangedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    routingChangedAt: { type: Date, default: null },
 
     credit: {
       enabled: { type: Boolean, default: false },

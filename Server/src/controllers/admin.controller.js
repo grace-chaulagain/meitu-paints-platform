@@ -3,7 +3,9 @@ import ApiError from "../utils/apiError.js";
 
 import * as adminService from "../services/admin.service.js";
 import * as adminInsightsService from "../services/adminInsights.service.js";
-import * as factoryService from "../services/factory.service.js";
+import * as dispatcherPricingService from "../services/dispatcherPricing.service.js";
+import * as dealerInventoryService from "../services/dealerInventory.service.js";
+import * as saleService from "../services/sale.service.js";
 import { resendPasswordSetupEmailForUser } from "../services/auth.service.js";
 
 // Settings
@@ -173,6 +175,66 @@ export const getDealerAnalyticsController = asyncHandler(async (req, res) => {
 
   const out = await adminService.getDealerAnalytics({ dealerId });
   res.status(200).json({ ok: true, item: out });
+});
+
+// Dealers: inventory
+export const getDealerInventoryController = asyncHandler(async (req, res) => {
+  const { dealerId } = req.params || {};
+  if (!dealerId) throw new ApiError(400, "Missing dealerId");
+
+  const { q, category, status, sort, page, limit, from, to } = req.query || {};
+  const out = await dealerInventoryService.listDealerStock({
+    dealerId,
+    q,
+    category,
+    status,
+    sort,
+    page,
+    limit,
+    from,
+    to,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDealerInventoryMovementsController = asyncHandler(async (req, res) => {
+  const { dealerId, productId } = req.params || {};
+  if (!dealerId) throw new ApiError(400, "Missing dealerId");
+  if (!productId) throw new ApiError(400, "Missing productId");
+
+  const { page, limit } = req.query || {};
+  const out = await dealerInventoryService.getDealerStockMovements({
+    dealerId,
+    productId,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+// Sales (fleet-wide, across all dealers)
+export const listAdminSalesController = asyncHandler(async (req, res) => {
+  const { dealerId, status, q, from, to, page, limit, dealerPage, dealerLimit } = req.query || {};
+  const out = await saleService.listAllSalesForAdmin({
+    dealerId,
+    status,
+    q,
+    from,
+    to,
+    page,
+    limit,
+    dealerPage,
+    dealerLimit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getAdminSaleController = asyncHandler(async (req, res) => {
+  const { saleId } = req.params || {};
+  if (!saleId) throw new ApiError(400, "Missing saleId");
+
+  const item = await saleService.getSaleForAdmin({ saleId });
+  res.status(200).json({ ok: true, item });
 });
 
 export const getDealerLeaderboardController = asyncHandler(async (req, res) => {
@@ -445,6 +507,92 @@ export const getDispatcherController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, item: out });
 });
 
+export const getDispatcherStockController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  const { page, limit } = req.query || {};
+
+  const out = await adminService.getDispatcherStock({ dispatcherId, page, limit });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherAnalyticsController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const out = await adminService.getDispatcherAnalytics({ dispatcherId });
+  res.status(200).json({ ok: true, item: out });
+});
+
+export const getDispatcherOwnOrdersController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  const { page, limit } = req.query || {};
+
+  const out = await adminService.listDispatcherOwnOrders({ dispatcherId, page, limit });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherFulfilledOrdersController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  const { page, limit } = req.query || {};
+
+  const out = await adminService.listDispatcherFulfilledOrders({ dispatcherId, page, limit });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherDealerStatsController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const out = await adminService.getDispatcherDealerStats({ dispatcherId });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherProductSummaryController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const out = await adminService.getDispatcherProductSummary({ dispatcherId });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherProductMovementsController = asyncHandler(async (req, res) => {
+  const { dispatcherId, productId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  if (!productId) throw new ApiError(400, "Missing productId");
+
+  const out = await adminService.getDispatcherProductMovements({ dispatcherId, productId });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherPricingSummaryController = asyncHandler(async (req, res) => {
+  const out = await dispatcherPricingService.getDispatcherPricingSummary();
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getDispatcherPricingController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const out = await dispatcherPricingService.listDispatcherPricing({ dispatcherId });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const updateDispatcherPricingController = asyncHandler(async (req, res) => {
+  const { dispatcherId } = req.params || {};
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  const { items } = req.body || {};
+
+  const out = await dispatcherPricingService.upsertDispatcherPricing({
+    dispatcherId,
+    items,
+    adminUser: req.user,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
 export const updateDispatcherController = asyncHandler(async (req, res) => {
   const { dispatcherId } = req.params || {};
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
@@ -559,42 +707,6 @@ export const hardDeleteOrderController = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({ ok: true, ...out });
-});
-
-export const approveOrderController = asyncHandler(async (req, res) => {
-  const { orderId } = req.params || {};
-  if (!orderId) throw new ApiError(400, "Missing orderId");
-
-  await adminService.approveOrder({ orderId, adminUser: req.user });
-  res.status(200).json({ ok: true });
-});
-
-export const sendOrderToDispatcherController = asyncHandler(
-  async (req, res) => {
-    const { orderId } = req.params || {};
-    if (!orderId) throw new ApiError(400, "Missing orderId");
-
-    await adminService.sendOrderToDispatcher({ orderId, adminUser: req.user });
-    res.status(200).json({ ok: true });
-  },
-);
-
-export const sendOrderToFactoryController = asyncHandler(async (req, res) => {
-  const { orderId } = req.params || {};
-  const { note = "" } = req.body || {};
-  if (!orderId) throw new ApiError(400, "Missing orderId");
-
-  const item = await factoryService.sendOrderToFactory({
-    orderId,
-    adminUser: req.user,
-    note,
-  });
-
-  res.status(200).json({
-    ok: true,
-    message: "Order sent to Factory.",
-    item,
-  });
 });
 
 export const closeOrderController = asyncHandler(async (req, res) => {

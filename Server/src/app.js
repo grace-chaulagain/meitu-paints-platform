@@ -21,6 +21,10 @@ import "./models/FactorySettings.model.js";
 import "./models/AdminNotificationSettings.model.js";
 import "./models/Notification.model.js";
 import "./models/StockAdjustmentLog.model.js";
+import "./models/Coupon.model.js";
+import "./models/CouponRedemptionHistory.model.js";
+import "./models/CouponRedemptionAttemptLog.model.js";
+import "./models/CouponRewardSettings.model.js";
 
 const app = express();
 const clientIndexPath = path.join(CLIENT_DIST_DIR, "index.html");

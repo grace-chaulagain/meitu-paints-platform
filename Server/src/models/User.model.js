@@ -7,6 +7,23 @@ export const USER_ACCOUNT_STATUS = Object.freeze({
   SUSPENDED: "SUSPENDED",
 });
 
+// One entry per concurrently-active login (tab, device, or automated
+// client) - replaces a single scalar refresh-token slot on the user so
+// that logging in from a second place doesn't invalidate every other
+// active session. Each session rotates independently on refresh.
+const SessionSchema = new mongoose.Schema(
+  {
+    tokenHash: { type: String, required: true },
+    previousTokenHash: { type: String, default: null },
+    previousTokenValidUntil: { type: Date, default: null },
+    expiresAt: { type: Date, required: true },
+    ip: { type: String, default: "" },
+    userAgent: { type: String, default: "" },
+    lastUsedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: { createdAt: true, updatedAt: false }, _id: true },
+);
+
 const UserSchema = new mongoose.Schema(
   {
     username: {
@@ -79,24 +96,23 @@ const UserSchema = new mongoose.Schema(
       default: null,
     },
 
-    refreshTokenHash: {
-      type: String,
-      default: null,
+    sessions: {
+      type: [SessionSchema],
+      default: [],
       select: false,
-      index: true,
     },
-    refreshTokenExpiresAt: { type: Date, default: null },
-    previousRefreshTokenHash: {
-      type: String,
-      default: null,
-      select: false,
-      index: true,
-    },
-    previousRefreshTokenValidUntil: { type: Date, default: null },
 
     lastLoginAt: {
       type: Date,
       default: null,
+    },
+
+    // Profile picture, uploaded to Cloudinary. publicId is kept alongside
+    // url so a replacement upload can delete the previous image instead of
+    // leaking orphaned assets.
+    avatar: {
+      url: { type: String, default: "" },
+      publicId: { type: String, default: "" },
     },
   },
   {

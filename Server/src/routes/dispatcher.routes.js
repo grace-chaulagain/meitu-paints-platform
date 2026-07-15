@@ -4,18 +4,23 @@ import {
   listDispatchersController,
   listPendingDispatchersController,
   getDispatcherByIdController,
-  approveDispatcherController,
-  rejectDispatcherController,
   listVerifiedDispatchersController,
   deleteDispatcherController,
   getMyDispatcherProfileController,
   listMyAssignedDealersController,
+  getMyAssignedDealerByIdController,
   listMyOrdersController,
   getMyOrderByIdController,
   verifyAssignedOrderController,
   rejectAssignedOrderController,
   amendAssignedOrderController,
   listMyOrderArchiveController,
+  createReplenishmentOrderController,
+  getMyDispatcherStockController,
+  dispatchAssignedOrderController,
+  getMyReplenishmentCatalogController,
+  listMyReplenishmentOrdersController,
+  getMyReplenishmentOrderController,
 } from "../controllers/dispatcher.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { applicationRateLimit } from "../middlewares/rateLimit.middleware.js";
@@ -25,6 +30,7 @@ import { dispatcherApplicationBodySchema } from "../validations/application.vali
 import { orderIdParamsSchema } from "../validations/common.validation.js";
 import {
   amendOrderBodySchema,
+  createReplenishmentOrderBodySchema,
   orderReviewBodySchema,
 } from "../validations/order.validation.js";
 
@@ -57,6 +63,13 @@ router.get(
   auth,
   requireRole("DISPATCHER"),
   listMyAssignedDealersController,
+);
+
+router.get(
+  "/me/dealers/:dealerId",
+  auth,
+  requireRole("DISPATCHER"),
+  getMyAssignedDealerByIdController,
 );
 
 router.get(
@@ -108,6 +121,56 @@ router.patch(
   amendAssignedOrderController,
 );
 
+router.post(
+  "/me/orders/:orderId/dispatch",
+  auth,
+  requireRole("DISPATCHER"),
+  validateParams(orderIdParamsSchema),
+  validateBody(orderReviewBodySchema),
+  dispatchAssignedOrderController,
+);
+
+/* ---------------------------------------
+   Dispatcher's own replenishment ordering + stock
+---------------------------------------- */
+
+router.get(
+  "/me/stock",
+  auth,
+  requireRole("DISPATCHER"),
+  getMyDispatcherStockController,
+);
+
+router.get(
+  "/me/replenishment-catalog",
+  auth,
+  requireRole("DISPATCHER"),
+  getMyReplenishmentCatalogController,
+);
+
+router.get(
+  "/me/replenishment-orders",
+  auth,
+  requireRole("DISPATCHER"),
+  listMyReplenishmentOrdersController,
+);
+
+router.get(
+  "/me/replenishment-orders/:orderId",
+  auth,
+  requireRole("DISPATCHER"),
+  validateParams(orderIdParamsSchema),
+  getMyReplenishmentOrderController,
+);
+
+router.post(
+  "/me/replenishment-orders",
+  auth,
+  requireRole("DISPATCHER"),
+  validateBody(createReplenishmentOrderBodySchema),
+  createReplenishmentOrderController,
+);
+
 /* ---------------------------------------
    Admin Dispatcher Management
 ---------------------------------------- */
@@ -133,20 +196,6 @@ router.get(
   auth,
   requireRole("ADMIN"),
   getDispatcherByIdController,
-);
-
-router.patch(
-  "/:dispatcherId/approve",
-  auth,
-  requireRole("ADMIN"),
-  approveDispatcherController,
-);
-
-router.patch(
-  "/:dispatcherId/reject",
-  auth,
-  requireRole("ADMIN"),
-  rejectDispatcherController,
 );
 
 router.delete(

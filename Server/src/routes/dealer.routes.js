@@ -10,18 +10,52 @@ import {
   submitPaymentController,
   listMyPaymentsController,
   getMyOrderOutstandingController,
+  listMyInventoryController,
+  getMyInventoryItemController,
+  getMyInventoryMovementsController,
+  getMyInventoryHistoryController,
+  listMySalesController,
+  getMySaleController,
+  createMySaleController,
+  voidMySaleController,
 } from "../controllers/dealer.controller.js";
+import {
+  getCouponPreviewController,
+  redeemCouponController,
+} from "../controllers/coupon.controller.js";
+import {
+  searchPaintersForDealerController,
+  registerRtpPainterController,
+} from "../controllers/painter.controller.js";
 import {
   validateBody,
   validateParams,
   validateQuery,
 } from "../middlewares/validate.middleware.js";
-import { orderIdParamsSchema, paginationQuerySchema } from "../validations/common.validation.js";
+import { couponRedemptionRateLimit } from "../middlewares/rateLimit.middleware.js";
+import {
+  orderIdParamsSchema,
+  paginationQuerySchema,
+  productIdParamsSchema,
+  saleIdParamsSchema,
+} from "../validations/common.validation.js";
+import { couponTokenParamsSchema, redeemCouponBodySchema } from "../validations/coupon.validation.js";
+import { painterSearchQuerySchema, registerRtpPainterBodySchema } from "../validations/painter.validation.js";
 import {
   createOrderBodySchema,
   dealerPaymentBodySchema,
 } from "../validations/order.validation.js";
 import { updateMeBodySchema } from "../validations/user.validation.js";
+import {
+  inventoryListQuerySchema,
+  inventoryMovementsQuerySchema,
+  inventoryHistoryQuerySchema,
+} from "../validations/dealerInventory.validation.js";
+import {
+  createSaleBodySchema,
+  saleListQuerySchema,
+  voidSaleBodySchema,
+} from "../validations/sale.validation.js";
 
 const router = Router();
 
@@ -52,5 +86,68 @@ router.post(
 );
 
 router.get("/payments", listMyPaymentsController);
+
+router.get(
+  "/inventory",
+  validateQuery(inventoryListQuerySchema),
+  listMyInventoryController,
+);
+// Must be registered before the /inventory/:productId param route below -
+// otherwise Express would match "history" as a productId value.
+router.get(
+  "/inventory/history",
+  validateQuery(inventoryHistoryQuerySchema),
+  getMyInventoryHistoryController,
+);
+router.get(
+  "/inventory/:productId",
+  validateParams(productIdParamsSchema),
+  getMyInventoryItemController,
+);
+router.get(
+  "/inventory/:productId/movements",
+  validateParams(productIdParamsSchema),
+  validateQuery(inventoryMovementsQuerySchema),
+  getMyInventoryMovementsController,
+);
+
+router.get("/sales", validateQuery(saleListQuerySchema), listMySalesController);
+router.post("/sales", validateBody(createSaleBodySchema), createMySaleController);
+router.get(
+  "/sales/:saleId",
+  validateParams(saleIdParamsSchema),
+  getMySaleController,
+);
+router.post(
+  "/sales/:saleId/void",
+  validateParams(saleIdParamsSchema),
+  validateBody(voidSaleBodySchema),
+  voidMySaleController,
+);
+
+router.get(
+  "/coupons/:token",
+  couponRedemptionRateLimit,
+  validateParams(couponTokenParamsSchema),
+  getCouponPreviewController,
+);
+router.post(
+  "/coupons/:token/redeem",
+  couponRedemptionRateLimit,
+  validateParams(couponTokenParamsSchema),
+  validateBody(redeemCouponBodySchema),
+  redeemCouponController,
+);
+
+router.get(
+  "/painters/search",
+  validateQuery(painterSearchQuerySchema),
+  searchPaintersForDealerController,
+);
+router.post(
+  "/painters",
+  validateBody(registerRtpPainterBodySchema),
+  registerRtpPainterController,
+);
 
 export default router;

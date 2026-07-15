@@ -108,6 +108,14 @@ export const adminOrderListQuerySchema = z
     fulfillmentMode: z.enum(["FACTORY", "DISPATCHER", "factory", "dispatcher"]).optional(),
     dealerId: objectIdSchema.optional(),
     dispatcherId: objectIdSchema.optional(),
+    orderOrigin: z
+      .enum([
+        "DEALER",
+        "DISPATCHER_REPLENISHMENT",
+        "dealer",
+        "dispatcher_replenishment",
+      ])
+      .optional(),
     from: optionalTrimmedString(40),
     to: optionalTrimmedString(40),
     page: z.coerce.number().int().min(1).max(10000).optional(),
@@ -128,5 +136,20 @@ export const hardDeleteOrderBodySchema = z
   .object({
     confirmation: z.string().trim().min(1).max(120),
     reason: optionalTrimmedString(500),
+  })
+  .strict();
+
+export const dispatcherReplenishmentItemSchema = z
+  .object({
+    productId: objectIdSchema,
+    quantity: quantitySchema,
+  })
+  .strict();
+
+export const createReplenishmentOrderBodySchema = z
+  .object({
+    items: z.array(dispatcherReplenishmentItemSchema).min(1).max(100),
+    paymentMethod: z.string().trim().min(1).max(80),
+    note: optionalTrimmedString(1000),
   })
   .strict();

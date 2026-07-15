@@ -299,12 +299,18 @@ export async function listMyOrders({
   const query = { dealerId, isDeleted: { $ne: true } };
 
   if (status) {
-    const normalizedStatus =
-      String(status).toUpperCase() === "ARCHIVE"
-        ? "ARCHIVED"
-        : String(status).toUpperCase();
+    const normalizedStatus = String(status).toUpperCase();
 
-    query.status = normalizedStatus;
+    // "Archived" isn't a status value in the Order schema's enum - it's
+    // tracked via a separate archivedAt timestamp (auto-set for every
+    // status except SUBMITTED), the same definition adminInsights.service.js
+    // already uses. A literal status match here would never match any
+    // document.
+    if (normalizedStatus === "ARCHIVE" || normalizedStatus === "ARCHIVED") {
+      query.archivedAt = { $ne: null };
+    } else {
+      query.status = normalizedStatus;
+    }
   }
 
   const search = sanitizeStr(q, 120).toLowerCase();
@@ -377,18 +383,7 @@ export async function getMyOrderStatementsReport({
   const normalizedStatus = sanitizeStr(status, 40).toUpperCase();
   if (normalizedStatus) {
     if (["ARCHIVE", "ARCHIVED"].includes(normalizedStatus)) {
-      query.status = {
-        $in: [
-          "VERIFIED",
-          "REJECTED",
-          "PROCESSING",
-          "AWAITING_SHIPMENT",
-          "OUT_FOR_DELIVERY",
-          "DELIVERED",
-          "CLOSED",
-          "CANCELLED",
-        ],
-      };
+      query.status = { $ne: "SUBMITTED" };
     } else if (normalizedStatus === "PENDING") {
       query.status = "SUBMITTED";
     } else {
@@ -657,9 +652,15 @@ export async function submitPayment({ user, orderId, payload = {} }) {
     dealerId,
     method: sanitizeStr(payload.method, 30),
     amount,
-    proofUrl: sanitizeStr(payload.proofUrl, 500),
-    note: sanitizeStr(payload.note, 200),
-    status: PAYMENT_STATUS?.PENDING ?? "PENDING",
+    currency: order.totals?.currency || "NPR",
+    // Schema only has a nested proof.fileUrl/proof.note - top-level
+    // proofUrl/note fields (as written before this fix) are silently
+    // dropped by Mongoose since they aren't in the schema at all.
+    proof: {
+      fileUrl: sanitizeStr(payload.proofUrl, 500),
+      note: sanitizeStr(payload.note, 200),
+    },
+    status: PAYMENT_STATUS.PENDING_VERIFICATION,
   });
 
   return { ok: true, paymentId: payment._id };
@@ -704,11 +705,10 @@ export async function getMyOrderOutstanding({ user, orderId } = {}) {
 
   if (!order) throw new ApiError(404, "Order not found");
 
-  const verifiedStatuses = [
-    PAYMENT_STATUS?.VERIFIED ?? "VERIFIED",
-    PAYMENT_STATUS?.APPROVED ?? "APPROVED",
-    PAYMENT_STATUS?.CONFIRMED ?? "CONFIRMED",
-  ];
+  // APPROVED/CONFIRMED aren't real values in the Payment status enum -
+  // they never matched anything. VERIFIED and PAID are the two statuses
+  // that actually represent money received.
+  const verifiedStatuses = [PAYMENT_STATUS.VERIFIED, PAYMENT_STATUS.PAID];
 
   const rows = await Payment.find({
     orderId,

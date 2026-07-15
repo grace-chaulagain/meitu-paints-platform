@@ -3,17 +3,22 @@ import {
   getAllDispatchers,
   getPendingDispatchers,
   getDispatcherById,
-  verifyDispatcher,
-  rejectDispatcher,
   listVerifiedDispatchers,
   getMyDispatcherProfile,
   listMyAssignedDealers,
+  getMyAssignedDealerById,
   listMyOrders,
   getMyOrderById,
   verifyAssignedOrder,
   rejectAssignedOrder,
   amendAssignedOrder,
   listMyOrderArchive,
+  createDispatcherReplenishmentOrder,
+  getMyDispatcherStock,
+  dispatchAssignedOrder,
+  listMyReplenishmentOrders,
+  getMyReplenishmentOrderById,
+  getMyReplenishmentCatalog,
 } from "../services/dispatcher.service.js";
 import { deleteDispatcher as scheduleDispatcherDeletion } from "../services/admin.service.js";
 
@@ -72,36 +77,6 @@ export async function getDispatcherByIdController(req, res, next) {
 
     return res.status(200).json({
       ok: true,
-      item,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function approveDispatcherController(req, res, next) {
-  try {
-    const { dispatcherId } = req.params;
-    const item = await verifyDispatcher(dispatcherId, req.body || {});
-
-    return res.status(200).json({
-      ok: true,
-      message: "Dispatcher verified successfully.",
-      item,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function rejectDispatcherController(req, res, next) {
-  try {
-    const { dispatcherId } = req.params;
-    const item = await rejectDispatcher(dispatcherId, req.body || {});
-
-    return res.status(200).json({
-      ok: true,
-      message: "Dispatcher rejected successfully.",
       item,
     });
   } catch (error) {
@@ -182,9 +157,24 @@ export async function listMyAssignedDealersController(req, res, next) {
   }
 }
 
+export async function getMyAssignedDealerByIdController(req, res, next) {
+  try {
+    const { dealerId } = req.params;
+
+    const item = await getMyAssignedDealerById({
+      user: req.user,
+      dealerId,
+    });
+
+    return res.status(200).json({ ok: true, item });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function listMyOrdersController(req, res, next) {
   try {
-    const { status, q, page, limit, archive } = req.query || {};
+    const { status, q, page, limit, archive, dealerId } = req.query || {};
 
     const out = await listMyOrders({
       user: req.user,
@@ -193,6 +183,7 @@ export async function listMyOrdersController(req, res, next) {
       page,
       limit,
       archive,
+      dealerId,
     });
 
     return res.status(200).json({
@@ -296,6 +287,121 @@ export async function listMyOrderArchiveController(req, res, next) {
     return res.status(200).json({
       ok: true,
       ...out,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/* ---------------------------------------
+   Dispatcher's own replenishment ordering + stock
+---------------------------------------- */
+
+export async function createReplenishmentOrderController(req, res, next) {
+  try {
+    const order = await createDispatcherReplenishmentOrder({
+      user: req.user,
+      payload: req.body || {},
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: "Replenishment order submitted successfully.",
+      item: order,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMyDispatcherStockController(req, res, next) {
+  try {
+    const { page, limit } = req.query || {};
+
+    const out = await getMyDispatcherStock({
+      user: req.user,
+      page,
+      limit,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      ...out,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMyReplenishmentCatalogController(req, res, next) {
+  try {
+    const { q } = req.query || {};
+
+    const out = await getMyReplenishmentCatalog({ user: req.user, q });
+
+    return res.status(200).json({
+      ok: true,
+      ...out,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listMyReplenishmentOrdersController(req, res, next) {
+  try {
+    const { status, q, page, limit, archive } = req.query || {};
+
+    const out = await listMyReplenishmentOrders({
+      user: req.user,
+      status,
+      q,
+      page,
+      limit,
+      archive,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      ...out,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMyReplenishmentOrderController(req, res, next) {
+  try {
+    const { orderId } = req.params;
+
+    const item = await getMyReplenishmentOrderById({
+      user: req.user,
+      orderId,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      item,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function dispatchAssignedOrderController(req, res, next) {
+  try {
+    const { orderId } = req.params;
+
+    const item = await dispatchAssignedOrder({
+      user: req.user,
+      orderId,
+      payload: req.body || {},
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Order dispatched successfully.",
+      item,
     });
   } catch (error) {
     next(error);

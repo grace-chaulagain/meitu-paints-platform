@@ -45,3 +45,28 @@ export const orderIdParamsSchema = z
     orderId: objectIdSchema,
   })
   .strict();
+
+export const productIdParamsSchema = z
+  .object({
+    productId: objectIdSchema,
+  })
+  .strict();
+
+export const dealerIdParamsSchema = z
+  .object({
+    dealerId: objectIdSchema,
+  })
+  .strict();
+
+export const dealerProductIdParamsSchema = z
+  .object({
+    dealerId: objectIdSchema,
+    productId: objectIdSchema,
+  })
+  .strict();
+
+export const saleIdParamsSchema = z
+  .object({
+    saleId: objectIdSchema,
+  })
+  .strict();

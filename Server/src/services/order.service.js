@@ -16,7 +16,10 @@ import {
   notifyAssignedDealerOrderSubmitted,
   notifyFactoryOrderSubmitted,
 } from "./adminNotification.service.js";
-import { sendOrderToFactory } from "./factory.service.js";
+import {
+  createFactoryNotification,
+  NOTIFICATION_CATEGORY,
+} from "./notification.service.js";
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { buildOrderSummaryPdfAttachment } from "./orderPdf.service.js";
 import {
@@ -127,12 +130,8 @@ function getUserId(user) {
 }
 
 function buildOrderNumber() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
   const rand = crypto.randomBytes(3).toString("hex").toUpperCase();
-  return `ORD-${y}${m}${d}-${rand}`;
+  return `ORD-${rand}`;
 }
 
 function parsePositiveNumber(value, label) {
@@ -643,6 +642,9 @@ export async function listOrdersForActor({
   q,
   fulfillmentMode,
   dispatcherId,
+  orderOrigin,
+  from,
+  to,
   page = 1,
   limit = 20,
 }) {
@@ -651,21 +653,15 @@ export async function listOrdersForActor({
   const query = { isDeleted: { $ne: true } };
   const normalizedStatus = normalizeUpper(status);
 
-  if (normalizedStatus) {
+  if (normalizedStatus === "ALL") {
+    // Explicit full-register view. The historical default for this endpoint is
+    // SUBMITTED-only, so callers that need every status must opt in.
+  } else if (normalizedStatus) {
     query.status = normalizedStatus;
   } else if (archive === true || String(archive) === "true") {
-    query.status = {
-      $in: [
-        ORDER_STATUS.VERIFIED,
-        ORDER_STATUS.REJECTED,
-        ORDER_STATUS.PROCESSING,
-        ORDER_STATUS.AWAITING_SHIPMENT,
-        ORDER_STATUS.OUT_FOR_DELIVERY,
-        ORDER_STATUS.DELIVERED,
-        ORDER_STATUS.CLOSED,
-        ORDER_STATUS.CANCELLED,
-      ],
-    };
+    // SUBMITTED is the only "not yet reviewed" status - everything else is
+    // archived by definition, so this is just "not submitted".
+    query.status = { $ne: ORDER_STATUS.SUBMITTED };
   } else {
     query.status = ORDER_STATUS.SUBMITTED;
   }
@@ -673,6 +669,11 @@ export async function listOrdersForActor({
   const normalizedFulfillmentMode = normalizeUpper(fulfillmentMode);
   if (["FACTORY", "DISPATCHER"].includes(normalizedFulfillmentMode)) {
     query["dealerSnapshot.fulfillmentMode"] = normalizedFulfillmentMode;
+  }
+
+  const normalizedOrigin = normalizeUpper(orderOrigin);
+  if (["DEALER", "DISPATCHER_REPLENISHMENT"].includes(normalizedOrigin)) {
+    query.orderOrigin = normalizedOrigin;
   }
 
   if (isDealer(actorUser)) {
@@ -703,8 +704,23 @@ export async function listOrdersForActor({
     ];
   }
 
+  const fromDate = from ? new Date(from) : null;
+  const toDate = to ? new Date(to) : null;
+  if ((fromDate && !Number.isNaN(fromDate.getTime())) || (toDate && !Number.isNaN(toDate.getTime()))) {
+    query.createdAt = {};
+    if (fromDate && !Number.isNaN(fromDate.getTime())) {
+      query.createdAt.$gte = fromDate;
+    }
+    if (toDate && !Number.isNaN(toDate.getTime())) {
+      // Treat "to" as inclusive of the whole calendar day.
+      const endOfDay = new Date(toDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = endOfDay;
+    }
+  }
+
   const safePage = Math.max(1, Number(page || 1));
-  const perPage = Math.min(100, Math.max(1, Number(limit || 20)));
+  const perPage = Math.min(200, Math.max(1, Number(limit || 20)));
   const skip = (safePage - 1) * perPage;
 
   const [items, total] = await Promise.all([
@@ -883,66 +899,148 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
   }
 
   const reviewMeta = await assertCanReviewOrder({ order, actorUser });
-
   const previousStatus = order.status;
-  order.status = ORDER_STATUS.VERIFIED;
-  order.review = {
-    reviewedByRole: reviewMeta.reviewedByRole,
-    reviewedByUserId: reviewMeta.reviewedByUserId,
-    reviewedAt: new Date(),
-    reviewNote: normalizeText(reviewNote),
-  };
-  order.statusHistory.push({
-    fromStatus: previousStatus || "",
-    toStatus: ORDER_STATUS.VERIFIED,
-    note: normalizeText(reviewNote) || "Order verified.",
-    changedByUserId: getUserId(actorUser),
-    changedByRole: normalizeUpper(actorUser.role),
-    changedAt: new Date(),
-  });
-
+  const normalizedReviewNote = normalizeText(reviewNote);
   const isFactoryOrder =
     (order.dealerSnapshot?.fulfillmentMode || "FACTORY") === "FACTORY";
 
-  if (isFactoryOrder) {
-    await reserveStockForOrder({
-      order,
-      actorUser,
-      reason: "Admin verified order for Factory fulfillment",
-      note: normalizeText(reviewNote),
-    });
+  // The status transition and (for factory orders) the stock reservation
+  // share one transaction: either both land, or neither does. This is
+  // also what closes the two-admins-verify-the-same-order race - the
+  // findOneAndUpdate below only matches if status is still SUBMITTED at
+  // the moment it runs, not at the moment we read it above.
+  //
+  // Both the "already reviewed" and "stock changed" errors below are
+  // optimistic-concurrency signals, not permanent failures - retrying
+  // resolves them the moment the other transaction commits. A genuine
+  // conflict (order already reviewed for real, or truly insufficient
+  // stock) reproduces on every attempt and still surfaces after
+  // MAX_VERIFY_ATTEMPTS, just slightly slower.
+  const MAX_VERIFY_ATTEMPTS = 3;
+  let verifiedOrder;
+  for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt += 1) {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // For factory orders, verification IS "sent to Factory" - VERIFIED
+        // is the resting state the factory's Inbox queue reads from, so
+        // the sent-to-factory timestamp is stamped in the same write
+        // rather than as a separate follow-up status transition.
+        const setFields = {
+          status: ORDER_STATUS.VERIFIED,
+          review: {
+            reviewedByRole: reviewMeta.reviewedByRole,
+            reviewedByUserId: reviewMeta.reviewedByUserId,
+            reviewedAt: new Date(),
+            reviewNote: normalizedReviewNote,
+          },
+        };
+        if (isFactoryOrder) {
+          setFields["factory.sentToFactoryAt"] = new Date();
+          setFields["factory.sentToFactoryBy"] = getUserId(actorUser);
+        }
 
-    if (!smtpConfigured()) {
-      console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
-    } else {
-      const recipients = await buildFactoryRecipients();
-      const mail = buildFactoryOrderEmail(order);
-      const pdfAttachment = buildOrderSummaryPdfAttachment(order);
+        const updated = await Order.findOneAndUpdate(
+          { _id: orderId, status: ORDER_STATUS.SUBMITTED },
+          {
+            $set: setFields,
+            $push: {
+              statusHistory: {
+                fromStatus: previousStatus || "",
+                toStatus: ORDER_STATUS.VERIFIED,
+                note: normalizedReviewNote || "Order verified.",
+                changedByUserId: getUserId(actorUser),
+                changedByRole: normalizeUpper(actorUser.role),
+                changedAt: new Date(),
+              },
+            },
+          },
+          { new: true, session },
+        );
 
-      await sendMail({
-        to: recipients,
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        attachments: [pdfAttachment],
+        if (!updated) {
+          throw new ApiError(
+            409,
+            "This order was already reviewed by someone else. Please refresh and try again.",
+          );
+        }
+
+        if (isFactoryOrder) {
+          await reserveStockForOrder({
+            order: updated,
+            actorUser,
+            reason: "Admin verified order for Factory fulfillment",
+            note: normalizedReviewNote,
+            session,
+          });
+        }
+
+        verifiedOrder = updated;
       });
-
-      order.factoryEmailSentAt = new Date();
+      break;
+    } catch (error) {
+      const isRetryableConflict = error instanceof ApiError && error.statusCode === 409;
+      if (!isRetryableConflict || attempt === MAX_VERIFY_ATTEMPTS) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 40 + Math.random() * 80));
+    } finally {
+      session.endSession();
     }
   }
 
-  await order.save();
-
-  let finalOrder = order;
+  // Email is a best-effort side effect, not part of the transaction above -
+  // a transaction should never stay open across a slow external network
+  // call, and a DB rollback can't "unsend" an email anyway.
   if (isFactoryOrder) {
-    finalOrder = await sendOrderToFactory({
-      orderId: order._id,
-      adminUser: actorUser,
-      note:
-        normalizeText(reviewNote) ||
-        "Order verified and automatically sent to Factory.",
+    if (!smtpConfigured()) {
+      console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
+    } else {
+      try {
+        const recipients = await buildFactoryRecipients();
+        const mail = buildFactoryOrderEmail(verifiedOrder);
+        const pdfAttachment = buildOrderSummaryPdfAttachment(verifiedOrder);
+
+        await sendMail({
+          to: recipients,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
+          attachments: [pdfAttachment],
+        });
+
+        verifiedOrder.factoryEmailSentAt = new Date();
+        await verifiedOrder.save();
+      } catch (error) {
+        console.warn("[factory-email] Failed to send factory order email; continuing without blocking verification.", {
+          orderId: String(verifiedOrder._id),
+          orderNumber: verifiedOrder.orderNumber,
+          message: error?.message,
+        });
+      }
+    }
+  }
+
+  if (isFactoryOrder) {
+    createFactoryNotification({
+      category: NOTIFICATION_CATEGORY.FACTORY_ORDER,
+      title: `Order ${verifiedOrder.orderNumber || ""} sent to Factory`.trim(),
+      description: `${verifiedOrder.dealerSnapshot?.companyName || "A dealer"} is awaiting factory fulfillment.`,
+      targetUrl: `/factory/dashboard/orders?orderId=${encodeURIComponent(String(verifiedOrder._id))}`,
+      dealerId: verifiedOrder.dealerId,
+      orderId: verifiedOrder._id,
+      metadata: {
+        orderNumber: verifiedOrder.orderNumber || "",
+        companyName: verifiedOrder.dealerSnapshot?.companyName || "",
+        total: verifiedOrder.totals?.total || 0,
+        currency: verifiedOrder.totals?.currency || "NPR",
+      },
+    }).catch((error) => {
+      console.warn("[factory-notification] order sent:", error.message);
     });
   }
+
+  const finalOrder = verifiedOrder;
 
   archiveVerifiedOrderToGoogleSheets(finalOrder).catch((error) => {
     console.error("[google-sheets-archive] Failed to archive verified order", {
@@ -969,41 +1067,70 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
 
   const reviewMeta = await assertCanReviewOrder({ order, actorUser });
 
-  if (!normalizeText(reviewNote)) {
+  const normalizedReviewNote = normalizeText(reviewNote);
+  if (!normalizedReviewNote) {
     throw new ApiError(400, "Rejection reason is required");
   }
 
   const previousStatus = order.status;
-  await releaseReservationForOrder({
-    order,
-    actorUser,
-    reason: "Order rejected during review",
-    note: normalizeText(reviewNote),
-  });
 
-  order.status = ORDER_STATUS.REJECTED;
-  order.review = {
-    reviewedByRole: reviewMeta.reviewedByRole,
-    reviewedByUserId: reviewMeta.reviewedByUserId,
-    reviewedAt: new Date(),
-    reviewNote: normalizeText(reviewNote),
-  };
-  order.rejection = {
-    reason: normalizeText(reviewNote),
-    rejectedAt: new Date(),
-    rejectedBy: getUserId(actorUser),
-    rejectedByRole: normalizeUpper(actorUser.role),
-  };
-  order.statusHistory.push({
-    fromStatus: previousStatus || "",
-    toStatus: ORDER_STATUS.REJECTED,
-    note: normalizeText(reviewNote),
-    reason: normalizeText(reviewNote),
-    changedByUserId: getUserId(actorUser),
-    changedByRole: normalizeUpper(actorUser.role),
-    changedAt: new Date(),
-  });
+  let rejectedOrder;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const updated = await Order.findOneAndUpdate(
+        { _id: orderId, status: ORDER_STATUS.SUBMITTED },
+        {
+          $set: {
+            status: ORDER_STATUS.REJECTED,
+            review: {
+              reviewedByRole: reviewMeta.reviewedByRole,
+              reviewedByUserId: reviewMeta.reviewedByUserId,
+              reviewedAt: new Date(),
+              reviewNote: normalizedReviewNote,
+            },
+            rejection: {
+              reason: normalizedReviewNote,
+              rejectedAt: new Date(),
+              rejectedBy: getUserId(actorUser),
+              rejectedByRole: normalizeUpper(actorUser.role),
+            },
+          },
+          $push: {
+            statusHistory: {
+              fromStatus: previousStatus || "",
+              toStatus: ORDER_STATUS.REJECTED,
+              note: normalizedReviewNote,
+              reason: normalizedReviewNote,
+              changedByUserId: getUserId(actorUser),
+              changedByRole: normalizeUpper(actorUser.role),
+              changedAt: new Date(),
+            },
+          },
+        },
+        { new: true, session },
+      );
 
-  await order.save();
-  return order;
+      if (!updated) {
+        throw new ApiError(
+          409,
+          "This order was already reviewed by someone else. Please refresh and try again.",
+        );
+      }
+
+      await releaseReservationForOrder({
+        order: updated,
+        actorUser,
+        reason: "Order rejected during review",
+        note: normalizedReviewNote,
+        session,
+      });
+
+      rejectedOrder = updated;
+    });
+  } finally {
+    session.endSession();
+  }
+
+  return rejectedOrder;
 }

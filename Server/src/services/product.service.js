@@ -86,8 +86,12 @@ export async function listActiveProducts({ q, category }) {
     const familyPrimaryImage = family?.primaryImage || null;
     const resolvedImage = familyPrimaryImage || productPrimaryImage || null;
 
+    // This endpoint is public/unauthenticated - dispatcher wholesale
+    // pricing must never appear in its response.
+    const { dispatcherPricing, dispatcherBasePrice, ...publicItem } = item;
+
     return {
-      ...item,
+      ...publicItem,
       pricing: normalizePricingForRuntime(item.pricing || {}),
       family,
       displayImage: resolvedImage

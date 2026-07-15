@@ -1,7 +1,40 @@
 import {
   updateCurrentUserProfile,
   changeCurrentUserPassword,
+  uploadUserAvatar,
 } from "../services/user.service.js";
+
+// POST /api/users/me/avatar
+export const uploadAvatar = async (req, res) => {
+  try {
+    if (!req.user?.sub) {
+      return res.status(401).json({
+        ok: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        ok: false,
+        message: "Image file is required",
+      });
+    }
+
+    const user = await uploadUserAvatar(req.user.sub, req.file);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Profile photo updated successfully",
+      avatarUrl: user.avatar?.url || null,
+    });
+  } catch (err) {
+    return res.status(400).json({
+      ok: false,
+      message: err?.message || "Failed to upload profile photo",
+    });
+  }
+};
 
 // PATCH /api/users/me
 export const updateMe = async (req, res) => {

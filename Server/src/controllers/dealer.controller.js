@@ -3,6 +3,8 @@ import ApiError from "../utils/apiError.js";
 
 import * as dealerService from "../services/dealer.service.js";
 import { createDealerOrder } from "../services/dealer.service.js";
+import * as dealerInventoryService from "../services/dealerInventory.service.js";
+import * as saleService from "../services/sale.service.js";
 
 export async function createDealerOrderController(req, res, next) {
   try {
@@ -130,3 +132,112 @@ export const getMyOrderOutstandingController = asyncHandler(
     res.status(200).json({ ok: true, ...out });
   },
 );
+
+// Dealer: inventory
+export const listMyInventoryController = asyncHandler(async (req, res) => {
+  const { q, category, status, sort, page, limit } = req.query || {};
+  const out = await dealerInventoryService.listDealerStock({
+    dealerId: req.user.dealerId,
+    q,
+    category,
+    status,
+    sort,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getMyInventoryItemController = asyncHandler(async (req, res) => {
+  const { productId } = req.params || {};
+  if (!productId) throw new ApiError(400, "Missing productId");
+
+  const item = await dealerInventoryService.getDealerStockItem({
+    dealerId: req.user.dealerId,
+    productId,
+  });
+  res.status(200).json({ ok: true, item });
+});
+
+export const getMyInventoryMovementsController = asyncHandler(async (req, res) => {
+  const { productId } = req.params || {};
+  if (!productId) throw new ApiError(400, "Missing productId");
+
+  const { type, from, to, page, limit } = req.query || {};
+  const out = await dealerInventoryService.getDealerStockMovements({
+    dealerId: req.user.dealerId,
+    productId,
+    type,
+    from,
+    to,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getMyInventoryHistoryController = asyncHandler(async (req, res) => {
+  const { q, type, from, to, page, limit } = req.query || {};
+  const out = await dealerInventoryService.getDealerStockHistory({
+    dealerId: req.user.dealerId,
+    q,
+    type,
+    from,
+    to,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+// Dealer: sales
+export const listMySalesController = asyncHandler(async (req, res) => {
+  const { q, status, dateFrom, dateTo, page, limit } = req.query || {};
+  const out = await saleService.listSales({
+    dealerId: req.user.dealerId,
+    q,
+    status,
+    dateFrom,
+    dateTo,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getMySaleController = asyncHandler(async (req, res) => {
+  const { saleId } = req.params || {};
+  if (!saleId) throw new ApiError(400, "Missing saleId");
+
+  const item = await saleService.getSale({ dealerId: req.user.dealerId, saleId });
+  res.status(200).json({ ok: true, item });
+});
+
+export const createMySaleController = asyncHandler(async (req, res) => {
+  const { billId, projectId, items, payment, notes } = req.body || {};
+  const item = await saleService.createSale({
+    dealerId: req.user.dealerId,
+    billId,
+    projectId,
+    items,
+    payment,
+    notes,
+    actorUser: req.user,
+  });
+  res.status(201).json({ ok: true, item });
+});
+
+export const voidMySaleController = asyncHandler(async (req, res) => {
+  const { saleId } = req.params || {};
+  if (!saleId) throw new ApiError(400, "Missing saleId");
+
+  const { reason } = req.body || {};
+  const item = await saleService.voidSale({
+    dealerId: req.user.dealerId,
+    saleId,
+    reason,
+    actorUser: req.user,
+    actorRole: "DEALER",
+  });
+  res.status(200).json({ ok: true, item });
+});

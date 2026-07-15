@@ -18,21 +18,11 @@ export const DEALER_STATUS = Object.freeze({
   SUSPENDED: "SUSPENDED",
 });
 
-export const ORDER_STATUS = Object.freeze({
-  SUBMITTED: "SUBMITTED",
-  UNDER_REVIEW: "UNDER_REVIEW",
-  PROCESSING: "PROCESSING",
-  AWAITING_SHIPMENT: "AWAITING_SHIPMENT",
-  OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
-  APPROVED: "APPROVED",
-  SENT_TO_DISPATCHER: "SENT_TO_DISPATCHER",
-  DISPATCHED: "DISPATCHED",
-  DELIVERED: "DELIVERED",
-  CLOSED: "CLOSED",
-  CANCELLED: "CANCELLED",
-  VERIFIED: "VERIFIED",
-  REJECTED: "REJECTED",
-});
+// ORDER_STATUS used to be duplicated here (and had drifted from the real
+// enum - it had an extra UNDER_REVIEW member that Order.model.js never
+// had). Order.model.js is the single source of truth now; re-exported here
+// only so existing `from "../constants/statuses.js"` imports keep working.
+export { ORDER_STATUS } from "../models/Order.model.js";
 
 export const PAYMENT_METHOD = Object.freeze({
   CASH: "CASH",

@@ -26,6 +26,13 @@ export const stockHistoryQuerySchema = z
     reason: optionalTrimmedString(120),
     dateFrom: optionalTrimmedString(40),
     dateTo: optionalTrimmedString(40),
+    // Opt-in rather than default-on: reservation-lifecycle log entries
+    // (order verified/rejected) are logged with previousQuantity===newQuantity
+    // by design (they move reservedQuantity, not on-hand stock), so this
+    // excludes them and keeps only entries that actually moved stock in or
+    // out of the factory. Left off by default so any other consumer of this
+    // endpoint still sees the full audit trail unless it asks not to.
+    onlyMovements: z.enum(["true", "false"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })

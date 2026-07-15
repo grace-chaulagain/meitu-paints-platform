@@ -10,10 +10,15 @@ const explicitEnvPath = process.env.DOTENV_CONFIG_PATH
   : "";
 
 if (explicitEnvPath) {
+  // An explicit env file (e.g. .env.staging) was requested via
+  // DOTENV_CONFIG_PATH. Load only that file - never fall back to the
+  // bare .env, even for variables it doesn't define, so a staging run
+  // can never pick up a production credential.
   dotenv.config({ path: explicitEnvPath, override: false });
+} else {
+  dotenv.config();
+  dotenv.config({ path: serverEnvPath, override: false });
 }
-dotenv.config();
-dotenv.config({ path: serverEnvPath, override: false });
 
 function normalizeNodeEnv(value = "") {
   const env = String(value || "development")

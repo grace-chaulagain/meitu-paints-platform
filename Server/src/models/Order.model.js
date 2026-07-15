@@ -1,25 +1,30 @@
 import mongoose from "mongoose";
 
+// Deliberately just 6 values - an order either hasn't been looked at yet
+// (SUBMITTED), has been reviewed and is queued for fulfillment (VERIFIED),
+// has physically left for the dealer/dispatcher (DISPATCHED), or is done
+// (COMPLETED), with REJECTED/CANCELLED as the two off-ramps. There is no
+// separate "preparing"/"awaiting shipment"/"out for delivery" checkpoint -
+// those all used to be sub-stages of VERIFIED or DISPATCHED and added
+// nothing an actor could act on differently. "Closed" (financial
+// reconciliation) is tracked separately via `closedAt`/`closedBy` below,
+// not as a status - closing is orthogonal to fulfillment progress.
 const ORDER_STATUS = Object.freeze({
   SUBMITTED: "SUBMITTED",
-  PROCESSING: "PROCESSING",
-  AWAITING_SHIPMENT: "AWAITING_SHIPMENT",
-  OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
-  DELIVERED: "DELIVERED",
   VERIFIED: "VERIFIED",
-  REJECTED: "REJECTED",
-  APPROVED: "APPROVED",
-  SENT_TO_DISPATCHER: "SENT_TO_DISPATCHER",
   DISPATCHED: "DISPATCHED",
-  CLOSED: "CLOSED",
+  COMPLETED: "COMPLETED",
+  REJECTED: "REJECTED",
   CANCELLED: "CANCELLED",
 });
 
-const FACTORY_STAGE = Object.freeze({
-  INBOX: "INBOX",
-  PREPARING: "PREPARING",
-  SHIPMENT: "SHIPMENT",
-  COMPLETED: "COMPLETED",
+// DEALER: a dealer's own order (the original, default case).
+// DISPATCHER_REPLENISHMENT: a dispatcher ordering their own regional
+// stock from the central Factory - reuses the same order lifecycle,
+// distinguished by this field rather than a parallel pipeline.
+const ORDER_ORIGIN = Object.freeze({
+  DEALER: "DEALER",
+  DISPATCHER_REPLENISHMENT: "DISPATCHER_REPLENISHMENT",
 });
 
 const STOCK_RESERVATION_STATUS = Object.freeze({
@@ -320,14 +325,41 @@ const OrderSchema = new mongoose.Schema(
       index: true,
     },
 
-    dealerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "DealerProfile",
-      required: true,
+    // DEALER for a dealer's own order; DISPATCHER_REPLENISHMENT for a
+    // dispatcher's own stock-replenishment order placed against the
+    // central Factory. Required-ness of dealerId / dispatcherCustomerId
+    // below is enforced in the pre-validate hook, same pattern already
+    // used for dispatcherId + fulfillmentMode.
+    orderOrigin: {
+      type: String,
+      enum: Object.values(ORDER_ORIGIN),
+      default: ORDER_ORIGIN.DEALER,
       index: true,
     },
 
-    // Snapshotted from dealer at submission time for easier archive/reporting
+    // Required only for DEALER-origin orders.
+    dealerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DealerProfile",
+      default: null,
+      index: true,
+    },
+
+    // Required only for DISPATCHER_REPLENISHMENT-origin orders - the
+    // dispatcher acting as the customer of this order. Distinct from
+    // `dispatcherId` below, which is the fulfillment-routing dispatcher
+    // assigned to service a DEALER's order.
+    dispatcherCustomerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Dispatcher",
+      default: null,
+      index: true,
+    },
+
+    // Snapshotted from dealer (or, for a DISPATCHER_REPLENISHMENT order,
+    // from the ordering dispatcher's own profile) at submission time for
+    // easier archive/reporting and so every existing dealer-facing
+    // notification/email/PDF code path works unchanged for either origin.
     dealerSnapshot: {
       companyName: { type: String, default: "", trim: true },
       contactName: { type: String, default: "", trim: true },
@@ -429,22 +461,9 @@ const OrderSchema = new mongoose.Schema(
       default: null,
     },
 
-    factoryStage: {
-      type: String,
-      enum: Object.values(FACTORY_STAGE),
-      default: null,
-      index: true,
-    },
-
     factory: {
       sentToFactoryAt: { type: Date, default: null },
       sentToFactoryBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        default: null,
-      },
-      preparingAt: { type: Date, default: null },
-      preparingBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         default: null,
@@ -476,6 +495,18 @@ const OrderSchema = new mongoose.Schema(
         default: null,
       },
       rejectedByRole: { type: String, default: "", trim: true },
+    },
+
+    // Financial reconciliation (admin confirms a completed order is fully
+    // paid/settled) is orthogonal to fulfillment progress, so it's a flag
+    // on top of `status` rather than a status value itself - an order can
+    // be closed the moment it's COMPLETED without that meaning something
+    // different about where it is in the fulfillment pipeline.
+    closedAt: { type: Date, default: null, index: true },
+    closedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
 
     stockReservation: {
@@ -544,6 +575,18 @@ const OrderSchema = new mongoose.Schema(
       index: true,
     },
 
+    currentVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     isDeleted: {
       type: Boolean,
       default: false,
@@ -571,7 +614,6 @@ const OrderSchema = new mongoose.Schema(
 OrderSchema.index({ dealerId: 1, createdAt: -1 });
 OrderSchema.index({ dispatcherId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
-OrderSchema.index({ factoryStage: 1, createdAt: -1 });
 OrderSchema.index({ "deletion.pending": 1, "deletion.deleteAfter": 1 });
 OrderSchema.index({
   "dealerSnapshot.fulfillmentMode": 1,
@@ -602,6 +644,17 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
     }
   }
 
+  if (this.orderOrigin === ORDER_ORIGIN.DISPATCHER_REPLENISHMENT) {
+    if (!this.dispatcherCustomerId) {
+      throw new Error(
+        "dispatcherCustomerId is required for DISPATCHER_REPLENISHMENT orders",
+      );
+    }
+    this.dealerId = null;
+  } else if (!this.dealerId) {
+    throw new Error("dealerId is required for DEALER orders");
+  }
+
   if (
     this.dealerSnapshot?.fulfillmentMode === "DISPATCHER" &&
     !this.dispatcherId
@@ -611,21 +664,16 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
     );
   }
 
-  if (
-    [
-      ORDER_STATUS.VERIFIED,
-      ORDER_STATUS.REJECTED,
-      ORDER_STATUS.DELIVERED,
-      ORDER_STATUS.CLOSED,
-      ORDER_STATUS.CANCELLED,
-    ].includes(this.status)
-  ) {
+  // SUBMITTED is the only "not yet looked at" status - every other status
+  // (including the two off-ramps) means an admin/dispatcher/factory actor
+  // has already acted on it, so it drops out of the default pending queue.
+  if (this.status !== ORDER_STATUS.SUBMITTED) {
     this.archivedAt = this.archivedAt || new Date();
   } else {
     this.archivedAt = null;
   }
 });
 
-export { ORDER_STATUS, ORDER_REVIEWED_BY, FACTORY_STAGE };
+export { ORDER_STATUS, ORDER_REVIEWED_BY, ORDER_ORIGIN };
 export { STOCK_RESERVATION_STATUS, STOCK_CHECK_STATUS };
 export default mongoose.model("Order", OrderSchema);

@@ -1,6 +1,51 @@
+import streamifier from "streamifier";
 import User from "../models/User.model.js";
 import DealerProfile from "../models/DealerProfile.model.js";
+import cloudinary from "../utils/cloudinary.js";
 import bcrypt from "bcrypt";
+
+function uploadBufferToCloudinary(buffer, options = {}) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "meitu-user-avatars", resource_type: "image", ...options },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      },
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
+
+export const uploadUserAvatar = async (userId, file) => {
+  if (!file?.buffer) throw new Error("Image file is required");
+  if (!String(file.mimetype || "").startsWith("image/")) {
+    throw new Error("Only image files are allowed");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) throw new Error("User not found");
+
+  const previousPublicId = user.avatar?.publicId || "";
+
+  const result = await uploadBufferToCloudinary(file.buffer, {
+    public_id: `avatar-${userId}-${Date.now()}`,
+    overwrite: false,
+  });
+
+  user.avatar = { url: result.secure_url, publicId: result.public_id };
+  await user.save();
+
+  if (previousPublicId) {
+    try {
+      await cloudinary.uploader.destroy(previousPublicId);
+    } catch (error) {
+      console.warn("[user] Failed to delete replaced avatar from Cloudinary:", error?.message || error);
+    }
+  }
+
+  return user;
+};
 
 export const updateCurrentUserProfile = async (userId, role, payload = {}) => {
   const user = await User.findById(userId);

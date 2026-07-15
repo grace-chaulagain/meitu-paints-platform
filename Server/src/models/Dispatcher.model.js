@@ -15,7 +15,7 @@ const DispatcherSchema = new mongoose.Schema(
     },
     companyName: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
     },
     phone: {
@@ -31,7 +31,7 @@ const DispatcherSchema = new mongoose.Schema(
     },
     address: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
     },
     notes: {
@@ -49,13 +49,32 @@ const DispatcherSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    verifiedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     rejectedAt: {
       type: Date,
+      default: null,
+    },
+    rejectedByUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
     },
     isActive: {
       type: Boolean,
       default: true,
+    },
+    activeChangedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    activeChangedAt: {
+      type: Date,
+      default: null,
     },
     deletion: {
       pending: { type: Boolean, default: false, index: true },

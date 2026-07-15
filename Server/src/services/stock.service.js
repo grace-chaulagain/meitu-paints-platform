@@ -126,49 +126,79 @@ async function createStockLog({
   type = STOCK_ADJUSTMENT_TYPE.MANUAL_CORRECTION,
   order = null,
   metadata = {},
+  session = null,
 }) {
   const changedBy = actorId(actorUser);
   if (!changedBy) throw new ApiError(401, "Authentication required");
 
-  return StockAdjustmentLog.create({
-    productId: product._id,
-    sku: product.sku || "",
-    code: product.code || "",
-    productName: product.name || "",
-    category: product.category || "",
-    packLabel: product.pack?.label || "",
-    unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-    type,
-    previousQuantity,
-    newQuantity,
-    delta: Number(newQuantity) - Number(previousQuantity),
-    previousCurrentQuantity:
-      previousCurrentQuantity === null ? null : Number(previousCurrentQuantity),
-    newCurrentQuantity:
-      newCurrentQuantity === null ? null : Number(newCurrentQuantity),
-    deltaCurrent:
-      previousCurrentQuantity === null || newCurrentQuantity === null
-        ? null
-        : Number(newCurrentQuantity) - Number(previousCurrentQuantity),
-    previousReservedQuantity:
-      previousReservedQuantity === null ? null : Number(previousReservedQuantity),
-    newReservedQuantity:
-      newReservedQuantity === null ? null : Number(newReservedQuantity),
-    deltaReserved:
-      previousReservedQuantity === null || newReservedQuantity === null
-        ? null
-        : Number(newReservedQuantity) - Number(previousReservedQuantity),
-    previousLowStockThreshold,
-    newLowStockThreshold,
-    reason: clean(reason),
-    note: clean(note),
-    orderId: order?._id || null,
-    orderNumber: order?.orderNumber || "",
-    dealerId: order?.dealerId || null,
-    changedBy,
-    changedByRole: clean(actorUser?.role).toUpperCase(),
-    metadata,
-  });
+  const [log] = await StockAdjustmentLog.create(
+    [
+      {
+        productId: product._id,
+        sku: product.sku || "",
+        code: product.code || "",
+        productName: product.name || "",
+        category: product.category || "",
+        packLabel: product.pack?.label || "",
+        unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
+        type,
+        previousQuantity,
+        newQuantity,
+        delta: Number(newQuantity) - Number(previousQuantity),
+        previousCurrentQuantity:
+          previousCurrentQuantity === null ? null : Number(previousCurrentQuantity),
+        newCurrentQuantity:
+          newCurrentQuantity === null ? null : Number(newCurrentQuantity),
+        deltaCurrent:
+          previousCurrentQuantity === null || newCurrentQuantity === null
+            ? null
+            : Number(newCurrentQuantity) - Number(previousCurrentQuantity),
+        previousReservedQuantity:
+          previousReservedQuantity === null ? null : Number(previousReservedQuantity),
+        newReservedQuantity:
+          newReservedQuantity === null ? null : Number(newReservedQuantity),
+        deltaReserved:
+          previousReservedQuantity === null || newReservedQuantity === null
+            ? null
+            : Number(newReservedQuantity) - Number(previousReservedQuantity),
+        previousLowStockThreshold,
+        newLowStockThreshold,
+        reason: clean(reason),
+        note: clean(note),
+        orderId: order?._id || null,
+        orderNumber: order?.orderNumber || "",
+        dealerId: order?.dealerId || null,
+        changedBy,
+        changedByRole: clean(actorUser?.role).toUpperCase(),
+        metadata,
+      },
+    ],
+    { session },
+  );
+  return log;
+}
+
+// Runs `work(session)` inside a Mongo transaction. If the caller already
+// holds a session (it's composing this call inside its own transaction),
+// that session is reused and no nested transaction is started - the
+// caller's transaction remains the unit of atomicity. Otherwise a
+// self-contained session/transaction is created, with mongoose's built-in
+// retry-on-transient-error behavior via withTransaction.
+export async function withStockSession(session, work) {
+  if (session) {
+    return work(session);
+  }
+
+  const ownSession = await mongoose.startSession();
+  try {
+    let result;
+    await ownSession.withTransaction(async () => {
+      result = await work(ownSession);
+    });
+    return result;
+  } finally {
+    ownSession.endSession();
+  }
 }
 
 function itemQuantity(item) {
@@ -380,6 +410,7 @@ export async function reserveStockForOrder({
   actorUser,
   reason = "Order verified and reserved for factory fulfillment",
   note = "",
+  session = null,
 } = {}) {
   if (!order?._id) throw new ApiError(400, "Order is required");
   const currentStatus = reservationStatus(order);
@@ -390,67 +421,102 @@ export async function reserveStockForOrder({
 
   const lines = await resolveOrderStockLines(order);
   const stockCheckItems = buildStockCheckRows(lines);
-  order.stockCheck = {
-    checkedAt: new Date(),
-    items: stockCheckItems,
-  };
 
   if (!stockCheckIsClear(stockCheckItems)) {
+    order.stockCheck = { checkedAt: new Date(), items: stockCheckItems };
+    await order.save({ session });
     throw new ApiError(400, `Cannot reserve stock. ${stockBlockerMessage(stockCheckItems)}`, {
       items: stockCheckItems,
     });
   }
 
-  const reservationItems = [];
-  for (const { product, quantity } of aggregateResolvedLines(lines)) {
-    const previousCurrentQuantity = Number(product.stock?.currentQuantity || 0);
-    const previousReservedQuantity = Number(product.stock?.reservedQuantity || 0);
-    const newReservedQuantity = previousReservedQuantity + Number(quantity || 0);
-    product.stock = {
-      ...(product.stock?.toObject?.() || product.stock || {}),
-      reservedQuantity: newReservedQuantity,
-      unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-      lastUpdatedAt: new Date(),
-      lastUpdatedBy: actorId(actorUser),
-    };
-    await product.save();
-    await createStockLog({
-      product,
-      previousQuantity: previousCurrentQuantity,
-      newQuantity: previousCurrentQuantity,
-      previousCurrentQuantity,
-      newCurrentQuantity: previousCurrentQuantity,
-      previousReservedQuantity,
-      newReservedQuantity,
-      reason,
-      note,
-      actorUser,
-      type: STOCK_ADJUSTMENT_TYPE.RESERVATION_CREATED,
-      order,
-    });
-    reservationItems.push(
-      serializeReservationItem({
-        product,
-        quantity,
-        previousReservedQuantity,
-        newReservedQuantity,
-      }),
-    );
-  }
+  const aggregated = aggregateResolvedLines(lines);
 
-  order.stockReservation = {
-    ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
-    status: STOCK_RESERVATION_STATUS.RESERVED,
-    reservedAt: new Date(),
-    reservedBy: actorId(actorUser),
-    releasedAt: null,
-    releasedBy: null,
-    consumedAt: null,
-    consumedBy: null,
-    items: reservationItems,
-  };
-  await order.save();
-  return order;
+  return withStockSession(session, async (txnSession) => {
+    const reservationItems = [];
+
+    for (const { product: staleProduct, quantity } of aggregated) {
+      const previousReservedQuantity = Number(staleProduct.stock?.reservedQuantity || 0);
+
+      // Atomic, guarded by the same DB read the write depends on: only
+      // succeeds if available quantity (current - reserved) still covers
+      // this request at the moment of the write, not at the moment we
+      // read it above. This is what actually prevents overselling under
+      // concurrent reservations, not the pre-flight check above (which is
+      // only there to produce a clear, specific error message).
+      const updated = await Product.findOneAndUpdate(
+        {
+          _id: staleProduct._id,
+          $expr: {
+            $gte: [
+              {
+                $subtract: [
+                  { $ifNull: ["$stock.currentQuantity", 0] },
+                  { $ifNull: ["$stock.reservedQuantity", 0] },
+                ],
+              },
+              quantity,
+            ],
+          },
+        },
+        {
+          $inc: { "stock.reservedQuantity": quantity },
+          $set: {
+            "stock.lastUpdatedAt": new Date(),
+            "stock.lastUpdatedBy": actorId(actorUser),
+          },
+        },
+        { new: true, session: txnSession },
+      );
+
+      if (!updated) {
+        throw new ApiError(
+          409,
+          `Stock for ${staleProduct.name || staleProduct.sku || "an item"} changed before the reservation could complete. Please retry.`,
+        );
+      }
+
+      await createStockLog({
+        product: updated,
+        previousQuantity: updated.stock.currentQuantity,
+        newQuantity: updated.stock.currentQuantity,
+        previousCurrentQuantity: updated.stock.currentQuantity,
+        newCurrentQuantity: updated.stock.currentQuantity,
+        previousReservedQuantity,
+        newReservedQuantity: updated.stock.reservedQuantity,
+        reason,
+        note,
+        actorUser,
+        type: STOCK_ADJUSTMENT_TYPE.RESERVATION_CREATED,
+        order,
+        session: txnSession,
+      });
+
+      reservationItems.push(
+        serializeReservationItem({
+          product: updated,
+          quantity,
+          previousReservedQuantity,
+          newReservedQuantity: updated.stock.reservedQuantity,
+        }),
+      );
+    }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.RESERVED,
+      reservedAt: new Date(),
+      reservedBy: actorId(actorUser),
+      releasedAt: null,
+      releasedBy: null,
+      consumedAt: null,
+      consumedBy: null,
+      items: reservationItems,
+    };
+    order.stockCheck = { checkedAt: new Date(), items: stockCheckItems };
+    await order.save({ session: txnSession });
+    return order;
+  });
 }
 
 export async function releaseReservationForOrder({
@@ -458,6 +524,7 @@ export async function releaseReservationForOrder({
   actorUser,
   reason = "Order reservation released",
   note = "",
+  session = null,
 } = {}) {
   if (!order?._id) throw new ApiError(400, "Order is required");
   const currentStatus = reservationStatus(order);
@@ -468,49 +535,72 @@ export async function releaseReservationForOrder({
     throw new ApiError(400, "Consumed stock cannot be released automatically");
   }
 
-  for (const item of order.stockReservation?.items || []) {
-    const product = item.productId
-      ? await Product.findById(item.productId)
-      : await Product.findOne({ sku: clean(item.sku) });
-    if (!product) continue;
+  const items = order.stockReservation?.items || [];
 
-    const previousCurrentQuantity = Number(product.stock?.currentQuantity || 0);
-    const previousReservedQuantity = Number(product.stock?.reservedQuantity || 0);
-    const releaseQuantity = Number(item.quantity || 0);
-    const newReservedQuantity = Math.max(0, previousReservedQuantity - releaseQuantity);
+  return withStockSession(session, async (txnSession) => {
+    for (const item of items) {
+      const releaseQuantity = Number(item.quantity || 0);
+      if (releaseQuantity <= 0) continue;
 
-    product.stock = {
-      ...(product.stock?.toObject?.() || product.stock || {}),
-      reservedQuantity: newReservedQuantity,
-      unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-      lastUpdatedAt: new Date(),
-      lastUpdatedBy: actorId(actorUser),
+      const query = item.productId
+        ? { _id: item.productId }
+        : { sku: clean(item.sku) };
+
+      const before = item.productId
+        ? await Product.findById(item.productId).session(txnSession)
+        : await Product.findOne(query).session(txnSession);
+      if (!before) continue;
+
+      const previousCurrentQuantity = Number(before.stock?.currentQuantity || 0);
+      const previousReservedQuantity = Number(before.stock?.reservedQuantity || 0);
+
+      // Releasing gives stock back, so it's clamped at 0 rather than
+      // guarded/rejected - the aggregation-pipeline update form computes
+      // the clamped value from whatever is on the document at write time,
+      // atomically, with no read-modify-write gap.
+      const updated = await Product.findOneAndUpdate(
+        query,
+        [
+          {
+            $set: {
+              "stock.reservedQuantity": {
+                $max: [0, { $subtract: [{ $ifNull: ["$stock.reservedQuantity", 0] }, releaseQuantity] }],
+              },
+              "stock.lastUpdatedAt": new Date(),
+              "stock.lastUpdatedBy": actorId(actorUser),
+            },
+          },
+        ],
+        { new: true, session: txnSession, updatePipeline: true },
+      );
+      if (!updated) continue;
+
+      await createStockLog({
+        product: updated,
+        previousQuantity: previousCurrentQuantity,
+        newQuantity: previousCurrentQuantity,
+        previousCurrentQuantity,
+        newCurrentQuantity: previousCurrentQuantity,
+        previousReservedQuantity,
+        newReservedQuantity: updated.stock.reservedQuantity,
+        reason,
+        note,
+        actorUser,
+        type: STOCK_ADJUSTMENT_TYPE.RESERVATION_RELEASED,
+        order,
+        session: txnSession,
+      });
+    }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.RELEASED,
+      releasedAt: new Date(),
+      releasedBy: actorId(actorUser),
     };
-    await product.save();
-    await createStockLog({
-      product,
-      previousQuantity: previousCurrentQuantity,
-      newQuantity: previousCurrentQuantity,
-      previousCurrentQuantity,
-      newCurrentQuantity: previousCurrentQuantity,
-      previousReservedQuantity,
-      newReservedQuantity,
-      reason,
-      note,
-      actorUser,
-      type: STOCK_ADJUSTMENT_TYPE.RESERVATION_RELEASED,
-      order,
-    });
-  }
-
-  order.stockReservation = {
-    ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
-    status: STOCK_RESERVATION_STATUS.RELEASED,
-    releasedAt: new Date(),
-    releasedBy: actorId(actorUser),
-  };
-  await order.save();
-  return order;
+    await order.save({ session: txnSession });
+    return order;
+  });
 }
 
 export async function consumeReservationForOrder({
@@ -518,6 +608,7 @@ export async function consumeReservationForOrder({
   actorUser,
   reason = "Order marked out for delivery",
   note = "",
+  session = null,
 } = {}) {
   if (!order?._id) throw new ApiError(400, "Order is required");
   if (order.stockDeduction?.deductedAt || reservationStatus(order) === STOCK_RESERVATION_STATUS.CONSUMED) {
@@ -546,114 +637,123 @@ export async function consumeReservationForOrder({
     fallbackWithoutReservation = true;
   }
 
-  const operations = [];
   for (const item of sourceItems) {
-    const product = item.productId
-      ? await Product.findById(item.productId)
-      : await Product.findOne({ sku: clean(item.sku) });
-    if (!product) {
-      throw new ApiError(404, `Product not found for SKU ${item.sku || ""}`);
+    if (Number(item.quantity || 0) <= 0) {
+      throw new ApiError(400, `Invalid deduction quantity for ${item.name || item.sku}`);
     }
-
-    const quantity = Number(item.quantity || 0);
-    const previousCurrentQuantity = Number(product.stock?.currentQuantity || 0);
-    const previousReservedQuantity = Number(product.stock?.reservedQuantity || 0);
-    if (quantity <= 0) {
-      throw new ApiError(400, `Invalid deduction quantity for ${product.name || product.sku}`);
-    }
-    if (previousCurrentQuantity < quantity) {
-      throw new ApiError(
-        400,
-        `Insufficient stock for ${product.name || product.sku}. Current ${previousCurrentQuantity}, requested ${quantity}.`,
-      );
-    }
-    if (!fallbackWithoutReservation && previousReservedQuantity < quantity) {
-      throw new ApiError(
-        400,
-        `Reserved stock for ${product.name || product.sku} is lower than shipment quantity.`,
-      );
-    }
-
-    const newCurrentQuantity = previousCurrentQuantity - quantity;
-    const newReservedQuantity = fallbackWithoutReservation
-      ? previousReservedQuantity
-      : Math.max(0, previousReservedQuantity - quantity);
-
-    operations.push({
-      product,
-      item,
-      quantity,
-      previousCurrentQuantity,
-      previousReservedQuantity,
-      newCurrentQuantity,
-      newReservedQuantity,
-    });
   }
 
-  const deductionLines = [];
-  for (const operation of operations) {
-    const {
-      product,
-      item,
-      quantity,
-      previousCurrentQuantity,
-      previousReservedQuantity,
-      newCurrentQuantity,
-      newReservedQuantity,
-    } = operation;
+  return withStockSession(session, async (txnSession) => {
+    const deductionLines = [];
 
-    product.stock = {
-      ...(product.stock?.toObject?.() || product.stock || {}),
-      currentQuantity: newCurrentQuantity,
-      reservedQuantity: newReservedQuantity,
-      unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-      lastUpdatedAt: new Date(),
-      lastUpdatedBy: actorId(actorUser),
+    for (const item of sourceItems) {
+      const quantity = Number(item.quantity || 0);
+      const filter = item.productId
+        ? { _id: item.productId }
+        : { sku: clean(item.sku) };
+
+      // Both guards live in the query filter, so the check and the
+      // decrement happen as one atomic operation - this is what closes
+      // the overselling race (two concurrent dispatches both reading
+      // "enough stock" before either writes). $ifNull matters here: a
+      // plain `{ "stock.currentQuantity": { $gte: quantity } }` filter
+      // never matches a document where that field is genuinely missing
+      // (not stored as 0), so this uses $expr to treat missing as 0,
+      // same as every stock read elsewhere in the app already does.
+      const exprConditions = [
+        { $gte: [{ $ifNull: ["$stock.currentQuantity", 0] }, quantity] },
+      ];
+      const decrement = { "stock.currentQuantity": -quantity };
+      if (!fallbackWithoutReservation) {
+        exprConditions.push({ $gte: [{ $ifNull: ["$stock.reservedQuantity", 0] }, quantity] });
+        decrement["stock.reservedQuantity"] = -quantity;
+      }
+      filter.$expr = { $and: exprConditions };
+
+      const updated = await Product.findOneAndUpdate(
+        filter,
+        {
+          $inc: decrement,
+          $set: {
+            "stock.lastUpdatedAt": new Date(),
+            "stock.lastUpdatedBy": actorId(actorUser),
+          },
+        },
+        { new: true, session: txnSession },
+      );
+
+      if (!updated) {
+        const existing = item.productId
+          ? await Product.findById(item.productId).session(txnSession)
+          : await Product.findOne({ sku: clean(item.sku) }).session(txnSession);
+        if (!existing) {
+          throw new ApiError(404, `Product not found for SKU ${item.sku || ""}`);
+        }
+        const currentQuantity = Number(existing.stock?.currentQuantity || 0);
+        const reservedQuantity = Number(existing.stock?.reservedQuantity || 0);
+        if (currentQuantity < quantity) {
+          throw new ApiError(
+            400,
+            `Insufficient stock for ${existing.name || existing.sku}. Current ${currentQuantity}, requested ${quantity}.`,
+          );
+        }
+        throw new ApiError(
+          400,
+          `Reserved stock for ${existing.name || existing.sku} is lower than shipment quantity.`,
+        );
+      }
+
+      const newCurrentQuantity = updated.stock.currentQuantity;
+      const newReservedQuantity = updated.stock.reservedQuantity;
+      const previousCurrentQuantity = newCurrentQuantity + quantity;
+      const previousReservedQuantity = fallbackWithoutReservation
+        ? newReservedQuantity
+        : newReservedQuantity + quantity;
+
+      await createStockLog({
+        product: updated,
+        previousQuantity: previousCurrentQuantity,
+        newQuantity: newCurrentQuantity,
+        previousCurrentQuantity,
+        newCurrentQuantity,
+        previousReservedQuantity,
+        newReservedQuantity,
+        reason,
+        note: note || "Automatic stock deduction at factory shipment stage.",
+        actorUser,
+        type: fallbackWithoutReservation
+          ? STOCK_ADJUSTMENT_TYPE.ORDER_SHIPMENT_DEDUCTION
+          : STOCK_ADJUSTMENT_TYPE.RESERVATION_CONSUMED,
+        order,
+        metadata: { fallbackWithoutReservation },
+        session: txnSession,
+      });
+
+      deductionLines.push({
+        productId: updated._id,
+        sku: updated.sku || item.sku || "",
+        name: updated.name || item.name || "",
+        previousQuantity: previousCurrentQuantity,
+        deductedQuantity: quantity,
+        newQuantity: newCurrentQuantity,
+      });
+    }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.CONSUMED,
+      consumedAt: new Date(),
+      consumedBy: actorId(actorUser),
+      items: sourceItems,
     };
-
-    await product.save();
-    await createStockLog({
-      product,
-      previousQuantity: previousCurrentQuantity,
-      newQuantity: newCurrentQuantity,
-      previousCurrentQuantity,
-      newCurrentQuantity,
-      previousReservedQuantity,
-      newReservedQuantity,
-      reason,
-      note: note || "Automatic stock deduction at factory shipment stage.",
-      actorUser,
-      type: fallbackWithoutReservation
-        ? STOCK_ADJUSTMENT_TYPE.ORDER_SHIPMENT_DEDUCTION
-        : STOCK_ADJUSTMENT_TYPE.RESERVATION_CONSUMED,
-      order,
-      metadata: { fallbackWithoutReservation },
-    });
-
-    deductionLines.push({
-      productId: product._id,
-      sku: product.sku || item.sku || "",
-      name: product.name || item.name || "",
-      previousQuantity: previousCurrentQuantity,
-      deductedQuantity: quantity,
-      newQuantity: newCurrentQuantity,
-    });
-  }
-
-  order.stockReservation = {
-    ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
-    status: STOCK_RESERVATION_STATUS.CONSUMED,
-    consumedAt: new Date(),
-    consumedBy: actorId(actorUser),
-    items: sourceItems,
-  };
-  order.stockDeduction = {
-    deductedAt: new Date(),
-    deductedBy: actorId(actorUser),
-    lines: deductionLines,
-  };
-  await order.save();
-  return deductionLines;
+    order.stockDeduction = {
+      deductedAt: new Date(),
+      deductedBy: actorId(actorUser),
+      lines: deductionLines,
+    };
+    await order.save({ session: txnSession });
+    return deductionLines;
+  });
 }
 
 function aggregateItemsByProduct(items = []) {
@@ -678,6 +778,7 @@ export async function adjustReservationForOrderAmendment({
   actorUser,
   reason = "Order amended",
   note = "",
+  session = null,
 } = {}) {
   if (!order?._id) throw new ApiError(400, "Order is required");
   const currentStatus = reservationStatus(order);
@@ -710,7 +811,7 @@ export async function adjustReservationForOrderAmendment({
     ...Array.from(nextMap.keys()),
   ]);
 
-  const operations = [];
+  const plans = [];
   for (const key of productIds) {
     const nextEntry = nextMap.get(key);
     const previousEntry = previousMap.get(key);
@@ -720,91 +821,123 @@ export async function adjustReservationForOrderAmendment({
     const oldQuantity = Number(previousEntry?.quantity || previousEntry?.item?.quantity || 0);
     const newQuantity = Number(nextEntry?.quantity || 0);
     const delta = newQuantity - oldQuantity;
-    const previousCurrentQuantity = Number(product.stock?.currentQuantity || 0);
-    const previousReservedQuantity = Number(product.stock?.reservedQuantity || 0);
-
-    if (delta > 0) {
-      const availableQuantity = Math.max(0, previousCurrentQuantity - previousReservedQuantity);
-      if (availableQuantity < delta) {
-        throw new ApiError(
-          400,
-          `Cannot increase ${product.name || product.sku}. Available ${availableQuantity}, extra requested ${delta}.`,
-        );
-      }
-    }
-
-    const newReservedQuantity = Math.max(0, previousReservedQuantity + delta);
-    operations.push({
-      product,
-      oldQuantity,
-      newQuantity,
-      delta,
-      previousCurrentQuantity,
-      previousReservedQuantity,
-      newReservedQuantity,
-    });
+    plans.push({ product, newQuantity, delta });
   }
 
-  const reservationItems = [];
-  for (const operation of operations) {
-    const {
-      product,
-      newQuantity,
-      delta,
-      previousCurrentQuantity,
-      previousReservedQuantity,
-      newReservedQuantity,
-    } = operation;
+  return withStockSession(session, async (txnSession) => {
+    const reservationItems = [];
 
-    product.stock = {
-      ...(product.stock?.toObject?.() || product.stock || {}),
-      reservedQuantity: newReservedQuantity,
-      unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-      lastUpdatedAt: new Date(),
-      lastUpdatedBy: actorId(actorUser),
-    };
-    await product.save();
+    for (const { product: staleProduct, newQuantity, delta } of plans) {
+      if (delta === 0) {
+        if (newQuantity > 0) {
+          reservationItems.push(
+            serializeReservationItem({
+              product: staleProduct,
+              quantity: newQuantity,
+              previousReservedQuantity: Number(staleProduct.stock?.reservedQuantity || 0),
+              newReservedQuantity: Number(staleProduct.stock?.reservedQuantity || 0),
+            }),
+          );
+        }
+        continue;
+      }
 
-    if (delta !== 0) {
+      const previousReservedQuantity = Number(staleProduct.stock?.reservedQuantity || 0);
+      let updated;
+
+      if (delta > 0) {
+        // Increasing a reservation needs the same available-quantity
+        // guard as a brand-new reservation.
+        updated = await Product.findOneAndUpdate(
+          {
+            _id: staleProduct._id,
+            $expr: {
+              $gte: [
+                {
+                  $subtract: [
+                    { $ifNull: ["$stock.currentQuantity", 0] },
+                    { $ifNull: ["$stock.reservedQuantity", 0] },
+                  ],
+                },
+                delta,
+              ],
+            },
+          },
+          {
+            $inc: { "stock.reservedQuantity": delta },
+            $set: {
+              "stock.lastUpdatedAt": new Date(),
+              "stock.lastUpdatedBy": actorId(actorUser),
+            },
+          },
+          { new: true, session: txnSession },
+        );
+        if (!updated) {
+          throw new ApiError(
+            400,
+            `Cannot increase ${staleProduct.name || staleProduct.sku}. Not enough available stock for the extra ${delta} requested.`,
+          );
+        }
+      } else {
+        // Decreasing gives reservation back - clamp at 0 atomically via
+        // a pipeline update, same as releaseReservationForOrder.
+        updated = await Product.findOneAndUpdate(
+          { _id: staleProduct._id },
+          [
+            {
+              $set: {
+                "stock.reservedQuantity": {
+                  $max: [0, { $add: [{ $ifNull: ["$stock.reservedQuantity", 0] }, delta] }],
+                },
+                "stock.lastUpdatedAt": new Date(),
+                "stock.lastUpdatedBy": actorId(actorUser),
+              },
+            },
+          ],
+          { new: true, session: txnSession, updatePipeline: true },
+        );
+      }
+
       await createStockLog({
-        product,
-        previousQuantity: previousCurrentQuantity,
-        newQuantity: previousCurrentQuantity,
-        previousCurrentQuantity,
-        newCurrentQuantity: previousCurrentQuantity,
+        product: updated,
+        previousQuantity: updated.stock.currentQuantity,
+        newQuantity: updated.stock.currentQuantity,
+        previousCurrentQuantity: updated.stock.currentQuantity,
+        newCurrentQuantity: updated.stock.currentQuantity,
         previousReservedQuantity,
-        newReservedQuantity,
+        newReservedQuantity: updated.stock.reservedQuantity,
         reason,
         note,
         actorUser,
         type: STOCK_ADJUSTMENT_TYPE.ORDER_AMENDED,
         order,
+        session: txnSession,
       });
+
+      if (newQuantity > 0) {
+        reservationItems.push(
+          serializeReservationItem({
+            product: updated,
+            quantity: newQuantity,
+            previousReservedQuantity,
+            newReservedQuantity: updated.stock.reservedQuantity,
+          }),
+        );
+      }
     }
 
-    if (newQuantity > 0) {
-      reservationItems.push(
-        serializeReservationItem({
-          product,
-          quantity: newQuantity,
-          previousReservedQuantity,
-          newReservedQuantity,
-        }),
-      );
-    }
-  }
-
-  order.stockReservation = {
-    ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
-    status: STOCK_RESERVATION_STATUS.RESERVED,
-    items: reservationItems,
-  };
-  order.stockCheck = {
-    checkedAt: new Date(),
-    items: nextCheckItems,
-  };
-  await order.save();
-  return order;
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.RESERVED,
+      items: reservationItems,
+    };
+    order.stockCheck = {
+      checkedAt: new Date(),
+      items: nextCheckItems,
+    };
+    await order.save({ session: txnSession });
+    return order;
+  });
 }
 
 export async function listStock({
@@ -857,11 +990,14 @@ export async function getStockDetail({ productId }) {
   return stockItem(product);
 }
 
-export async function getStockHistory({ productId, page = 1, limit = 50 }) {
+export async function getStockHistory({ productId, page = 1, limit = 50, onlyMovements = "" }) {
   ensureObjectId(productId, "productId");
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(200, Math.max(1, Number(limit || 50)));
   const query = { productId };
+  if (onlyMovements === "true") {
+    query.delta = { $ne: 0 };
+  }
   const [items, total] = await Promise.all([
     StockAdjustmentLog.find(query)
       .sort({ changedAt: -1 })
@@ -887,6 +1023,7 @@ export async function listStockHistory({
   reason = "",
   dateFrom = "",
   dateTo = "",
+  onlyMovements = "",
   page = 1,
   limit = 80,
 } = {}) {
@@ -934,6 +1071,10 @@ export async function listStockHistory({
     if (!Object.keys(query.changedAt).length) delete query.changedAt;
   }
 
+  if (onlyMovements === "true") {
+    query.delta = { $ne: 0 };
+  }
+
   const [items, total] = await Promise.all([
     StockAdjustmentLog.find(query)
       .sort({ changedAt: -1 })
@@ -971,30 +1112,45 @@ export async function updateStockQuantity({
     throw new ApiError(400, "Stock amendment reason is required");
   }
 
-  const product = await Product.findById(productId);
-  if (!product) throw new ApiError(404, "Product not found");
+  return withStockSession(null, async (txnSession) => {
+    const existing = await Product.findById(productId).session(txnSession);
+    if (!existing) throw new ApiError(404, "Product not found");
 
-  const previousQuantity = Number(product.stock?.currentQuantity || 0);
-  product.stock = {
-    ...(product.stock?.toObject?.() || product.stock || {}),
-    currentQuantity: normalizedQuantity,
-    unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-    notes: clean(note) || clean(product.stock?.notes),
-    lastUpdatedAt: new Date(),
-    lastUpdatedBy: actorId(actorUser),
-  };
+    const previousQuantity = Number(existing.stock?.currentQuantity || 0);
+    const reservedQuantity = Number(existing.stock?.reservedQuantity || 0);
+    if (normalizedQuantity < reservedQuantity) {
+      throw new ApiError(
+        400,
+        `Cannot set stock below the ${reservedQuantity} unit(s) already reserved for open orders.`,
+      );
+    }
 
-  await product.save();
-  await createStockLog({
-    product,
-    previousQuantity,
-    newQuantity: normalizedQuantity,
-    reason,
-    note,
-    actorUser,
+    const updated = await Product.findOneAndUpdate(
+      { _id: productId },
+      {
+        $set: {
+          "stock.currentQuantity": normalizedQuantity,
+          "stock.unit": clean(existing.stock?.unit || existing.pack?.unit || existing.uom?.base || "PCS"),
+          "stock.notes": clean(note) || clean(existing.stock?.notes),
+          "stock.lastUpdatedAt": new Date(),
+          "stock.lastUpdatedBy": actorId(actorUser),
+        },
+      },
+      { new: true, session: txnSession },
+    );
+
+    await createStockLog({
+      product: updated,
+      previousQuantity,
+      newQuantity: normalizedQuantity,
+      reason,
+      note,
+      actorUser,
+      session: txnSession,
+    });
+
+    return stockItem(updated.toObject());
   });
-
-  return stockItem(product.toObject());
 }
 
 export async function updateStockThreshold({
@@ -1013,34 +1169,42 @@ export async function updateStockThreshold({
     throw new ApiError(400, "Threshold change reason is required");
   }
 
-  const product = await Product.findById(productId);
-  if (!product) throw new ApiError(404, "Product not found");
+  return withStockSession(null, async (txnSession) => {
+    const existing = await Product.findById(productId).session(txnSession);
+    if (!existing) throw new ApiError(404, "Product not found");
 
-  const previousQuantity = Number(product.stock?.currentQuantity || 0);
-  const previousLowStockThreshold = Number(product.stock?.lowStockThreshold || 0);
-  product.stock = {
-    ...(product.stock?.toObject?.() || product.stock || {}),
-    lowStockThreshold: normalizedThreshold,
-    unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-    notes: clean(note) || clean(product.stock?.notes),
-    lastUpdatedAt: new Date(),
-    lastUpdatedBy: actorId(actorUser),
-  };
+    const previousQuantity = Number(existing.stock?.currentQuantity || 0);
+    const previousLowStockThreshold = Number(existing.stock?.lowStockThreshold || 0);
 
-  await product.save();
-  await createStockLog({
-    product,
-    previousQuantity,
-    newQuantity: previousQuantity,
-    previousLowStockThreshold,
-    newLowStockThreshold: normalizedThreshold,
-    reason,
-    note,
-    actorUser,
-    type: STOCK_ADJUSTMENT_TYPE.THRESHOLD_UPDATE,
+    const updated = await Product.findOneAndUpdate(
+      { _id: productId },
+      {
+        $set: {
+          "stock.lowStockThreshold": normalizedThreshold,
+          "stock.unit": clean(existing.stock?.unit || existing.pack?.unit || existing.uom?.base || "PCS"),
+          "stock.notes": clean(note) || clean(existing.stock?.notes),
+          "stock.lastUpdatedAt": new Date(),
+          "stock.lastUpdatedBy": actorId(actorUser),
+        },
+      },
+      { new: true, session: txnSession },
+    );
+
+    await createStockLog({
+      product: updated,
+      previousQuantity,
+      newQuantity: previousQuantity,
+      previousLowStockThreshold,
+      newLowStockThreshold: normalizedThreshold,
+      reason,
+      note,
+      actorUser,
+      type: STOCK_ADJUSTMENT_TYPE.THRESHOLD_UPDATE,
+      session: txnSession,
+    });
+
+    return stockItem(updated.toObject());
   });
-
-  return stockItem(product.toObject());
 }
 
 export async function bulkUpdateStockQuantity({
@@ -1096,71 +1260,6 @@ export async function bulkUpdateStockQuantity({
   }
 
   return { items, errors };
-}
-
-export async function deductStockForOrder({ order, actorUser }) {
-  if (!order?._id) throw new ApiError(400, "Order is required");
-  if (order.stockDeduction?.deductedAt) {
-    throw new ApiError(400, "Stock has already been deducted for this order");
-  }
-
-  const lines = [];
-  for (const item of order.items || []) {
-    const productId = item.productId;
-    if (!productId) {
-      throw new ApiError(400, `Order item ${item.name || item.sku || ""} is missing productId`);
-    }
-
-    const product = await Product.findById(productId);
-    if (!product) {
-      throw new ApiError(404, `Product not found for SKU ${item.sku || ""}`);
-    }
-
-    const previousQuantity = Number(product.stock?.currentQuantity || 0);
-    const deductedQuantity = Number(item.quantity || 0);
-    if (!Number.isFinite(deductedQuantity) || deductedQuantity <= 0) {
-      throw new ApiError(400, `Invalid deduction quantity for ${item.name || item.sku}`);
-    }
-
-    const newQuantity = previousQuantity - deductedQuantity;
-    if (newQuantity < 0) {
-      throw new ApiError(
-        400,
-        `Insufficient stock for ${product.name || product.sku}. Available ${previousQuantity}, requested ${deductedQuantity}.`,
-      );
-    }
-
-    product.stock = {
-      ...(product.stock?.toObject?.() || product.stock || {}),
-      currentQuantity: newQuantity,
-      unit: clean(product.stock?.unit || product.pack?.unit || product.uom?.base || "PCS"),
-      lastUpdatedAt: new Date(),
-      lastUpdatedBy: actorId(actorUser),
-    };
-
-    await product.save();
-    await createStockLog({
-      product,
-      previousQuantity,
-      newQuantity,
-      reason: `Order ${order.orderNumber || order._id} marked out for delivery`,
-      note: "Automatic stock deduction at factory shipment stage.",
-      actorUser,
-      type: STOCK_ADJUSTMENT_TYPE.ORDER_SHIPMENT_DEDUCTION,
-      order,
-    });
-
-    lines.push({
-      productId: product._id,
-      sku: product.sku || item.sku || "",
-      name: product.name || item.name || "",
-      previousQuantity,
-      deductedQuantity,
-      newQuantity,
-    });
-  }
-
-  return lines;
 }
 
 export { STOCK_STATUS };

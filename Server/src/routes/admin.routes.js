@@ -32,6 +32,12 @@ import {
   undoDealerDeletionController,
   setDealerStatusController,
   updateDealerCreditController,
+  getDealerInventoryController,
+  getDealerInventoryMovementsController,
+
+  // Sales
+  listAdminSalesController,
+  getAdminSaleController,
 
   // Dispatchers
   createDispatcherController,
@@ -39,6 +45,16 @@ import {
   listDispatcherApplicationsController,
   listVerifiedDispatchersController,
   getDispatcherController,
+  getDispatcherStockController,
+  getDispatcherAnalyticsController,
+  getDispatcherOwnOrdersController,
+  getDispatcherFulfilledOrdersController,
+  getDispatcherDealerStatsController,
+  getDispatcherProductSummaryController,
+  getDispatcherProductMovementsController,
+  getDispatcherPricingSummaryController,
+  getDispatcherPricingController,
+  updateDispatcherPricingController,
   verifyDispatcherApplicationController,
   rejectDispatcherApplicationController,
   setDispatcherActiveController,
@@ -52,9 +68,6 @@ import {
   getOrderController,
   getOrderStatementsReportController,
   hardDeleteOrderController,
-  approveOrderController,
-  sendOrderToFactoryController,
-  sendOrderToDispatcherController,
   closeOrderController,
   reviseOrderController,
   getOrderOutstandingController,
@@ -64,18 +77,89 @@ import {
   verifyPaymentController,
   rejectPaymentController,
 } from "../controllers/admin.controller.js";
+import {
+  generateCouponsController,
+  listCouponsController,
+  listCouponBatchesController,
+  listCouponRedemptionHistoryController,
+  getRewardSettingsController,
+  updateRewardSettingsController,
+  deleteCouponController,
+  deleteCouponBatchController,
+  deleteCouponBatchesController,
+  listCouponAttemptsController,
+  getSettlementReportController,
+} from "../controllers/coupon.controller.js";
+import {
+  listPaintersController,
+  getPainterController,
+  createPainterController,
+  updatePainterController,
+  deletePainterController,
+  listPainterSalesController,
+  promotePainterController,
+  getPainterIdCardDownloadUrlController,
+  regeneratePainterIdCardWithPhotoController,
+  getPainterIdCardTemplateController,
+  getPainterPointsController,
+} from "../controllers/painter.controller.js";
+import {
+  listCatalogProductsController,
+  getCatalogProductController,
+  createCatalogProductController,
+  updateCatalogProductController,
+  deleteCatalogProductController,
+} from "../controllers/pointsCatalog.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { upload } from "../middlewares/upload.js";
 import {
   validateBody,
   validateParams,
   validateQuery,
 } from "../middlewares/validate.middleware.js";
-import { orderIdParamsSchema } from "../validations/common.validation.js";
+import {
+  orderIdParamsSchema,
+  dealerIdParamsSchema,
+  dealerProductIdParamsSchema,
+} from "../validations/common.validation.js";
 import {
   adminOrderListQuerySchema,
   hardDeleteOrderBodySchema,
 } from "../validations/order.validation.js";
+import {
+  inventoryListQuerySchema,
+  inventoryMovementsQuerySchema,
+} from "../validations/dealerInventory.validation.js";
+import { adminSaleListQuerySchema } from "../validations/sale.validation.js";
+import { saleIdParamsSchema } from "../validations/common.validation.js";
+import {
+  generateCouponsBodySchema,
+  couponListQuerySchema,
+  couponBatchListQuerySchema,
+  couponRedemptionHistoryQuerySchema,
+  updateRewardSettingsBodySchema,
+  couponIdParamsSchema,
+  couponBatchIdParamsSchema,
+  couponBatchIdsBodySchema,
+  couponAttemptQuerySchema,
+  settlementReportQuerySchema,
+} from "../validations/coupon.validation.js";
+import {
+  painterIdParamsSchema,
+  createPainterBodySchema,
+  updatePainterBodySchema,
+  painterListQuerySchema,
+  painterSalesQuerySchema,
+  promotePainterBodySchema,
+  painterPointsQuerySchema,
+} from "../validations/painter.validation.js";
+import {
+  catalogProductIdParamsSchema,
+  createCatalogProductBodySchema,
+  updateCatalogProductBodySchema,
+  catalogProductListQuerySchema,
+} from "../validations/pointsCatalog.validation.js";
 
 const router = Router();
 
@@ -137,15 +221,70 @@ router.post(
   unassignDispatcherFromDealerController,
 );
 router.patch("/dealers/:dealerId/status", setDealerStatusController);
+router.patch("/dealers/:dealerId/credit", updateDealerCreditController);
 router.delete("/dealers/:dealerId", deleteDealerController);
 router.post("/dealers/:dealerId/undo-delete", undoDealerDeletionController);
+
+router.get(
+  "/dealers/:dealerId/inventory",
+  validateParams(dealerIdParamsSchema),
+  validateQuery(inventoryListQuerySchema),
+  getDealerInventoryController,
+);
+router.get(
+  "/dealers/:dealerId/inventory/:productId/movements",
+  validateParams(dealerProductIdParamsSchema),
+  validateQuery(inventoryMovementsQuerySchema),
+  getDealerInventoryMovementsController,
+);
+// Sales (fleet-wide, across all dealers)
+router.get("/sales", validateQuery(adminSaleListQuerySchema), listAdminSalesController);
+router.get(
+  "/sales/:saleId",
+  validateParams(saleIdParamsSchema),
+  getAdminSaleController,
+);
 
 // Dispatchers
 router.post("/dispatchers", createDispatcherController);
 router.get("/dispatchers", listDispatchersController);
 router.get("/dispatcher-applications", listDispatcherApplicationsController);
 router.get("/dispatchers/verified", listVerifiedDispatchersController);
+router.get("/dispatchers/pricing-summary", getDispatcherPricingSummaryController);
 router.get("/dispatchers/:dispatcherId", getDispatcherController);
+router.get("/dispatchers/:dispatcherId/stock", getDispatcherStockController);
+router.get(
+  "/dispatchers/:dispatcherId/analytics",
+  getDispatcherAnalyticsController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/own-orders",
+  getDispatcherOwnOrdersController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/fulfilled-orders",
+  getDispatcherFulfilledOrdersController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/dealer-stats",
+  getDispatcherDealerStatsController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/product-summary",
+  getDispatcherProductSummaryController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/products/:productId/movements",
+  getDispatcherProductMovementsController,
+);
+router.get(
+  "/dispatchers/:dispatcherId/pricing",
+  getDispatcherPricingController,
+);
+router.put(
+  "/dispatchers/:dispatcherId/pricing",
+  updateDispatcherPricingController,
+);
 router.patch(
   "/dispatchers/:dispatcherId/verify",
   verifyDispatcherApplicationController,
@@ -179,21 +318,6 @@ router.delete(
   validateBody(hardDeleteOrderBodySchema),
   hardDeleteOrderController,
 );
-router.post(
-  "/orders/:orderId/approve",
-  validateParams(orderIdParamsSchema),
-  approveOrderController,
-);
-router.post(
-  "/orders/:orderId/send-to-dispatcher",
-  validateParams(orderIdParamsSchema),
-  sendOrderToDispatcherController,
-);
-router.post(
-  "/orders/:orderId/send-to-factory",
-  validateParams(orderIdParamsSchema),
-  sendOrderToFactoryController,
-);
 router.get(
   "/orders/:orderId/outstanding",
   validateParams(orderIdParamsSchema),
@@ -204,11 +328,159 @@ router.post(
   validateParams(orderIdParamsSchema),
   closeOrderController,
 );
-router.post("/orders/:orderId/revise", reviseOrderController);
+router.post(
+  "/orders/:orderId/revise",
+  validateParams(orderIdParamsSchema),
+  reviseOrderController,
+);
 
 // Payments
 router.get("/payments", listPaymentsController);
 router.post("/payments/:paymentId/verify", verifyPaymentController);
 router.post("/payments/:paymentId/reject", rejectPaymentController);
+
+// Coupons
+router.post(
+  "/coupons/generate",
+  validateBody(generateCouponsBodySchema),
+  generateCouponsController,
+);
+router.get(
+  "/coupons",
+  validateQuery(couponListQuerySchema),
+  listCouponsController,
+);
+router.get(
+  "/coupons/batches",
+  validateQuery(couponBatchListQuerySchema),
+  listCouponBatchesController,
+);
+router.get(
+  "/coupons/redemptions",
+  validateQuery(couponRedemptionHistoryQuerySchema),
+  listCouponRedemptionHistoryController,
+);
+router.get("/coupons/settings", getRewardSettingsController);
+router.patch(
+  "/coupons/settings",
+  validateBody(updateRewardSettingsBodySchema),
+  updateRewardSettingsController,
+);
+router.get(
+  "/coupons/attempts",
+  validateQuery(couponAttemptQuerySchema),
+  listCouponAttemptsController,
+);
+router.get(
+  "/coupons/settlement-report",
+  validateQuery(settlementReportQuerySchema),
+  getSettlementReportController,
+);
+// Order matters: the literal "/coupons/batches" routes must be declared
+// before the "/coupons/:couponId" param route below, or Express would match
+// "batches" as a couponId first.
+router.delete(
+  "/coupons/batches",
+  validateBody(couponBatchIdsBodySchema),
+  deleteCouponBatchesController,
+);
+router.delete(
+  "/coupons/batches/:batchId",
+  validateParams(couponBatchIdParamsSchema),
+  deleteCouponBatchController,
+);
+router.delete(
+  "/coupons/:couponId",
+  validateParams(couponIdParamsSchema),
+  deleteCouponController,
+);
+
+// Points catalog (Painter Points Scheme - drives coupon generation)
+router.get(
+  "/points-catalog-products",
+  validateQuery(catalogProductListQuerySchema),
+  listCatalogProductsController,
+);
+router.get(
+  "/points-catalog-products/:productId",
+  validateParams(catalogProductIdParamsSchema),
+  getCatalogProductController,
+);
+router.post(
+  "/points-catalog-products",
+  validateBody(createCatalogProductBodySchema),
+  createCatalogProductController,
+);
+router.patch(
+  "/points-catalog-products/:productId",
+  validateParams(catalogProductIdParamsSchema),
+  validateBody(updateCatalogProductBodySchema),
+  updateCatalogProductController,
+);
+router.delete(
+  "/points-catalog-products/:productId",
+  validateParams(catalogProductIdParamsSchema),
+  deleteCatalogProductController,
+);
+
+// Painters
+router.get(
+  "/painters",
+  validateQuery(painterListQuerySchema),
+  listPaintersController,
+);
+// Registered before the /:painterId routes below - "id-card-template" would
+// otherwise be swallowed by the :painterId wildcard match.
+router.get("/painters/id-card-template", getPainterIdCardTemplateController);
+router.get(
+  "/painters/:painterId",
+  validateParams(painterIdParamsSchema),
+  getPainterController,
+);
+router.post(
+  "/painters",
+  validateBody(createPainterBodySchema),
+  createPainterController,
+);
+router.patch(
+  "/painters/:painterId",
+  validateParams(painterIdParamsSchema),
+  validateBody(updatePainterBodySchema),
+  updatePainterController,
+);
+router.delete(
+  "/painters/:painterId",
+  validateParams(painterIdParamsSchema),
+  deletePainterController,
+);
+router.get(
+  "/painters/:painterId/sales",
+  validateParams(painterIdParamsSchema),
+  validateQuery(painterSalesQuerySchema),
+  listPainterSalesController,
+);
+router.post(
+  "/painters/:painterId/promote",
+  validateParams(painterIdParamsSchema),
+  validateBody(promotePainterBodySchema),
+  promotePainterController,
+);
+router.get(
+  "/painters/:painterId/points",
+  validateParams(painterIdParamsSchema),
+  validateQuery(painterPointsQuerySchema),
+  getPainterPointsController,
+);
+router.get(
+  "/painters/:painterId/id-card",
+  validateParams(painterIdParamsSchema),
+  getPainterIdCardDownloadUrlController,
+);
+router.post(
+  "/painters/:painterId/id-card",
+  validateParams(painterIdParamsSchema),
+  upload.single("photo"),
+  regeneratePainterIdCardWithPhotoController,
+);
 
 export default router;

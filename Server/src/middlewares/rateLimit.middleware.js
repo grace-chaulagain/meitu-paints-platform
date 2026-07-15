@@ -40,6 +40,16 @@ export const passwordResetRateLimit = rateLimit({
   ),
 });
 
+export const changePasswordRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitResponse(
+    "Too many password change attempts. Please wait before trying again.",
+  ),
+});
+
 export const adminAuthUtilityRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
@@ -77,5 +87,15 @@ export const publicWriteRateLimit = rateLimit({
   legacyHeaders: false,
   handler: rateLimitResponse(
     "Too many requests. Please wait before trying again.",
+  ),
+});
+
+export const couponRedemptionRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitResponse(
+    "Too many coupon scan attempts. Please wait before trying again.",
   ),
 });

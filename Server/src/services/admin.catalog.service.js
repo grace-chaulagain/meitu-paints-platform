@@ -330,6 +330,7 @@ export async function createProductService(payload = {}) {
   }
 
   validateTierRows(payload?.pricing?.tiers || []);
+  validateTierRows(payload?.dispatcherPricing?.tiers || []);
 
   const product = await Product.create({
     datasetKey: normalizeText(payload.datasetKey),
@@ -350,6 +351,18 @@ export async function createProductService(payload = {}) {
         tiers: [],
       },
     ),
+    // Independent, optional per-SKU price list for dispatcher replenishment
+    // orders - defaults to an empty tier set (same as updateProductService)
+    // when not supplied, which reads as "not configured" rather than FLAT.
+    dispatcherPricing: normalizePricingPayload(
+      payload.dispatcherPricing || {
+        pricingModelKey: "FLAT",
+        basis: "FLAT",
+        tierUnit: "",
+        tiers: [],
+      },
+    ),
+    dispatcherBasePrice: Number(payload.dispatcherBasePrice) || 0,
     images: payload.images || [],
     isActive: normalizeBoolean(payload.isActive, true),
     source: payload.source || null,
@@ -419,6 +432,17 @@ export async function updateProductService(productId, payload = {}) {
   if (payload.pricing !== undefined) {
     validateTierRows(payload?.pricing?.tiers || []);
     product.pricing = normalizePricingPayload(payload.pricing);
+  }
+
+  if (payload.dispatcherPricing !== undefined) {
+    validateTierRows(payload?.dispatcherPricing?.tiers || []);
+    product.dispatcherPricing = normalizePricingPayload(
+      payload.dispatcherPricing,
+    );
+  }
+
+  if (payload.dispatcherBasePrice !== undefined) {
+    product.dispatcherBasePrice = Number(payload.dispatcherBasePrice) || 0;
   }
 
   if (payload.images !== undefined) {

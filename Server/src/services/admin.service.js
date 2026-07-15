@@ -19,6 +19,8 @@ import Payment from "../models/Payment.model.js";
 import OrderRevision from "../models/OrderRevision.model.js";
 import Invoice from "../models/Invoice.model.js";
 import Notification from "../models/Notification.model.js";
+import Product from "../models/Product.model.js";
+import DispatcherProductStock from "../models/DispatcherProductStock.model.js";
 
 import { createPasswordSetupTokenForUser } from "./auth.service.js";
 import {
@@ -30,6 +32,9 @@ import {
   getDealerAnalytics as getDealerAnalyticsService,
   getDealerLeaderboard as getDealerLeaderboardService,
 } from "./dealerAnalytics.service.js";
+import { getDispatcherAnalytics as getDispatcherAnalyticsService } from "./dispatcherAnalytics.service.js";
+import { listDispatcherStock } from "./dispatcherStock.service.js";
+import { releaseReservationForOrder } from "./stock.service.js";
 
 // ----------------------------
 // Helpers
@@ -956,6 +961,8 @@ export async function getDealer({ dealerId } = {}) {
       path: "dispatcherId",
       select: "name companyName email phone status isActive",
     })
+    .populate({ path: "statusChangedBy", select: "username email role" })
+    .populate({ path: "routingChangedBy", select: "username email role" })
     .lean();
 
   if (!dealer) throw new ApiError(404, "Dealer not found");
@@ -1106,6 +1113,8 @@ export async function updateDealerRouting({
 
   dealer.fulfillmentMode = routing.fulfillmentMode;
   dealer.dispatcherId = routing.dispatcherId;
+  dealer.routingChangedBy = adminUser?.id || adminUser?._id || null;
+  dealer.routingChangedAt = new Date();
 
   await dealer.save();
 
@@ -1150,6 +1159,8 @@ export async function setDealerStatus({ dealerId, status, adminUser }) {
   assertDeletionNotPending(dealer, "Dealer");
 
   dealer.status = status;
+  dealer.statusChangedBy = adminUser?.id || adminUser?._id || null;
+  dealer.statusChangedAt = new Date();
   await dealer.save();
 
   const linkedUsers = await User.find({
@@ -1162,10 +1173,7 @@ export async function setDealerStatus({ dealerId, status, adminUser }) {
 
     if (status === DEALER_STATUS.SUSPENDED) {
       user.accountStatus = USER_ACCOUNT_STATUS.SUSPENDED;
-      user.refreshTokenHash = null;
-      user.refreshTokenExpiresAt = null;
-      user.previousRefreshTokenHash = null;
-      user.previousRefreshTokenValidUntil = null;
+      user.sessions = [];
     } else if (status === DEALER_STATUS.VERIFIED) {
       user.accountStatus = user.passwordHash
         ? USER_ACCOUNT_STATUS.ACTIVE
@@ -1235,12 +1243,7 @@ export async function scheduleDealerDeletion({
       $set: {
         isActive: false,
         accountStatus: USER_ACCOUNT_STATUS.SUSPENDED,
-        refreshTokenHash: null,
-        refreshTokenExpiresAt: null,
-        previousRefreshTokenHash: null,
-        previousRefreshTokenValidUntil: null,
-        previousRefreshTokenHash: null,
-        previousRefreshTokenValidUntil: null,
+        sessions: [],
       },
     },
   );
@@ -1290,10 +1293,7 @@ export async function undoDealerDeletion({ dealerId, adminUser }) {
 
   for (const user of linkedUsers) {
     user.isActive = restoredStatus === DEALER_STATUS.VERIFIED;
-    user.refreshTokenHash = null;
-    user.refreshTokenExpiresAt = null;
-    user.previousRefreshTokenHash = null;
-    user.previousRefreshTokenValidUntil = null;
+    user.sessions = [];
     user.accountStatus =
       restoredStatus === DEALER_STATUS.VERIFIED
         ? user.passwordHash
@@ -1472,7 +1472,11 @@ export async function getDispatcher({ dispatcherId } = {}) {
   await purgeExpiredAccountDeletions();
 
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
-  const dispatcher = await Dispatcher.findById(dispatcherId).lean();
+  const dispatcher = await Dispatcher.findById(dispatcherId)
+    .populate({ path: "verifiedByUserId", select: "username email role" })
+    .populate({ path: "rejectedByUserId", select: "username email role" })
+    .populate({ path: "activeChangedBy", select: "username email role" })
+    .lean();
   if (!dispatcher) throw new ApiError(404, "Dispatcher not found");
   if (dispatcher.deletion?.pending) {
     throw new ApiError(404, "Dispatcher not found");
@@ -1591,6 +1595,292 @@ export async function getDispatcher({ dispatcherId } = {}) {
   };
 }
 
+export async function getDispatcherStock({ dispatcherId, page, limit } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const dispatcher = await Dispatcher.findById(dispatcherId).select("_id").lean();
+  if (!dispatcher) throw new ApiError(404, "Dispatcher not found");
+
+  return listDispatcherStock({ dispatcherId, page, limit });
+}
+
+export async function getDispatcherAnalytics({ dispatcherId } = {}) {
+  return getDispatcherAnalyticsService({ dispatcherId });
+}
+
+// A dispatcher's own purchase history - its replenishment orders placed
+// against the central Factory. Direct analog of a dealer's own Orders
+// list; unlike a dealer, there's no separate InventoryMovement ledger for
+// dispatcher stock, so the Order documents themselves are the source of
+// truth here.
+export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 200 } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const pageNumber = Math.max(1, Number(page || 1));
+  const limitNumber = Math.min(200, Math.max(1, Number(limit || 200)));
+
+  const query = {
+    dispatcherCustomerId: dispatcherId,
+    orderOrigin: "DISPATCHER_REPLENISHMENT",
+    isDeleted: { $ne: true },
+  };
+
+  const [items, total] = await Promise.all([
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip((pageNumber - 1) * limitNumber)
+      .limit(limitNumber)
+      .lean(),
+    Order.countDocuments(query),
+  ]);
+
+  return {
+    items,
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      pages: Math.max(1, Math.ceil(total / limitNumber)),
+    },
+  };
+}
+
+// Every dealer order this dispatcher has fulfilled - the dispatcher's
+// "sales" side, where the customer is the dealer rather than an end
+// consumer. DISPATCHED is the status dispatcher.service.js's own dispatch
+// flow sets (consumeDispatcherStockForOrder fires in the same
+// transaction), so it's the equivalent of a dealer's COMPLETED signal.
+export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, limit = 200 } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const pageNumber = Math.max(1, Number(page || 1));
+  const limitNumber = Math.min(200, Math.max(1, Number(limit || 200)));
+
+  const query = {
+    dispatcherId,
+    "dealerSnapshot.fulfillmentMode": "DISPATCHER",
+    status: "DISPATCHED",
+    isDeleted: { $ne: true },
+  };
+
+  const [items, total] = await Promise.all([
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip((pageNumber - 1) * limitNumber)
+      .limit(limitNumber)
+      .populate({ path: "dealerId", select: "companyName contactName" })
+      .lean(),
+    Order.countDocuments(query),
+  ]);
+
+  return {
+    items,
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      pages: Math.max(1, Math.ceil(total / limitNumber)),
+    },
+  };
+}
+
+// Per-dealer lifetime totals for this dispatcher's own dealer network -
+// the "customers" of a dispatcher are the dealers it fulfills, so this is
+// the dispatcher-side equivalent of a dealer's Customer lifetime stats.
+// Scoped to DISPATCHED orders specifically (not the VERIFIED-based
+// operationalSummary already used on the profile page) since DISPATCHED is
+// the actual "stock left the dispatcher's shelf" signal.
+export async function getDispatcherDealerStats({ dispatcherId } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+
+  const dealers = await DealerProfile.find({ dispatcherId, fulfillmentMode: "DISPATCHER" })
+    .select("companyName contactName phone email status createdAt")
+    .lean();
+  const dealerIds = dealers.map((dealer) => dealer._id);
+
+  const stats = dealerIds.length
+    ? await Order.aggregate([
+        {
+          $match: {
+            dealerId: { $in: dealerIds },
+            dispatcherId: new mongoose.Types.ObjectId(String(dispatcherId)),
+            status: "DISPATCHED",
+            isDeleted: { $ne: true },
+          },
+        },
+        {
+          $group: {
+            _id: "$dealerId",
+            totalOrders: { $sum: 1 },
+            totalSpend: { $sum: "$totals.total" },
+            lastOrderAt: { $max: "$createdAt" },
+          },
+        },
+      ])
+    : [];
+
+  const statsMap = new Map(stats.map((entry) => [String(entry._id), entry]));
+
+  const items = dealers.map((dealer) => {
+    const stat = statsMap.get(String(dealer._id)) || { totalOrders: 0, totalSpend: 0, lastOrderAt: null };
+    return {
+      _id: dealer._id,
+      companyName: dealer.companyName,
+      contactName: dealer.contactName,
+      phone: dealer.phone,
+      email: dealer.email,
+      status: dealer.status,
+      totalOrders: stat.totalOrders || 0,
+      totalSpend: stat.totalSpend || 0,
+      lastOrderAt: stat.lastOrderAt || null,
+    };
+  });
+
+  return { items };
+}
+
+// Per-product purchase (from Factory) vs sale (dispatched to dealers)
+// totals for this dispatcher - the dispatcher-side equivalent of a
+// dealer's Product Summary. Derived entirely from Order line items since
+// there's no InventoryMovement-style ledger for dispatcher stock.
+const DISPATCHER_RECEIVED_STATUSES = ["DISPATCHED", "COMPLETED"];
+
+export async function getDispatcherProductSummary({ dispatcherId } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  const dispatcherObjectId = new mongoose.Types.ObjectId(String(dispatcherId));
+
+  const [purchaseAgg, salesAgg, stockRows] = await Promise.all([
+    Order.aggregate([
+      {
+        $match: {
+          dispatcherCustomerId: dispatcherObjectId,
+          orderOrigin: "DISPATCHER_REPLENISHMENT",
+          status: { $in: DISPATCHER_RECEIVED_STATUSES },
+          isDeleted: { $ne: true },
+        },
+      },
+      { $unwind: "$items" },
+      { $match: { "items.productId": { $ne: null } } },
+      { $group: { _id: "$items.productId", quantity: { $sum: "$items.quantity" } } },
+    ]),
+    Order.aggregate([
+      {
+        $match: {
+          dispatcherId: dispatcherObjectId,
+          "dealerSnapshot.fulfillmentMode": "DISPATCHER",
+          status: "DISPATCHED",
+          isDeleted: { $ne: true },
+        },
+      },
+      { $unwind: "$items" },
+      { $match: { "items.productId": { $ne: null } } },
+      { $group: { _id: "$items.productId", quantity: { $sum: "$items.quantity" } } },
+    ]),
+    DispatcherProductStock.find({ dispatcherId }).select("productId currentQuantity").lean(),
+  ]);
+
+  const purchaseMap = new Map(purchaseAgg.map((row) => [String(row._id), row.quantity]));
+  const salesMap = new Map(salesAgg.map((row) => [String(row._id), row.quantity]));
+  const stockMap = new Map(stockRows.map((row) => [String(row.productId), row.currentQuantity]));
+
+  const productIds = new Set([...purchaseMap.keys(), ...salesMap.keys(), ...stockMap.keys()]);
+  const products = productIds.size
+    ? await Product.find({ _id: { $in: Array.from(productIds) } })
+        .select("name sku category pack")
+        .lean()
+    : [];
+  const productById = new Map(products.map((product) => [String(product._id), product]));
+
+  const items = Array.from(productIds)
+    .map((id) => {
+      const product = productById.get(id) || {};
+      return {
+        productId: id,
+        name: product.name || "",
+        sku: product.sku || "",
+        category: product.category || "",
+        pack: product.pack || {},
+        purchase: purchaseMap.get(id) || 0,
+        sales: salesMap.get(id) || 0,
+        balance: stockMap.get(id) || 0,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { items };
+}
+
+// Per-product purchase/sale history for a single product - powers the
+// dispatcher's drill-down "See Purchases" / "See Sales" pages, mirroring
+// getDealerStockMovements but sourced from Order line items directly.
+export async function getDispatcherProductMovements({ dispatcherId, productId } = {}) {
+  if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
+  if (!productId) throw new ApiError(400, "Missing productId");
+
+  const productObjectId = new mongoose.Types.ObjectId(String(productId));
+
+  const [ownOrders, fulfilledOrders] = await Promise.all([
+    Order.find({
+      dispatcherCustomerId: dispatcherId,
+      orderOrigin: "DISPATCHER_REPLENISHMENT",
+      status: { $in: DISPATCHER_RECEIVED_STATUSES },
+      isDeleted: { $ne: true },
+      items: { $elemMatch: { productId: productObjectId } },
+    })
+      .select("orderNumber status createdAt items")
+      .lean(),
+    Order.find({
+      dispatcherId,
+      "dealerSnapshot.fulfillmentMode": "DISPATCHER",
+      status: "DISPATCHED",
+      isDeleted: { $ne: true },
+      items: { $elemMatch: { productId: productObjectId } },
+    })
+      .select("orderNumber status createdAt items dealerId dealerSnapshot")
+      .populate({ path: "dealerId", select: "companyName contactName" })
+      .lean(),
+  ]);
+
+  const purchases = ownOrders.map((order) => {
+    const item = (order.items || []).find((entry) => String(entry.productId) === String(productId));
+    return {
+      type: "PURCHASE",
+      order: {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+      },
+      quantity: item?.quantity || 0,
+      packLabel: item?.packLabel || "",
+      createdAt: order.createdAt,
+    };
+  });
+
+  const sales = fulfilledOrders.map((order) => {
+    const item = (order.items || []).find((entry) => String(entry.productId) === String(productId));
+    return {
+      type: "SALE",
+      order: {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+        dealerName: order.dealerId?.companyName || order.dealerSnapshot?.companyName || "",
+      },
+      quantity: item?.quantity || 0,
+      packLabel: item?.packLabel || "",
+      createdAt: order.createdAt,
+    };
+  });
+
+  const items = [...purchases, ...sales].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return { items };
+}
+
 export async function getDispatcherApplications({
   status,
   page = 1,
@@ -1664,6 +1954,7 @@ export async function verifyDispatcherApplication({
 
     dispatcher.status = DISPATCHER_STATUS.VERIFIED;
     dispatcher.isActive = true;
+    dispatcher.verifiedByUserId = adminUser?.id || adminUser?._id || null;
 
     if (notes !== undefined) {
       dispatcher.notes = normalizedNotes;
@@ -1712,6 +2003,7 @@ export async function rejectDispatcherApplication({
 
   dispatcher.status = DISPATCHER_STATUS.REJECTED;
   dispatcher.isActive = false;
+  dispatcher.rejectedByUserId = adminUser?.id || adminUser?._id || null;
 
   if (notes !== undefined) {
     dispatcher.notes = normalizeText(notes);
@@ -1725,10 +2017,7 @@ export async function rejectDispatcherApplication({
       $set: {
         isActive: false,
         accountStatus: USER_ACCOUNT_STATUS.SUSPENDED,
-        refreshTokenHash: null,
-        refreshTokenExpiresAt: null,
-        previousRefreshTokenHash: null,
-        previousRefreshTokenValidUntil: null,
+        sessions: [],
       },
     },
   );
@@ -1762,6 +2051,8 @@ export async function setDispatcherActive({
   assertDeletionNotPending(dispatcher, "Dispatcher");
 
   dispatcher.isActive = Boolean(isActive);
+  dispatcher.activeChangedBy = adminUser?.id || adminUser?._id || null;
+  dispatcher.activeChangedAt = new Date();
 
   if (dispatcher.isActive && dispatcher.status === DISPATCHER_STATUS.PENDING) {
     dispatcher.status = DISPATCHER_STATUS.VERIFIED;
@@ -1778,10 +2069,7 @@ export async function setDispatcherActive({
     user.isActive = dispatcher.isActive;
     if (!dispatcher.isActive) {
       user.accountStatus = USER_ACCOUNT_STATUS.SUSPENDED;
-      user.refreshTokenHash = null;
-      user.refreshTokenExpiresAt = null;
-      user.previousRefreshTokenHash = null;
-      user.previousRefreshTokenValidUntil = null;
+      user.sessions = [];
     } else {
       user.accountStatus = user.passwordHash
         ? USER_ACCOUNT_STATUS.ACTIVE
@@ -1888,10 +2176,7 @@ export async function deleteDispatcher({
         $set: {
           isActive: false,
           accountStatus: USER_ACCOUNT_STATUS.SUSPENDED,
-          refreshTokenHash: null,
-          refreshTokenExpiresAt: null,
-          previousRefreshTokenHash: null,
-          previousRefreshTokenValidUntil: null,
+          sessions: [],
         },
       },
     ),
@@ -1979,10 +2264,7 @@ export async function undoDispatcherDeletion({ dispatcherId, adminUser }) {
       for (const user of linkedUsers) {
         user.isActive =
           restoredStatus === DISPATCHER_STATUS.VERIFIED && restoredIsActive;
-        user.refreshTokenHash = null;
-        user.refreshTokenExpiresAt = null;
-        user.previousRefreshTokenHash = null;
-        user.previousRefreshTokenValidUntil = null;
+        user.sessions = [];
         user.accountStatus = user.isActive
           ? user.passwordHash
             ? USER_ACCOUNT_STATUS.ACTIVE
@@ -2160,18 +2442,7 @@ export async function getOrderStatementsReport({
 
   if (normalizedStatus) {
     if (["ARCHIVE", "ARCHIVED"].includes(normalizedStatus)) {
-      query.status = {
-        $in: [
-          "VERIFIED",
-          "REJECTED",
-          "PROCESSING",
-          "AWAITING_SHIPMENT",
-          "OUT_FOR_DELIVERY",
-          "DELIVERED",
-          "CLOSED",
-          "CANCELLED",
-        ],
-      };
+      query.status = { $ne: "SUBMITTED" };
     } else if (normalizedStatus === "PENDING") {
       query.status = "SUBMITTED";
     } else {
@@ -2382,7 +2653,7 @@ export async function hardDeleteOrder({
   if (!orderId) throw new ApiError(400, "Missing orderId");
 
   const order = await Order.findById(orderId).select(
-    "_id orderNumber status dealerId dispatcherId isDeleted deletion",
+    "_id orderNumber status dealerId dispatcherId isDeleted deletion stockReservation",
   );
   if (!order) throw new ApiError(404, "Order not found");
   if (order.deletion?.pending || order.isDeleted) {
@@ -2396,15 +2667,33 @@ export async function hardDeleteOrder({
   });
 
   const deleteAfter = deletionDeadline();
-  order.isDeleted = true;
-  order.deletion = {
-    pending: true,
-    requestedAt: new Date(),
-    deleteAfter,
-    requestedByUserId: actorUserId(adminUser),
-    reason: normalizeText(reason),
-  };
-  await order.save();
+
+  await runInTxn(async (session) => {
+    // Trashing an order must not permanently strand its reserved stock -
+    // an order sitting in the review/verified stage still holds a live
+    // reservation, and without this it would never be released (the
+    // order disappears from every normal queue once isDeleted is set,
+    // so nothing would ever call releaseReservationForOrder for it).
+    if (order.stockReservation?.status === "RESERVED") {
+      await releaseReservationForOrder({
+        order,
+        actorUser: adminUser,
+        reason: "Order deleted by admin",
+        note: normalizeText(reason),
+        session,
+      });
+    }
+
+    order.isDeleted = true;
+    order.deletion = {
+      pending: true,
+      requestedAt: new Date(),
+      deleteAfter,
+      requestedByUserId: actorUserId(adminUser),
+      reason: normalizeText(reason),
+    };
+    await order.save({ session });
+  });
 
   return {
     ok: true,
@@ -2446,67 +2735,6 @@ export async function undoOrderDeletion({ orderId }) {
   await order.save();
 
   return { ok: true, orderId: order._id, orderNumber: order.orderNumber };
-}
-
-export async function approveOrder({ orderId, adminUser }) {
-  if (!orderId) throw new ApiError(400, "Missing orderId");
-
-  const order = await Order.findById(orderId);
-  if (!order) throw new ApiError(404, "Order not found");
-
-  const allowed = new Set([
-    ORDER_STATUS?.SUBMITTED ?? "SUBMITTED",
-    ORDER_STATUS?.PENDING ?? "PENDING",
-  ]);
-  if (!allowed.has(order.status)) {
-    throw new ApiError(
-      400,
-      `Order cannot be approved from status: ${order.status}`,
-    );
-  }
-
-  order.status = ORDER_STATUS?.APPROVED ?? "APPROVED";
-  order.updatedBy = adminUser.id || adminUser._id || null;
-  await order.save();
-
-  return { ok: true };
-}
-
-export async function sendOrderToDispatcher({ orderId, adminUser }) {
-  if (!orderId) throw new ApiError(400, "Missing orderId");
-
-  const order = await Order.findById(orderId);
-  if (!order) throw new ApiError(404, "Order not found");
-
-  const approved = ORDER_STATUS?.APPROVED ?? "APPROVED";
-  if (order.status !== approved) {
-    throw new ApiError(
-      400,
-      "Order must be approved before sending to dispatcher",
-    );
-  }
-
-  if (!order.dispatcherId) {
-    const dealer = await DealerProfile.findById(order.dealerId).select(
-      "dispatcherId fulfillmentMode",
-    );
-
-    if (dealer?.dispatcherId && dealer?.fulfillmentMode === "DISPATCHER") {
-      order.dispatcherId = dealer.dispatcherId;
-    }
-  }
-
-  if (!order.dispatcherId) {
-    throw new ApiError(400, "No dispatcher assigned to this order");
-  }
-
-  await assertDispatcherActive(order.dispatcherId);
-
-  order.status = ORDER_STATUS?.SENT_TO_DISPATCHER ?? "SENT_TO_DISPATCHER";
-  order.updatedBy = adminUser.id || adminUser._id || null;
-  await order.save();
-
-  return { ok: true };
 }
 
 // ----------------------------
@@ -2647,7 +2875,8 @@ export async function closeOrder({ orderId, adminUser }) {
       throw new ApiError(400, "Credit order not fully settled; cannot close");
     }
 
-    order.status = ORDER_STATUS?.CLOSED ?? "CLOSED";
+    order.closedAt = new Date();
+    order.closedBy = adminUser.id || adminUser._id || null;
     order.updatedBy = adminUser.id || adminUser._id || null;
     await order.save({ session });
 
@@ -2669,9 +2898,7 @@ export async function reviseOrder({ orderId, patch, reason = "", adminUser }) {
     const order = await Order.findById(orderId).session(session);
     if (!order) throw new ApiError(404, "Order not found");
 
-    const closed = ORDER_STATUS?.CLOSED ?? "CLOSED";
-    const cancelled = ORDER_STATUS?.CANCELLED ?? "CANCELLED";
-    if ([closed, cancelled].includes(order.status)) {
+    if (order.closedAt || order.status === ORDER_STATUS.CANCELLED) {
       throw new ApiError(400, "Cannot revise a closed/cancelled order");
     }
 
