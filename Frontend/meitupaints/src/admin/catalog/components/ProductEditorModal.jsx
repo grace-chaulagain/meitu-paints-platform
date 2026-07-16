@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useCreateAdminProductMutation,
+  useDeleteAdminProductImageMutation,
   useDeleteAdminProductMutation,
   useRestoreAdminProductMutation,
   useUpdateAdminProductMutation,
+  useUploadAdminProductImageMutation,
 } from "../../../redux/api/meituApi.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
@@ -53,6 +55,11 @@ const STATUS_OPTIONS = [
   { key: "ACTIVE", label: "Active" },
   { key: "INACTIVE", label: "Inactive" },
 ];
+
+function getPrimaryImage(images = []) {
+  if (!Array.isArray(images) || !images.length) return null;
+  return images.find((img) => img?.isPrimary) || images[0] || null;
+}
 
 function toDropdownOptions(options) {
   return options.map((option) => ({ key: option.value, label: option.label }));
@@ -317,6 +324,8 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
   const [updateProduct] = useUpdateAdminProductMutation();
   const [deleteProduct] = useDeleteAdminProductMutation();
   const [restoreProduct] = useRestoreAdminProductMutation();
+  const [uploadProductImage] = useUploadAdminProductImageMutation();
+  const [deleteProductImage] = useDeleteAdminProductImageMutation();
 
   const [form, setForm] = useState(createInitialForm());
   const [initialFormSignature, setInitialFormSignature] = useState(() => serializeEditorForm(createInitialForm()));
@@ -325,9 +334,16 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [pendingExit, setPendingExit] = useState(null);
+  const [images, setImages] = useState(product?.images || []);
+  const [imageBusy, setImageBusy] = useState(false);
+  const primaryImage = getPrimaryImage(images);
 
   const resolvedCategoryOptions = useMemo(() => buildEditorCategoryOptions(categoryOptions, form.category), [categoryOptions, form.category]);
   const isDirty = useMemo(() => serializeEditorForm(form) !== initialFormSignature, [form, initialFormSignature]);
+
+  useEffect(() => {
+    setImages(product?.images || []);
+  }, [product]);
 
   useEffect(() => {
     if (!product) {
@@ -532,6 +548,48 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
       setFormError("Failed to save product. Please review the fields and try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleUploadImage() {
+    if (!product?._id) return;
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.onchange = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        setImageBusy(true);
+        const updated = await uploadProductImage({ productId: product._id, file }).unwrap();
+        setImages(updated?.images || []);
+      } catch (error) {
+        console.error("Product image upload failed:", error);
+        alert(error?.message || "Failed to upload product image");
+      } finally {
+        setImageBusy(false);
+      }
+    };
+    fileInput.click();
+  }
+
+  async function handleRemoveImage() {
+    if (!product?._id || !primaryImage?.publicId) return;
+
+    const confirmed = window.confirm("Remove this variant's image? It will fall back to the family image until a new one is uploaded.");
+    if (!confirmed) return;
+
+    try {
+      setImageBusy(true);
+      const updated = await deleteProductImage({ productId: product._id, publicId: primaryImage.publicId }).unwrap();
+      setImages(updated?.images || []);
+    } catch (error) {
+      console.error("Product image removal failed:", error);
+      alert(error?.message || "Failed to remove product image");
+    } finally {
+      setImageBusy(false);
     }
   }
 
@@ -746,11 +804,34 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
         <div className="product-editor-grid" style={{ marginTop: 18, display: "grid", gridTemplateColumns: "minmax(240px,280px) minmax(0,1fr)", gap: 16, alignItems: "start" }}>
           <aside className="product-editor-snapshot" style={{ position: "sticky", top: 0, display: "grid", gap: 14 }}>
             <Surface padding={16} className="product-editor-snapshot-card">
-              <div className="product-editor-icon-stage">
-                <div className="product-editor-icon-core">
-                  <DashboardIcon name="package" size={28} strokeWidth={1.6} />
-                </div>
+              <div className="product-editor-icon-stage" style={primaryImage?.url ? { height: 160, overflow: "hidden", position: "relative" } : undefined}>
+                {primaryImage?.url ? (
+                  <img
+                    src={primaryImage.url}
+                    alt={primaryImage.alt || form.name || "Product image"}
+                    style={{ position: "absolute", inset: 20, width: "calc(100% - 40px)", height: "calc(100% - 40px)", objectFit: "contain", mixBlendMode: "multiply" }}
+                  />
+                ) : (
+                  <div className="product-editor-icon-core">
+                    <DashboardIcon name="package" size={28} strokeWidth={1.6} />
+                  </div>
+                )}
               </div>
+
+              {isEdit ? (
+                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                  <GhostButton icon="download" onClick={handleUploadImage} disabled={imageBusy} style={{ flex: 1, justifyContent: "center" }}>
+                    {imageBusy ? "Working…" : primaryImage ? "Replace image" : "Upload image"}
+                  </GhostButton>
+                  {primaryImage ? (
+                    <GhostButton danger icon="trash" onClick={handleRemoveImage} disabled={imageBusy} aria-label="Remove image" />
+                  ) : null}
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                  Save this variant first to upload its image.
+                </div>
+              )}
 
               <div style={{ marginTop: 14 }}>
                 <CardLabel icon="chart">Live Snapshot</CardLabel>

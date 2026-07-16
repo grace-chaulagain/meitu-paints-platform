@@ -5,10 +5,9 @@
  * than duplicating them - useful for the yearly scheme refresh the name
  * implies.
  *
- * Business rule: only Granite 2D, Granite 3D, and Real Stone Paint generate
- * GOLDEN coupons. Every other product - including Epoxy Floor Paint, which
- * has the same flat-points-plus-rule shape as the Granite Textures items -
- * generates GREEN.
+ * Business rule: Granite 2D, Granite 3D, Real Stone Paint, and Floor Paint
+ * (Epoxy Floor Paint) generate GOLDEN coupons. Every other product generates
+ * GREEN.
  *
  * Usage:
  *   DOTENV_CONFIG_PATH=.env.staging node src/scripts/seed-points-catalog.js
@@ -57,14 +56,14 @@ const PRODUCTS = [
   sizesProduct("Primers", "Efficient Exterior Primer", { "20L": 200, "10L": 100 }),
   sizesProduct("Primers", "Alkali Resistant Interior Primer", { "20L": 200, "10L": 100 }),
 
-  // Granite Textures - the only GOLDEN-eligible products in the scheme.
+  // Granite Textures - GOLDEN-eligible products in the scheme.
   // Flat points, no distribution/rule breakdown - same as any other product.
   flatProduct("Granite Textures", "Granite 2D", 200, "", "GOLDEN"),
   flatProduct("Granite Textures", "Granite 3D", 300, "", "GOLDEN"),
   flatProduct("Granite Textures", "Real Stone Paint", 300, "", "GOLDEN"),
 
-  // Floor Paint - same flat-points shape as Granite Textures, but GREEN
-  flatProduct("Floor Paint", "Epoxy Floor Paint", 200, "200 points on True Bond A."),
+  // Floor Paint - same flat-points shape as Granite Textures, also GOLDEN.
+  flatProduct("Floor Paint", "Epoxy Floor Paint", 200, "200 points on True Bond A.", "GOLDEN"),
 
   // Enamel
   sizesProduct("Enamel", "Meitu Glossy Enamels", { "4L": 100 }),

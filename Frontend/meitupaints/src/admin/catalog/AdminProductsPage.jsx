@@ -458,7 +458,9 @@ function CatalogGridStyles() {
         aspect-ratio:4 / 3;
         border-radius:18px;
         overflow:hidden;
-        background:linear-gradient(145deg, #f5f5f7 0%, #ffffff 100%);
+        background:
+          radial-gradient(circle at 30% 20%, rgba(0,113,227,.05), transparent 55%),
+          var(--color-fog, #f5f5f7);
         cursor:pointer;
         display:grid;
         place-items:center;
@@ -701,7 +703,9 @@ function CatalogGridStyles() {
         aspect-ratio:1 / 1;
         border-radius:22px;
         overflow:hidden;
-        background:linear-gradient(145deg, #f5f5f7, #fff);
+        background:
+          radial-gradient(circle at 30% 20%, rgba(0,113,227,.05), transparent 55%),
+          var(--color-fog, #f5f5f7);
         display:grid;
         place-items:center;
         position:relative;
@@ -831,6 +835,7 @@ function CatalogGridStyles() {
         background:rgba(0,113,227,.08);
         color:var(--color-azure, #0071e3);
         flex:0 0 auto;
+        overflow:hidden;
       }
       .catalog-variant-pack strong{
         display:block;
@@ -956,12 +961,21 @@ function CompactVariantRow({ variant, onEditProduct, onUploadVariantImage, uploa
   const startingPrice = getStartingPrice(variant);
   const inactive = variant?.isActive === false;
   const isUploading = uploadingVariantId === variant._id;
+  const variantImage = getPrimaryImage(variant?.images || []);
 
   return (
     <div className={`catalog-variant-row ${inactive ? "inactive" : ""}`}>
       <div className="catalog-variant-pack">
         <span className="catalog-variant-pack-icon">
-          <DashboardIcon name={inactive ? "minus" : "package"} size={13} strokeWidth={2} />
+          {variantImage?.url ? (
+            <CachedImageElement
+              src={variantImage.url}
+              alt={variantImage.alt || variant?.pack?.label || "Variant image"}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", borderRadius: "999px" }}
+            />
+          ) : (
+            <DashboardIcon name={inactive ? "minus" : "package"} size={13} strokeWidth={2} />
+          )}
         </span>
         <span>
           <strong>{variant?.pack?.label || "—"}</strong>
@@ -1005,7 +1019,7 @@ function MinimalCatalogCard({ entry, divisions, onOpen, onViewImage }) {
           <CachedImageElement
             src={heroImage.url}
             alt={heroImage.alt || entry.name}
-            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "var(--color-snow, #fff)" }}
+            style={{ position: "absolute", inset: 18, width: "calc(100% - 36px)", height: "calc(100% - 36px)", objectFit: "contain", mixBlendMode: "multiply" }}
           />
         ) : (
           <div style={{ padding: 18, textAlign: "center", fontSize: 12, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
@@ -1075,6 +1089,7 @@ function ProductListRow({ entry, divisions, onOpen, onViewImage }) {
       <div className="catalog-list-row-grid" style={{ display: "grid", gridTemplateColumns: LIST_COLUMNS, gap: 12, alignItems: "center", flex: 1, minWidth: 0 }}>
         <div
           className="catalog-list-thumb"
+          style={heroImage?.url ? { padding: 5 } : undefined}
           onClick={(event) => {
             if (heroImage?.url) {
               event.stopPropagation();
@@ -1083,7 +1098,7 @@ function ProductListRow({ entry, divisions, onOpen, onViewImage }) {
           }}
         >
           {heroImage?.url ? (
-            <CachedImageElement src={heroImage.url} alt={heroImage.alt || entry.name} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "var(--color-snow, #fff)" }} />
+            <CachedImageElement src={heroImage.url} alt={heroImage.alt || entry.name} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", mixBlendMode: "multiply" }} />
           ) : (
             <DashboardIcon name="package" size={16} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)" }} />
           )}
@@ -1218,7 +1233,7 @@ function CatalogDetailModal({
                   <CachedImageElement
                     src={heroImage.url}
                     alt={heroImage.alt || entry.name}
-                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "var(--color-snow, #fff)" }}
+                    style={{ position: "absolute", inset: 28, width: "calc(100% - 56px)", height: "calc(100% - 56px)", objectFit: "contain", mixBlendMode: "multiply" }}
                   />
                 ) : (
                   <div style={{ padding: 18, textAlign: "center", fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>No preview image</div>

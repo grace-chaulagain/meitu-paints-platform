@@ -93,14 +93,14 @@
   {
     "code": "DARK-COLOR-INT-EXT-C1",
     "name": "MeiTu Eco-Friendly Dark Color Interior And Exterior Wall Paint C1",
-    "category": "INTERIOR_EXTERIOR_PAINT",
+    "category": "INTERIOR_PAINT",
     "description": "Eco-friendly dark color wall paint for both interior and exterior use, formulated for rich shade impact.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },
   {
     "code": "DARK-COLOR-INT-EXT-C2",
     "name": "MeiTu Eco-Friendly Dark Color Interior And Exterior Wall Paint C2",
-    "category": "INTERIOR_EXTERIOR_PAINT",
+    "category": "EXTERIOR_PAINT",
     "description": "Eco-friendly dark color wall paint for interior and exterior applications with bold and lasting appearance.",
     "copyrightText": "Product visuals and descriptions © Meitu Paints."
   },

@@ -20,6 +20,7 @@ import {
   Surface,
   ViewToggle,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
 
 const STATUS_OPTIONS = [
@@ -559,7 +560,10 @@ export default function AdminSalesPage() {
           page={dealerPagination.page}
           totalPages={dealerPagination.pages}
           totalCount={dealerPagination.total}
-          onChange={setDealerPage}
+          onChange={(next) => {
+            setDealerPage(next);
+            scrollResultsToTop();
+          }}
         />
       </Surface>
 

@@ -40,11 +40,14 @@ function getPrimaryImage(images = []) {
 
 function resolveCartItemImage(product, familyMap = {}) {
   const familyByCode = familyMap?.[product?.code] || null;
+  // A cart line is a specific SKU (a specific bucket size) - its own image
+  // takes priority over the family's shared image, which would otherwise
+  // show every size in the family rather than the one actually ordered.
   return (
+    getPrimaryImage(product?.images || []) ||
     getPrimaryImage(product?.familyImages || []) ||
     getPrimaryImage(product?.family?.images || []) ||
     getPrimaryImage(familyByCode?.images || []) ||
-    getPrimaryImage(product?.images || []) ||
     null
   );
 }

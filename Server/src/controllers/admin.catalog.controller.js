@@ -12,6 +12,9 @@ import {
   updateProductService,
   deleteProductService,
   restoreProductService,
+  uploadProductImageService,
+  setPrimaryProductImageService,
+  deleteProductImageService,
 } from "../services/admin.catalog.service.js";
 import { listProductCategories } from "../services/product.service.js";
 
@@ -157,5 +160,38 @@ export async function restoreProduct(req, res) {
     return res.json({ ok: true, item, message: "Product restored" });
   } catch (error) {
     return handleError(res, error, "Failed to restore product");
+  }
+}
+
+export async function uploadProductImage(req, res) {
+  try {
+    const item = await uploadProductImageService(req.params.productId, req.file);
+    return res.json({ ok: true, item, message: "Product image uploaded" });
+  } catch (error) {
+    return handleError(res, error, "Failed to upload product image");
+  }
+}
+
+export async function setPrimaryProductImage(req, res) {
+  try {
+    const item = await setPrimaryProductImageService(
+      req.params.productId,
+      req.body.publicId,
+    );
+    return res.json({ ok: true, item, message: "Primary image updated" });
+  } catch (error) {
+    return handleError(res, error, "Failed to set primary image");
+  }
+}
+
+export async function deleteProductImage(req, res) {
+  try {
+    const item = await deleteProductImageService(
+      req.params.productId,
+      req.params.publicId,
+    );
+    return res.json({ ok: true, item, message: "Product image deleted" });
+  } catch (error) {
+    return handleError(res, error, "Failed to delete product image");
   }
 }

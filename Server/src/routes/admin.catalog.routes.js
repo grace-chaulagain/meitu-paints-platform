@@ -17,6 +17,9 @@ import {
   updateProduct,
   deleteProduct,
   restoreProduct,
+  uploadProductImage,
+  setPrimaryProductImage,
+  deleteProductImage,
 } from "../controllers/admin.catalog.controller.js";
 
 const router = Router();
@@ -56,5 +59,19 @@ router.post("/products", createProduct);
 router.patch("/products/:productId", updateProduct);
 router.delete("/products/:productId", deleteProduct);
 router.post("/products/:productId/restore", restoreProduct);
+
+router.post(
+  "/products/:productId/image",
+  upload.single("image"),
+  uploadProductImage,
+);
+router.patch(
+  "/products/:productId/image/primary",
+  setPrimaryProductImage,
+);
+router.delete(
+  "/products/:productId/image/:publicId",
+  deleteProductImage,
+);
 
 export default router;

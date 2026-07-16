@@ -1492,7 +1492,12 @@ export default function AdminOrdersPage() {
   const changeCustomTo = (next) => updateListState({ customTo: next, page: 1 });
   const changeOrderStatus = (next) => updateListState({ orderStatus: normalizeOrderStatus(next, filterMode), page: 1 });
   const changePageSize = (next) => updateListState({ pageSize: Number(next), page: 1 });
-  const goToPage = (next) => updateListState({ page: next });
+  const goToPage = (next) => {
+    updateListState({ page: next });
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   return (
     <div className="admin-orders-page" style={{ display: "grid", gap: 16 }}>

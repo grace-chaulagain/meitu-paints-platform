@@ -1,5 +1,7 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import { compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.js";
+import { amountInWords, compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.js";
+
+const MEITU_PAN = "606572561";
 
 // Mirrors FactoryInvoiceModal.jsx's on-screen layout, but declared with
 // react-pdf's flexbox primitives instead of raw HTML/CSS. Unlike the earlier
@@ -10,14 +12,13 @@ import { compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.
 const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: "Helvetica", fontSize: 10, color: "#111111" },
   header: { textAlign: "center", position: "relative" },
-  copyLabel: {
+  panLabel: {
     position: "absolute",
-    top: 0,
+    top: 2,
     right: 0,
-    fontSize: 9.5,
+    fontSize: 8.5,
     fontWeight: 700,
-    color: "#333333",
-    textTransform: "uppercase",
+    color: "#555555",
   },
   companyName: { fontSize: 16, fontWeight: 700 },
   companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: "#444444" },
@@ -62,39 +63,48 @@ const styles = StyleSheet.create({
   colUnit: { flex: 0.7, fontSize: 9 },
   colRate: { flex: 1, fontSize: 9.5, textAlign: "right" },
   colAmount: { flex: 1.2, fontSize: 9.5, fontWeight: 700, textAlign: "right" },
-  totalsWrap: { marginTop: 12, flexDirection: "row", justifyContent: "flex-end" },
-  totalsBox: { width: 280, borderWidth: 1, borderColor: "#cccccc", borderRadius: 4 },
+  amountInWordsRow: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#dddddd",
+    borderTopStyle: "dashed",
+  },
+  amountInWordsLabel: { fontSize: 7.5, fontWeight: 700, color: "#888888", textTransform: "uppercase" },
+  amountInWordsValue: { marginTop: 2, fontSize: 8.5, fontWeight: 700, color: "#333333" },
+  totalsWrap: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end" },
+  totalsBox: { width: 230, borderWidth: 1, borderColor: "#cccccc", borderRadius: 4 },
   bucketLabel: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
     borderTopWidth: 1,
     borderTopColor: "#e2e2e2",
-    fontSize: 9.5,
+    fontSize: 8,
     fontWeight: 700,
     backgroundColor: "#f7f7f7",
   },
   bucketRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 5,
-    paddingLeft: 18,
-    paddingRight: 10,
-    fontSize: 9,
+    paddingVertical: 3.5,
+    paddingLeft: 14,
+    paddingRight: 8,
+    fontSize: 7.5,
   },
   bucketRowEmphasis: { fontWeight: 700 },
   totalsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderTopWidth: 1,
     borderTopColor: "#e2e2e2",
   },
   totalsRowEmphasis: { backgroundColor: "#f2f2f2" },
-  totalsLabel: { fontSize: 9.5, fontWeight: 500 },
-  totalsLabelEmphasis: { fontSize: 10, fontWeight: 700 },
-  totalsValue: { fontSize: 9.5, fontWeight: 700 },
-  totalsValueEmphasis: { fontSize: 10, fontWeight: 700 },
+  totalsLabel: { fontSize: 8, fontWeight: 500 },
+  totalsLabelEmphasis: { fontSize: 8.5, fontWeight: 700 },
+  totalsValue: { fontSize: 8, fontWeight: 700 },
+  totalsValueEmphasis: { fontSize: 8.5, fontWeight: 700 },
   signatureRow: {
     marginTop: 34,
     flexDirection: "row",
@@ -128,13 +138,13 @@ function productDisplayName(item) {
   return size ? `${item.name || "—"} (${size})` : item.name || "—";
 }
 
-function CopyPage({ copy, invoice, proforma, proformaId }) {
+function InvoicePage({ invoice, proforma, proformaId }) {
   const currency = invoice.totals?.currency;
 
   return (
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
-        <Text style={styles.copyLabel}>{copy}</Text>
+        <Text style={styles.panLabel}>PAN: {MEITU_PAN}</Text>
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>
         <Text style={styles.companyAddress}>Madhyapur Thimi-08, Bhaktapur</Text>
         <Text style={styles.docTitle}>PROFORMA INVOICE</Text>
@@ -143,8 +153,7 @@ function CopyPage({ copy, invoice, proforma, proformaId }) {
       <View style={styles.infoSection}>
         <View style={styles.infoRow}>
           <View style={styles.infoColLeft}>
-            <InfoLine label="Dealer Name" value={invoice.dealer?.companyName} />
-            <InfoLine label="Contact Person" value={invoice.dealer?.contactName} />
+            <InfoLine label="Company Name" value={invoice.dealer?.companyName} />
             <InfoLine label="Phone" value={invoice.dealer?.phone} />
             <InfoLine label="Email" value={invoice.dealer?.email} />
             <InfoLine label="Address" value={invoice.dealer?.address} />
@@ -152,7 +161,6 @@ function CopyPage({ copy, invoice, proforma, proformaId }) {
           </View>
           <View style={styles.infoColRight}>
             <InfoLine label="Proforma ID" value={proformaId} />
-            <InfoLine label="Order No." value={invoice.orderNumber} />
             <InfoLine label="Date" value={compactDateWithYear(invoice.generatedAt)} />
             <InfoLine label="Payment Method" value={invoice.payment?.method} />
           </View>
@@ -184,6 +192,11 @@ function CopyPage({ copy, invoice, proforma, proformaId }) {
             </Text>
           </View>
         ))}
+      </View>
+
+      <View style={styles.amountInWordsRow} wrap={false}>
+        <Text style={styles.amountInWordsLabel}>Amount in Words</Text>
+        <Text style={styles.amountInWordsValue}>{amountInWords(proforma.grandTotal, currency)}</Text>
       </View>
 
       <View style={styles.totalsWrap} wrap={false}>
@@ -258,7 +271,7 @@ function CopyPage({ copy, invoice, proforma, proformaId }) {
       <View style={styles.signatureRow} wrap={false}>
         <Text>Factory ____________</Text>
         <Text>Driver ____________</Text>
-        <Text>Dealer ____________</Text>
+        <Text>Receiver ____________</Text>
       </View>
 
       <Text style={styles.footer} fixed>
@@ -269,14 +282,11 @@ function CopyPage({ copy, invoice, proforma, proformaId }) {
 }
 
 export default function ProformaPdfDocument({ invoice, proforma }) {
-  const copies = invoice?.copies?.length ? invoice.copies : ["Factory Copy", "Driver Copy", "Dealer Copy"];
   const proformaId = deriveProformaId(invoice);
 
   return (
     <Document title={`Proforma ${invoice?.orderNumber || ""}`}>
-      {copies.map((copy) => (
-        <CopyPage key={copy} copy={copy} invoice={invoice} proforma={proforma} proformaId={proformaId} />
-      ))}
+      <InvoicePage invoice={invoice} proforma={proforma} proformaId={proformaId} />
     </Document>
   );
 }

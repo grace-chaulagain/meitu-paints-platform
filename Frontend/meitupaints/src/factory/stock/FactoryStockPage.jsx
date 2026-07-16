@@ -142,7 +142,6 @@ export default function FactoryStockPage() {
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
-  const [family, setFamily] = useState("ALL");
   const [status, setStatus] = useState("ALL");
   const [sort, setSort] = useState("name");
   const [view, setView] = useState("card");
@@ -152,12 +151,11 @@ export default function FactoryStockPage() {
   const stockQuery = useGetStockQuery({
     q: query,
     category: category === "ALL" ? "" : category,
-    code: family === "ALL" ? "" : family,
     status,
     limit: 200,
   });
   // The catalog can exceed the API's per-request cap of 200, so this list
-  // (used to build category/family filters and the bulk-import SKU lookup)
+  // (used to build the category filter and the bulk-import SKU lookup)
   // is assembled from two pages - generous headroom over the current
   // catalog size without needing open-ended pagination.
   const allStockPage1 = useGetStockQuery({ limit: 200, page: 1 });
@@ -167,7 +165,6 @@ export default function FactoryStockPage() {
     [allStockPage1.data, allStockPage2.data],
   );
   const categories = useMemo(() => [...new Set(allItems.map((item) => item.category).filter(Boolean))].sort(), [allItems]);
-  const families = useMemo(() => [...new Set(allItems.map((item) => item.code).filter(Boolean))].sort(), [allItems]);
 
   const items = useMemo(() => {
     return [...(stockQuery.data?.items || [])].sort((a, b) => {
@@ -204,9 +201,35 @@ export default function FactoryStockPage() {
   const showGroupHeadings = category === "ALL" && groupedItems.length > 1;
 
   const categoryOptions = [{ key: "ALL", label: "All categories" }, ...categories.map((item) => ({ key: item, label: titleCaseLabel(item) }))];
-  const familyOptions = [{ key: "ALL", label: "All families" }, ...families.map((item) => ({ key: item, label: item }))];
 
   const loadError = stockQuery.error ? getQueryErrorMessage(stockQuery.error, "Failed to load the stock catalog.") : "";
+
+  // Filters are deliberately mutually exclusive rather than combinable, to
+  // keep this page's filter state simple and predictable: activating a
+  // search or a filter clears whatever else was active, instead of
+  // stacking into a combinatorial state the admin has to mentally track.
+  function updateSearch(next) {
+    setDraftQuery(next);
+    if (next === "") {
+      setQuery("");
+      setCategory("ALL");
+      setStatus("ALL");
+    }
+  }
+
+  function changeCategory(next) {
+    setCategory(next);
+    setStatus("ALL");
+    setDraftQuery("");
+    setQuery("");
+  }
+
+  function changeStatus(next) {
+    setStatus(next);
+    setCategory("ALL");
+    setDraftQuery("");
+    setQuery("");
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -225,11 +248,10 @@ export default function FactoryStockPage() {
 
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ maxWidth: 300, flex: "1 1 220px" }}>
-            <SearchField value={draftQuery} onChange={setDraftQuery} onSubmit={() => setQuery(draftQuery.trim())} placeholder="Search product, SKU, category…" />
+            <SearchField value={draftQuery} onChange={updateSearch} onSubmit={() => setQuery(draftQuery.trim())} placeholder="Search product, SKU, category…" />
           </div>
-          <AppleDropdown value={category} options={categoryOptions} onChange={setCategory} style={{ width: 170 }} />
-          <AppleDropdown value={family} options={familyOptions} onChange={setFamily} style={{ width: 170 }} />
-          <AppleDropdown value={status} options={STATUS_OPTIONS} onChange={setStatus} style={{ width: 150 }} />
+          <AppleDropdown value={category} options={categoryOptions} onChange={changeCategory} style={{ width: 170 }} />
+          <AppleDropdown value={status} options={STATUS_OPTIONS} onChange={changeStatus} style={{ width: 150 }} />
           <AppleDropdown value={sort} options={SORT_OPTIONS} onChange={setSort} style={{ width: 160 }} />
           <ViewToggle value={view} onChange={setView} />
         </div>

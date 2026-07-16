@@ -30,6 +30,7 @@ import {
   SegmentedControl,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
 
 // Credit limits/terms were removed entirely (2026) - dealer payments are
@@ -498,10 +499,26 @@ function EditDealerModal({ open, dealer, saving, onClose, onSave }) {
   );
 }
 
+function orderActivitySizesLabel(order) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const sizes = [];
+  const seen = new Set();
+  for (const item of items) {
+    const label = (item.packLabel || "").trim();
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      sizes.push(label);
+    }
+  }
+  if (!sizes.length) return "";
+  return sizes.length > 3 ? `${sizes.slice(0, 3).join(", ")} +${sizes.length - 3}` : sizes.join(", ");
+}
+
 function OrderActivityRow({ order, onOpen }) {
   const status = normalizeStatus(order.status);
   const meta = orderStatusMeta(status);
   const dotColor = { positive: "#15803d", accent: "var(--color-azure,#0071e3)", critical: "#b42318", caution: "var(--color-caution,#b64400)", neutral: "var(--color-graphite,#707070)" }[meta.tone] || "var(--color-graphite,#707070)";
+  const sizesLabel = orderActivitySizesLabel(order);
 
   return (
     <button type="button" className="dealer-profile-activity-row" onClick={() => onOpen(order)}>
@@ -510,7 +527,10 @@ function OrderActivityRow({ order, onOpen }) {
         <span className="dealer-profile-activity-title">
           Order {order.orderNumber || "—"} {meta.label.toLowerCase()}
         </span>
-        <span className="dealer-profile-activity-time">{formatDateTime(order.updatedAt || order.createdAt)}</span>
+        <span className="dealer-profile-activity-time">
+          {sizesLabel ? `${sizesLabel} · ` : ""}
+          {formatDateTime(order.updatedAt || order.createdAt)}
+        </span>
       </span>
       <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite,#707070)", flexShrink: 0 }} />
     </button>
@@ -1372,7 +1392,10 @@ export default function AdminDealerProfilePage() {
                   totalPages={historyTotalPages}
                   totalCount={historyDayGroups.length}
                   pageSize={HISTORY_DAYS_PAGE_SIZE}
-                  onChange={setHistoryPage}
+                  onChange={(next) => {
+                    setHistoryPage(next);
+                    scrollResultsToTop();
+                  }}
                 />
               </>
             )}

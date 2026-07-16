@@ -1,16 +1,15 @@
 import JSZip from "jszip";
-import { renderCouponQrPng, renderCouponQrSvg } from "./couponQrImage.js";
+import { renderCouponFrontPng, getCouponBackSvg, renderCouponBackPng } from "./couponCardImage.js";
 
-// Meitu doesn't print these coupons in-house - the QR assets get handed off
-// to an external print vendor, who place the QR into a small designated
-// area on a sturdy coupon they design and produce themselves. So the
-// deliverable isn't a "cut into coupons" print sheet, it's one QR asset per
-// coupon (both a vector SVG - the format professional print shops prefer,
-// since it never pixelates regardless of final print size - and a high-res
-// PNG fallback), with the points value captioned directly beneath the QR
-// so it's legible on the physical coupon itself, plus a manifest so the
-// vendor's and Meitu's records both trace back cleanly from a physical
-// coupon to its exact coupon code / points / cash amount.
+// Meitu doesn't print these coupons in-house - the assets get handed off to
+// an external print vendor, who cut/produce the physical cards from them.
+// So the deliverable is one print-ready front card per coupon (QR + points
+// composited onto the real Gold/Green template, both as a vector SVG - the
+// format professional print shops prefer, since it never pixelates
+// regardless of final print size - and a high-res PNG fallback), plus one
+// shared back card per batch (the back carries no per-coupon data), plus a
+// manifest so the vendor's and Meitu's records both trace back cleanly from
+// a physical coupon to its exact coupon code / points / cash amount.
 function csvEscape(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
@@ -24,9 +23,10 @@ function sanitizeForFilename(value) {
     .trim();
 }
 
-// One batch is always one product (+ size) - schemeProductId is fixed per
-// generateCoupons call - so the root folder name is derived once from the
-// first coupon rather than per-coupon.
+// One batch is always one product (+ size) and one coupon type -
+// schemeProductId is fixed per generateCoupons call - so the root folder
+// name and the shared back card are derived once from the first coupon
+// rather than per-coupon.
 //
 // onProgress (optional) is called repeatedly with { phase, done, total } for
 // the "render" phase (one call per coupon, as its SVG/PNG is drawn) and
@@ -39,20 +39,34 @@ export async function downloadCouponPrintAssets({ coupons = [], batchId = "", on
   const productName = sanitizeForFilename(coupons[0].productName) || "Coupon";
   const bucketSize = sanitizeForFilename(coupons[0].bucketSize);
   const rootName = `${productName}${bucketSize ? `-${bucketSize}-QR` : "QR"}`;
+  const type = coupons[0].type;
+  const backLabel = type === "GOLDEN" ? "Gold" : "Green";
 
   const zip = new JSZip();
   const root = zip.folder(rootName);
   const pngFolder = root.folder("PNG");
   const svgFolder = root.folder("SVG");
+  const backFolder = root.folder("Back");
 
-  const manifestRows = [["Coupon Code", "Type", "Points", "Cash Amount", "Expires At", "SVG File", "PNG File"]];
+  const backSvgFilename = `${backLabel}-Back.svg`;
+  const backPngFilename = `${backLabel}-Back.png`;
+  backFolder.file(backSvgFilename, getCouponBackSvg(type));
+  backFolder.file(backPngFilename, (await renderCouponBackPng(type)).replace(/^data:image\/png;base64,/, ""), {
+    base64: true,
+  });
+
+  const manifestRows = [
+    ["Coupon Code", "Type", "Points", "Cash Amount", "Expires At", "Front SVG File", "Front PNG File", "Back SVG File", "Back PNG File"],
+  ];
 
   const total = coupons.length;
   let done = 0;
   for (const coupon of coupons) {
-    const caption = `${coupon.points} PTS`;
-    const svgString = await renderCouponQrSvg(coupon.redeemUrl, caption, { size: 600 });
-    const pngDataUrl = await renderCouponQrPng(coupon.redeemUrl, caption, { size: 1200 });
+    const { svgString, pngDataUrl } = await renderCouponFrontPng({
+      type: coupon.type,
+      redeemUrl: coupon.redeemUrl,
+      points: coupon.points,
+    });
     const pngBase64 = pngDataUrl.replace(/^data:image\/png;base64,/, "");
 
     const svgFilename = `${coupon.couponCode}.svg`;
@@ -69,6 +83,8 @@ export async function downloadCouponPrintAssets({ coupons = [], batchId = "", on
       new Date(coupon.expiresAt).toISOString(),
       `SVG/${svgFilename}`,
       `PNG/${pngFilename}`,
+      `Back/${backSvgFilename}`,
+      `Back/${backPngFilename}`,
     ]);
 
     done += 1;

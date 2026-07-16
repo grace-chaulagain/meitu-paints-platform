@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "./DashboardIcons.jsx";
+import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 
 export function Surface({ children, padding = 20, style = {}, ...rest }) {
   return (
@@ -864,6 +865,11 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
 
   const pages = buildPageList(page, totalPages);
 
+  function goTo(nextPage) {
+    onChange(nextPage);
+    scrollResultsToTop();
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
       <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
@@ -872,7 +878,7 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <button
           type="button"
-          onClick={() => onChange(Math.max(1, page - 1))}
+          onClick={() => goTo(Math.max(1, page - 1))}
           disabled={page <= 1}
           aria-label="Previous page"
           className="dash-pagination-btn"
@@ -884,7 +890,7 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
             <button
               key={p}
               type="button"
-              onClick={() => onChange(p)}
+              onClick={() => goTo(p)}
               className={`dash-pagination-btn ${p === page ? "is-active" : ""}`}
             >
               {p}
@@ -897,7 +903,7 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
         )}
         <button
           type="button"
-          onClick={() => onChange(Math.min(totalPages, page + 1))}
+          onClick={() => goTo(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           aria-label="Next page"
           className="dash-pagination-btn"

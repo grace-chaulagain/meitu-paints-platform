@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
   GhostButton,
@@ -422,6 +422,16 @@ export function InsightTable({ columns, rows = [], empty = "No rows available.",
   const [sortKey, setSortKey] = useState("");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
+  const tableRef = useRef(null);
+
+  // Insight tables are often one of several on a page, so paging scrolls
+  // just this table back into view rather than jumping to the page top.
+  function goToPage(updater) {
+    setPage(updater);
+    window.requestAnimationFrame(() => {
+      tableRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
 
   const sorted = useMemo(() => {
     const column = columns.find((item) => item.key === sortKey);
@@ -450,7 +460,7 @@ export function InsightTable({ columns, rows = [], empty = "No rows available.",
   if (!rows.length) return <EmptyNote>{empty}</EmptyNote>;
 
   return (
-    <div>
+    <div ref={tableRef}>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
           <thead>
@@ -532,13 +542,13 @@ export function InsightTable({ columns, rows = [], empty = "No rows available.",
             Showing {start + 1}-{Math.min(sorted.length, start + pageRows.length)} of {sorted.length}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <GhostButton onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage <= 1}>
+            <GhostButton onClick={() => goToPage((current) => Math.max(1, current - 1))} disabled={safePage <= 1}>
               Previous
             </GhostButton>
             <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
               Page {safePage} of {totalPages}
             </span>
-            <GhostButton onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={safePage >= totalPages}>
+            <GhostButton onClick={() => goToPage((current) => Math.min(totalPages, current + 1))} disabled={safePage >= totalPages}>
               Next
             </GhostButton>
           </div>

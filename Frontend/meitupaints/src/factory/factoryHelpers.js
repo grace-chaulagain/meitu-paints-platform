@@ -317,6 +317,56 @@ export function computeProformaTotals(items = [], { discount = 0 } = {}) {
   return { lines, buckets, basicAmount, taxableAmount, discountAmount, vat, grandTotal };
 }
 
+const ONES = [
+  "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+  "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+  "Seventeen", "Eighteen", "Nineteen",
+];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+function twoDigitsToWords(value) {
+  if (value < 20) return ONES[value];
+  const tens = Math.floor(value / 10);
+  const ones = value % 10;
+  return ones ? `${TENS[tens]} ${ONES[ones]}` : TENS[tens];
+}
+
+function threeDigitsToWords(value) {
+  const hundreds = Math.floor(value / 100);
+  const rest = value % 100;
+  const parts = [];
+  if (hundreds) parts.push(`${ONES[hundreds]} Hundred`);
+  if (rest) parts.push(twoDigitsToWords(rest));
+  return parts.join(" ");
+}
+
+// Nepali/Indian numbering convention (Lakh = 10^5, Crore = 10^7) rather than
+// the Western thousand/million grouping - the correct convention for an NPR
+// invoice, and how the amount would actually be read aloud locally.
+function integerToWords(value) {
+  if (value === 0) return "Zero";
+
+  const crore = Math.floor(value / 10000000);
+  const lakh = Math.floor((value % 10000000) / 100000);
+  const thousand = Math.floor((value % 100000) / 1000);
+  const hundred = value % 1000;
+
+  const parts = [];
+  if (crore) parts.push(`${integerToWords(crore)} Crore`);
+  if (lakh) parts.push(`${twoDigitsToWords(lakh)} Lakh`);
+  if (thousand) parts.push(`${twoDigitsToWords(thousand)} Thousand`);
+  if (hundred) parts.push(threeDigitsToWords(hundred));
+
+  return parts.join(" ");
+}
+
+// e.g. amountInWords(72500) -> "Rupees Seventy Two Thousand Five Hundred Only"
+export function amountInWords(value, currency = "NPR") {
+  const numeric = Math.round(Number(value) || 0);
+  const currencyWord = currency === "NPR" ? "Rupees" : currency;
+  return `${currencyWord} ${integerToWords(Math.abs(numeric))} Only`;
+}
+
 // "PI-XXXXXX" identifier - reuses the order number's own trailing 6
 // characters (e.g. "ORD-20260629-9C3450" -> "PI-9C3450") rather than a
 // derived hash, so it's instantly recognizable as the same order rather

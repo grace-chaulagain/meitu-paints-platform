@@ -14,6 +14,7 @@ import {
   Surface,
   ViewToggle,
 } from "../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../components/dashboard/ApplePickers.jsx";
 import {
   categoryLabel,
@@ -538,7 +539,10 @@ export default function DealerInventoryPage() {
             query={historyQuery}
             page={historyPage}
             totalPages={historyTotalPages}
-            onPageChange={setHistoryPage}
+            onPageChange={(next) => {
+              setHistoryPage(next);
+              scrollResultsToTop();
+            }}
           />
         </>
       ) : inventoryQuery.isLoading && !inventoryQuery.data ? (

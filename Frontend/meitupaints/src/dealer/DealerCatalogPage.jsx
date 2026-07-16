@@ -27,6 +27,7 @@ import {
   Surface,
   ViewToggle,
 } from "../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../utils/scrollResultsToTop.js";
 
 const CATEGORIES_PER_PAGE = 4;
 
@@ -668,11 +669,23 @@ export default function DealerCatalogPage() {
 
   function goToPage(nextPage) {
     setPage(nextPage);
+    scrollResultsToTop();
   }
 
+  // Search and category are mutually exclusive rather than combinable -
+  // activating one clears the other, keeping filter state simple and
+  // predictable instead of a combinatorial search+category mix.
   function changeCategory(nextCategory) {
     setCategory(nextCategory);
     setPage(1);
+    if (nextCategory !== "ALL" && search) {
+      setSearch("");
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("search");
+        return next;
+      }, { replace: true });
+    }
   }
 
   function updateSearch(value) {
@@ -688,6 +701,7 @@ export default function DealerCatalogPage() {
       },
       { replace: true },
     );
+    setCategory("ALL");
   }
 
   return (

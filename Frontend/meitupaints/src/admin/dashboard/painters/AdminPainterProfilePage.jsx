@@ -20,6 +20,7 @@ import {
   SectionHeader,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
@@ -434,11 +435,20 @@ export default function AdminPainterProfilePage() {
                       Page {pointsQuery.data.pagination.page} of {pointsQuery.data.pagination.pages}
                     </span>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <GhostButton onClick={() => setPointsPage((p) => Math.max(1, p - 1))} disabled={pointsPage <= 1}>
+                      <GhostButton
+                        onClick={() => {
+                          setPointsPage((p) => Math.max(1, p - 1));
+                          scrollResultsToTop();
+                        }}
+                        disabled={pointsPage <= 1}
+                      >
                         Previous
                       </GhostButton>
                       <GhostButton
-                        onClick={() => setPointsPage((p) => Math.min(pointsQuery.data.pagination.pages, p + 1))}
+                        onClick={() => {
+                          setPointsPage((p) => Math.min(pointsQuery.data.pagination.pages, p + 1));
+                          scrollResultsToTop();
+                        }}
                         disabled={pointsPage >= pointsQuery.data.pagination.pages}
                       >
                         Next

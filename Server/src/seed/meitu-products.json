@@ -35,9 +35,21 @@
       "basis": "volume",
       "tierUnit": "L",
       "tiers": [
-        { "min": 1, "max": 80, "label": "1-80" },
-        { "min": 81, "max": 250, "label": "81-250" },
-        { "min": 251, "max": null, "label": "251 & above" }
+        {
+          "min": 1,
+          "max": 80,
+          "label": "1-80"
+        },
+        {
+          "min": 81,
+          "max": 250,
+          "label": "81-250"
+        },
+        {
+          "min": 251,
+          "max": null,
+          "label": "251 & above"
+        }
       ]
     },
     {
@@ -45,8 +57,16 @@
       "basis": "totalVolume",
       "tierUnit": "L",
       "tiers": [
-        { "min": 1, "max": 20, "label": "1-20L" },
-        { "min": 21, "max": null, "label": "21L and above" }
+        {
+          "min": 1,
+          "max": 20,
+          "label": "1-20L"
+        },
+        {
+          "min": 21,
+          "max": null,
+          "label": "21L and above"
+        }
       ]
     },
     {
@@ -54,9 +74,21 @@
       "basis": "bucketCount",
       "tierUnit": "BKT",
       "tiers": [
-        { "min": 1, "max": 5, "label": "1-5 bkt" },
-        { "min": 6, "max": 10, "label": "6-10 bkt" },
-        { "min": 11, "max": null, "label": "10 bkt above" }
+        {
+          "min": 1,
+          "max": 5,
+          "label": "1-5 bkt"
+        },
+        {
+          "min": 6,
+          "max": 10,
+          "label": "6-10 bkt"
+        },
+        {
+          "min": 11,
+          "max": null,
+          "label": "10 bkt above"
+        }
       ]
     },
     {
@@ -64,8 +96,16 @@
       "basis": "unitCount",
       "tierUnit": "UNIT",
       "tiers": [
-        { "min": 1, "max": 20, "label": "1-20" },
-        { "min": 21, "max": null, "label": "21 & above" }
+        {
+          "min": 1,
+          "max": 20,
+          "label": "1-20"
+        },
+        {
+          "min": 21,
+          "max": null,
+          "label": "21 & above"
+        }
       ]
     },
     {
@@ -82,46 +122,115 @@
       "name": "MeiTu Eco-Friendly High Glossy Exterior Wall Paint",
       "category": "EXTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-HG-EXT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 16086 },
-            { "min": 81, "max": 250, "pricePerPack": 15320 },
-            { "min": 251, "max": null, "pricePerPack": 14554 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 16086
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 15320
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 14554
+            }
           ]
         },
         {
           "sku": "ECO-HG-EXT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 8808 },
-            { "min": 81, "max": 250, "pricePerPack": 8389 },
-            { "min": 251, "max": null, "pricePerPack": 7969 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 8808
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 8389
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 7969
+            }
           ]
         },
         {
           "sku": "ECO-HG-EXT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3526 },
-            { "min": 81, "max": 250, "pricePerPack": 3358 },
-            { "min": 251, "max": null, "pricePerPack": 3190 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3526
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3358
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3190
+            }
           ]
         },
         {
           "sku": "ECO-HG-EXT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 898 },
-            { "min": 81, "max": 250, "pricePerPack": 855 },
-            { "min": 251, "max": null, "pricePerPack": 812 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 898
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 855
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 812
+            }
           ]
         }
       ]
@@ -132,46 +241,115 @@
       "name": "MeiTu Eco-Friendly High Glossy Natural Exterior Wall Paint",
       "category": "EXTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-HG-NAT-EXT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 12316 },
-            { "min": 81, "max": 250, "pricePerPack": 11730 },
-            { "min": 251, "max": null, "pricePerPack": 11143 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 12316
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 11730
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 11143
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-EXT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 6607 },
-            { "min": 81, "max": 250, "pricePerPack": 6293 },
-            { "min": 251, "max": null, "pricePerPack": 5978 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 6607
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 6293
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 5978
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-EXT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2996 },
-            { "min": 81, "max": 250, "pricePerPack": 2854 },
-            { "min": 251, "max": null, "pricePerPack": 2711 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2996
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2854
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2711
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-EXT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 756 },
-            { "min": 81, "max": 250, "pricePerPack": 720 },
-            { "min": 251, "max": null, "pricePerPack": 684 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 756
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 720
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 684
+            }
           ]
         }
       ]
@@ -182,46 +360,115 @@
       "name": "MeiTu Environmentally Friendly Natural Exterior Paint",
       "category": "EXTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ENV-FRIENDLY-NAT-EXT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 10009 },
-            { "min": 81, "max": 250, "pricePerPack": 9533 },
-            { "min": 251, "max": null, "pricePerPack": 9056 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 10009
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 9533
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 9056
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-EXT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 5150 },
-            { "min": 81, "max": 250, "pricePerPack": 4905 },
-            { "min": 251, "max": null, "pricePerPack": 4659 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 5150
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 4905
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 4659
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-EXT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2159 },
-            { "min": 81, "max": 250, "pricePerPack": 2057 },
-            { "min": 251, "max": null, "pricePerPack": 1954 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2159
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2057
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1954
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-EXT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 593 },
-            { "min": 81, "max": 250, "pricePerPack": 565 },
-            { "min": 251, "max": null, "pricePerPack": 536 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 593
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 565
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 536
+            }
           ]
         }
       ]
@@ -232,46 +479,115 @@
       "name": "MeiTu Environmentally Friendly Constant Color Exterior Paint",
       "category": "EXTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ENV-FRIENDLY-CONST-EXT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 6223 },
-            { "min": 81, "max": 250, "pricePerPack": 5927 },
-            { "min": 251, "max": null, "pricePerPack": 5630 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 6223
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 5927
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 5630
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-EXT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3318 },
-            { "min": 81, "max": 250, "pricePerPack": 3160 },
-            { "min": 251, "max": null, "pricePerPack": 3002 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3318
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3160
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3002
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-EXT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1157 },
-            { "min": 81, "max": 250, "pricePerPack": 1102 },
-            { "min": 251, "max": null, "pricePerPack": 1046 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1157
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1102
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1046
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-EXT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 336 },
-            { "min": 81, "max": 250, "pricePerPack": 320 },
-            { "min": 251, "max": null, "pricePerPack": 304 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 336
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 320
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 304
+            }
           ]
         }
       ]
@@ -282,46 +598,115 @@
       "name": "MeiTu Eco-Friendly High Glossy Interior Wall Paint",
       "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-HG-INT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 16180 },
-            { "min": 81, "max": 250, "pricePerPack": 15371 },
-            { "min": 251, "max": null, "pricePerPack": 14602 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 16180
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 15371
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 14602
+            }
           ]
         },
         {
           "sku": "ECO-HG-INT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 8490 },
-            { "min": 81, "max": 250, "pricePerPack": 8065 },
-            { "min": 251, "max": null, "pricePerPack": 7661 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 8490
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 8065
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 7661
+            }
           ]
         },
         {
           "sku": "ECO-HG-INT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3408 },
-            { "min": 81, "max": 250, "pricePerPack": 3237 },
-            { "min": 251, "max": null, "pricePerPack": 3075 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3408
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3237
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3075
+            }
           ]
         },
         {
           "sku": "ECO-HG-INT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 851 },
-            { "min": 81, "max": 250, "pricePerPack": 808 },
-            { "min": 251, "max": null, "pricePerPack": 767 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 851
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 808
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 767
+            }
           ]
         }
       ]
@@ -332,46 +717,115 @@
       "name": "MeiTu Eco-Friendly High Glossy Natural Interior Wall Paint",
       "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-HG-NAT-INT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 13592 },
-            { "min": 81, "max": 250, "pricePerPack": 12945 },
-            { "min": 251, "max": null, "pricePerPack": 12297 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 13592
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 12945
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 12297
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-INT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 7277 },
-            { "min": 81, "max": 250, "pricePerPack": 6931 },
-            { "min": 251, "max": null, "pricePerPack": 6584 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 7277
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 6931
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 6584
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-INT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3097 },
-            { "min": 81, "max": 250, "pricePerPack": 2949 },
-            { "min": 251, "max": null, "pricePerPack": 2801 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3097
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2949
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2801
+            }
           ]
         },
         {
           "sku": "ECO-HG-NAT-INT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 785 },
-            { "min": 81, "max": 250, "pricePerPack": 745 },
-            { "min": 251, "max": null, "pricePerPack": 707 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 785
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 745
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 707
+            }
           ]
         }
       ]
@@ -382,46 +836,115 @@
       "name": "MeiTu Environmentally Friendly Natural Interior Wall Paint",
       "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ENV-FRIENDLY-NAT-INT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 9866 },
-            { "min": 81, "max": 250, "pricePerPack": 9372 },
-            { "min": 251, "max": null, "pricePerPack": 8903 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 9866
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 9372
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 8903
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-INT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 5070 },
-            { "min": 81, "max": 250, "pricePerPack": 4816 },
-            { "min": 251, "max": null, "pricePerPack": 4575 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 5070
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 4816
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 4575
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-INT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2079 },
-            { "min": 81, "max": 250, "pricePerPack": 1975 },
-            { "min": 251, "max": null, "pricePerPack": 1876 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2079
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1975
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1876
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-NAT-INT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 586 },
-            { "min": 81, "max": 250, "pricePerPack": 556 },
-            { "min": 251, "max": null, "pricePerPack": 528 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 586
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 556
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 528
+            }
           ]
         }
       ]
@@ -432,46 +955,115 @@
       "name": "MeiTu Environmentally Friendly Constant Color Interior Wall Paint",
       "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ENV-FRIENDLY-CONST-INT-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 5885 },
-            { "min": 81, "max": 250, "pricePerPack": 5590 },
-            { "min": 251, "max": null, "pricePerPack": 5310 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 5885
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 5590
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 5310
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-INT-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3060 },
-            { "min": 81, "max": 250, "pricePerPack": 2907 },
-            { "min": 251, "max": null, "pricePerPack": 2761 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3060
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2907
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2761
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-INT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1298 },
-            { "min": 81, "max": 250, "pricePerPack": 1233 },
-            { "min": 251, "max": null, "pricePerPack": 1171 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1298
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1233
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1171
+            }
           ]
         },
         {
           "sku": "ENV-FRIENDLY-CONST-INT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 344 },
-            { "min": 81, "max": 250, "pricePerPack": 326 },
-            { "min": 251, "max": null, "pricePerPack": 309 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 344
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 326
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 309
+            }
           ]
         }
       ]
@@ -482,46 +1074,115 @@
       "name": "MeiTu Eco-Friendly Interior Wall Paint",
       "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-INT-WALL-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3890 },
-            { "min": 81, "max": 250, "pricePerPack": 3695 },
-            { "min": 251, "max": null, "pricePerPack": 3510 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3890
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3695
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3510
+            }
           ]
         },
         {
           "sku": "ECO-INT-WALL-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2076 },
-            { "min": 81, "max": 250, "pricePerPack": 1972 },
-            { "min": 251, "max": null, "pricePerPack": 1873 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2076
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1972
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1873
+            }
           ]
         },
         {
           "sku": "ECO-INT-WALL-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 908 },
-            { "min": 81, "max": 250, "pricePerPack": 862 },
-            { "min": 251, "max": null, "pricePerPack": 818 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 908
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 862
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 818
+            }
           ]
         },
         {
           "sku": "ECO-INT-WALL-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 262 },
-            { "min": 81, "max": 250, "pricePerPack": 248 },
-            { "min": 251, "max": null, "pricePerPack": 235 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 262
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 248
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 235
+            }
           ]
         }
       ]
@@ -532,46 +1193,115 @@
       "name": "MeiTu Environmentally Efficient Exterior Wall Primer",
       "category": "PRIMER",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "EE-EXT-PRIMER-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 4250 },
-            { "min": 81, "max": 250, "pricePerPack": 4037 },
-            { "min": 251, "max": null, "pricePerPack": 3835 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 4250
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 4037
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3835
+            }
           ]
         },
         {
           "sku": "EE-EXT-PRIMER-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2293 },
-            { "min": 81, "max": 250, "pricePerPack": 2178 },
-            { "min": 251, "max": null, "pricePerPack": 2069 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2293
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2178
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2069
+            }
           ]
         },
         {
           "sku": "EE-EXT-PRIMER-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 978 },
-            { "min": 81, "max": 250, "pricePerPack": 929 },
-            { "min": 251, "max": null, "pricePerPack": 882 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 978
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 929
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 882
+            }
           ]
         },
         {
           "sku": "EE-EXT-PRIMER-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 323 },
-            { "min": 81, "max": 250, "pricePerPack": 306 },
-            { "min": 251, "max": null, "pricePerPack": 290 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 323
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 306
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 290
+            }
           ]
         }
       ]
@@ -582,46 +1312,115 @@
       "name": "MeiTu Environmentally Friendly Alkali-Resistant Interior Wall Primer",
       "category": "PRIMER",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ALKALI-RES-INT-PRIMER-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3430 },
-            { "min": 81, "max": 250, "pricePerPack": 3277 },
-            { "min": 251, "max": null, "pricePerPack": 3113 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3430
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3277
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3113
+            }
           ]
         },
         {
           "sku": "ALKALI-RES-INT-PRIMER-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1727 },
-            { "min": 81, "max": 250, "pricePerPack": 1640 },
-            { "min": 251, "max": null, "pricePerPack": 1558 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1727
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1640
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1558
+            }
           ]
         },
         {
           "sku": "ALKALI-RES-INT-PRIMER-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 841 },
-            { "min": 81, "max": 250, "pricePerPack": 798 },
-            { "min": 251, "max": null, "pricePerPack": 758 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 841
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 798
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 758
+            }
           ]
         },
         {
           "sku": "ALKALI-RES-INT-PRIMER-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 258 },
-            { "min": 81, "max": 250, "pricePerPack": 245 },
-            { "min": 251, "max": null, "pricePerPack": 232 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 258
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 245
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 232
+            }
           ]
         }
       ]
@@ -632,46 +1431,115 @@
       "name": "MeiTu Eco-Friendly Interior Primer",
       "category": "PRIMER",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-INT-PRIMER-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2090 },
-            { "min": 81, "max": 250, "pricePerPack": 1985 },
-            { "min": 251, "max": null, "pricePerPack": 1880 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2090
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1985
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1880
+            }
           ]
         },
         {
           "sku": "ECO-INT-PRIMER-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1090 },
-            { "min": 81, "max": 250, "pricePerPack": 1035 },
-            { "min": 251, "max": null, "pricePerPack": 995 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1090
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1035
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 995
+            }
           ]
         },
         {
           "sku": "ECO-INT-PRIMER-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 569 },
-            { "min": 81, "max": 250, "pricePerPack": 540 },
-            { "min": 251, "max": null, "pricePerPack": 513 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 569
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 540
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 513
+            }
           ]
         },
         {
           "sku": "ECO-INT-PRIMER-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 153 },
-            { "min": 81, "max": 250, "pricePerPack": 145 },
-            { "min": 251, "max": null, "pricePerPack": 137 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 153
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 145
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 137
+            }
           ]
         }
       ]
@@ -682,36 +1550,89 @@
       "name": "MeiTu Acrylic Distemper Interior Wall Paint",
       "category": "DISTEMPER",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "ACRYLIC-DIST-INT-20KG",
-          "pack": { "size": 20, "unit": "KG", "label": "20KG" },
+          "pack": {
+            "size": 20,
+            "unit": "KG",
+            "label": "20KG"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1750 },
-            { "min": 81, "max": 250, "pricePerPack": 1665 },
-            { "min": 251, "max": null, "pricePerPack": 1580 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1750
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1665
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1580
+            }
           ]
         },
         {
           "sku": "ACRYLIC-DIST-INT-10KG",
-          "pack": { "size": 10, "unit": "KG", "label": "10KG" },
+          "pack": {
+            "size": 10,
+            "unit": "KG",
+            "label": "10KG"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 895 },
-            { "min": 81, "max": 250, "pricePerPack": 850 },
-            { "min": 251, "max": null, "pricePerPack": 810 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 895
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 850
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 810
+            }
           ]
         },
         {
           "sku": "ACRYLIC-DIST-INT-5KG",
-          "pack": { "size": 5, "unit": "KG", "label": "5KG" },
+          "pack": {
+            "size": 5,
+            "unit": "KG",
+            "label": "5KG"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 455 },
-            { "min": 81, "max": 250, "pricePerPack": 435 },
-            { "min": 251, "max": null, "pricePerPack": 415 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 455
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 435
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 415
+            }
           ]
         }
       ]
@@ -720,48 +1641,117 @@
       "datasetKey": "bhadra2082_regular_primer_distemper_ceiling",
       "code": "DARK-COLOR-INT-EXT-C1",
       "name": "MeiTu Eco-Friendly Dark Color Interior And Exterior Wall Paint C1",
-      "category": "INTERIOR_EXTERIOR_PAINT",
+      "category": "INTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "DARK-COLOR-INT-EXT-C1-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 9105 },
-            { "min": 81, "max": 250, "pricePerPack": 8652 },
-            { "min": 251, "max": null, "pricePerPack": 8219 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 9105
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 8652
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 8219
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C1-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 4945 },
-            { "min": 81, "max": 250, "pricePerPack": 4698 },
-            { "min": 251, "max": null, "pricePerPack": 4463 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 4945
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 4698
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 4463
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C1-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2085 },
-            { "min": 81, "max": 250, "pricePerPack": 1980 },
-            { "min": 251, "max": null, "pricePerPack": 1881 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2085
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1980
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 1881
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C1-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 535 },
-            { "min": 81, "max": 250, "pricePerPack": 511 },
-            { "min": 251, "max": null, "pricePerPack": 485 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 535
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 511
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 485
+            }
           ]
         }
       ]
@@ -770,48 +1760,117 @@
       "datasetKey": "bhadra2082_regular_primer_distemper_ceiling",
       "code": "DARK-COLOR-INT-EXT-C2",
       "name": "MeiTu Eco-Friendly Dark Color Interior And Exterior Wall Paint C2",
-      "category": "INTERIOR_EXTERIOR_PAINT",
+      "category": "EXTERIOR_PAINT",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "DARK-COLOR-INT-EXT-C2-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 15515 },
-            { "min": 81, "max": 250, "pricePerPack": 14739 },
-            { "min": 251, "max": null, "pricePerPack": 14005 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 15515
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 14739
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 14005
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C2-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 8495 },
-            { "min": 81, "max": 250, "pricePerPack": 8070 },
-            { "min": 251, "max": null, "pricePerPack": 7665 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 8495
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 8070
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 7665
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C2-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 3405 },
-            { "min": 81, "max": 250, "pricePerPack": 3234 },
-            { "min": 251, "max": null, "pricePerPack": 3070 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 3405
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 3234
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 3070
+            }
           ]
         },
         {
           "sku": "DARK-COLOR-INT-EXT-C2-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 855 },
-            { "min": 81, "max": 250, "pricePerPack": 812 },
-            { "min": 251, "max": null, "pricePerPack": 770 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 855
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 812
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 770
+            }
           ]
         }
       ]
@@ -822,46 +1881,115 @@
       "name": "MeiTu Eco-Friendly High Glossy Ceiling White",
       "category": "CEILING_WHITE",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-HG-CEILING-WHITE-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 12190 },
-            { "min": 81, "max": 250, "pricePerPack": 11580 },
-            { "min": 251, "max": null, "pricePerPack": 11005 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 12190
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 11580
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 11005
+            }
           ]
         },
         {
           "sku": "ECO-HG-CEILING-WHITE-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 6700 },
-            { "min": 81, "max": 250, "pricePerPack": 6365 },
-            { "min": 251, "max": null, "pricePerPack": 6045 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 6700
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 6365
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 6045
+            }
           ]
         },
         {
           "sku": "ECO-HG-CEILING-WHITE-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2680 },
-            { "min": 81, "max": 250, "pricePerPack": 2548 },
-            { "min": 251, "max": null, "pricePerPack": 2420 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2680
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2548
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2420
+            }
           ]
         },
         {
           "sku": "ECO-HG-CEILING-WHITE-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 675 },
-            { "min": 81, "max": 250, "pricePerPack": 640 },
-            { "min": 251, "max": null, "pricePerPack": 608 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 675
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 640
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 608
+            }
           ]
         }
       ]
@@ -872,67 +2000,156 @@
       "name": "MeiTu Eco-Friendly Ceiling White",
       "category": "CEILING_WHITE",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ECO-CEILING-WHITE-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 4655 },
-            { "min": 81, "max": 250, "pricePerPack": 4425 },
-            { "min": 251, "max": null, "pricePerPack": 4205 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 4655
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 4425
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 4205
+            }
           ]
         },
         {
           "sku": "ECO-CEILING-WHITE-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2630 },
-            { "min": 81, "max": 250, "pricePerPack": 2502 },
-            { "min": 251, "max": null, "pricePerPack": 2375 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2630
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2502
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2375
+            }
           ]
         },
         {
           "sku": "ECO-CEILING-WHITE-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 1050 },
-            { "min": 81, "max": 250, "pricePerPack": 1005 },
-            { "min": 251, "max": null, "pricePerPack": 955 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 1050
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 1005
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 955
+            }
           ]
         },
         {
           "sku": "ECO-CEILING-WHITE-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 270 },
-            { "min": 81, "max": 250, "pricePerPack": 257 },
-            { "min": 251, "max": null, "pricePerPack": 245 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 270
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 257
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 245
+            }
           ]
         }
       ]
     },
-
     {
       "datasetKey": "bhadra2082_other_buckets",
       "code": "GTONE-2D-GRANITE-PRIMER",
       "name": "Granite primer",
       "category": "LIQUID_GRANITE_GTONE_2D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-2D-GRANITE-PRIMER-5KG",
-          "pack": { "size": 5, "unit": "KG", "label": "5KG" },
+          "pack": {
+            "size": 5,
+            "unit": "KG",
+            "label": "5KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 2370 },
-            { "min": 6, "max": 10, "pricePerPack": 2250 },
-            { "min": 11, "max": null, "pricePerPack": 2135 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 2370
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 2250
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 2135
+            }
           ]
         }
       ]
@@ -943,16 +2160,37 @@
       "name": "Intermediate coating paint",
       "category": "LIQUID_GRANITE_GTONE_2D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-2D-INTERMEDIATE-COAT-8KG",
-          "pack": { "size": 8, "unit": "KG", "label": "8KG" },
+          "pack": {
+            "size": 8,
+            "unit": "KG",
+            "label": "8KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 4260 },
-            { "min": 6, "max": 10, "pricePerPack": 4045 },
-            { "min": 11, "max": null, "pricePerPack": 3840 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 4260
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 4045
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 3840
+            }
           ]
         }
       ]
@@ -963,16 +2201,37 @@
       "name": "Granite surface paint",
       "category": "LIQUID_GRANITE_GTONE_2D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-2D-GRANITE-SURFACE-9KG",
-          "pack": { "size": 9, "unit": "KG", "label": "9KG" },
+          "pack": {
+            "size": 9,
+            "unit": "KG",
+            "label": "9KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 9705 },
-            { "min": 6, "max": 10, "pricePerPack": 9220 },
-            { "min": 11, "max": null, "pricePerPack": 8760 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 9705
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 9220
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 8760
+            }
           ]
         }
       ]
@@ -983,16 +2242,37 @@
       "name": "Dust-proof Surface paint",
       "category": "LIQUID_GRANITE_GTONE_2D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-2D-DUSTPROOF-SURFACE-3KG",
-          "pack": { "size": 3, "unit": "KG", "label": "3KG" },
+          "pack": {
+            "size": 3,
+            "unit": "KG",
+            "label": "3KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 2150 },
-            { "min": 6, "max": 10, "pricePerPack": 2045 },
-            { "min": 11, "max": null, "pricePerPack": 1945 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 2150
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 2045
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 1945
+            }
           ]
         }
       ]
@@ -1003,16 +2283,37 @@
       "name": "3D Granite primer",
       "category": "LIQUID_GRANITE_GTONE_3D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-3D-GRANITE-PRIMER-3KG",
-          "pack": { "size": 3, "unit": "KG", "label": "3KG" },
+          "pack": {
+            "size": 3,
+            "unit": "KG",
+            "label": "3KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 1420 },
-            { "min": 6, "max": 10, "pricePerPack": 1350 },
-            { "min": 11, "max": null, "pricePerPack": 1285 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 1420
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 1350
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 1285
+            }
           ]
         }
       ]
@@ -1023,16 +2324,37 @@
       "name": "3D Intermediate coating paint",
       "category": "LIQUID_GRANITE_GTONE_3D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-3D-INTERMEDIATE-COAT-5KG",
-          "pack": { "size": 5, "unit": "KG", "label": "5KG" },
+          "pack": {
+            "size": 5,
+            "unit": "KG",
+            "label": "5KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 2665 },
-            { "min": 6, "max": 10, "pricePerPack": 2530 },
-            { "min": 11, "max": null, "pricePerPack": 2405 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 2665
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 2530
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 2405
+            }
           ]
         }
       ]
@@ -1043,16 +2365,37 @@
       "name": "3D Granite surface paint",
       "category": "LIQUID_GRANITE_GTONE_3D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-3D-GRANITE-SURFACE-24KG",
-          "pack": { "size": 24, "unit": "KG", "label": "24KG" },
+          "pack": {
+            "size": 24,
+            "unit": "KG",
+            "label": "24KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 15910 },
-            { "min": 6, "max": 10, "pricePerPack": 15115 },
-            { "min": 11, "max": null, "pricePerPack": 14360 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 15910
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 15115
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 14360
+            }
           ]
         }
       ]
@@ -1063,16 +2406,37 @@
       "name": "3D Dust-proof Surface paint",
       "category": "LIQUID_GRANITE_GTONE_3D",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GTONE-3D-DUSTPROOF-SURFACE-3KG",
-          "pack": { "size": 3, "unit": "KG", "label": "3KG" },
+          "pack": {
+            "size": 3,
+            "unit": "KG",
+            "label": "3KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 2155 },
-            { "min": 6, "max": 10, "pricePerPack": 2045 },
-            { "min": 11, "max": null, "pricePerPack": 1945 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 2155
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 2045
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 1945
+            }
           ]
         }
       ]
@@ -1083,16 +2447,37 @@
       "name": "Real stone Primer",
       "category": "REAL_STONE",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "REALSTONE-PRIMER-3KG",
-          "pack": { "size": 3, "unit": "KG", "label": "3KG" },
+          "pack": {
+            "size": 3,
+            "unit": "KG",
+            "label": "3KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 1205 },
-            { "min": 6, "max": 10, "pricePerPack": 1145 },
-            { "min": 11, "max": null, "pricePerPack": 1090 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 1205
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 1145
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 1090
+            }
           ]
         }
       ]
@@ -1103,16 +2488,37 @@
       "name": "Real stone surface paint",
       "category": "REAL_STONE",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "REALSTONE-SURFACE-30KG",
-          "pack": { "size": 30, "unit": "KG", "label": "30KG" },
+          "pack": {
+            "size": 30,
+            "unit": "KG",
+            "label": "30KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 6410 },
-            { "min": 6, "max": 10, "pricePerPack": 6090 },
-            { "min": 11, "max": null, "pricePerPack": 5785 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 6410
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 6090
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 5785
+            }
           ]
         }
       ]
@@ -1123,16 +2529,37 @@
       "name": "Real stone dust proof paint",
       "category": "REAL_STONE",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "REALSTONE-DUSTPROOF-3KG",
-          "pack": { "size": 3, "unit": "KG", "label": "3KG" },
+          "pack": {
+            "size": 3,
+            "unit": "KG",
+            "label": "3KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 1825 },
-            { "min": 6, "max": 10, "pricePerPack": 1735 },
-            { "min": 11, "max": null, "pricePerPack": 1650 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 1825
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 1735
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 1650
+            }
           ]
         }
       ]
@@ -1143,13 +2570,28 @@
       "name": "Interior / Exterior Wall Putty (White)",
       "category": "WALL_PUTTY",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "WALLPUTTY-WHITE-20KG",
-          "pack": { "size": 20, "unit": "KG", "label": "20KG" },
+          "pack": {
+            "size": 20,
+            "unit": "KG",
+            "label": "20KG"
+          },
           "pricingModelKey": "FLAT",
-          "prices": [{ "min": null, "max": null, "pricePerPack": 565 }]
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 565
+            }
+          ]
         }
       ]
     },
@@ -1159,13 +2601,28 @@
       "name": "Exterior waterproof Wall Putty (Gray)",
       "category": "WALL_PUTTY",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "WALLPUTTY-GRAY-20KG",
-          "pack": { "size": 20, "unit": "KG", "label": "20KG" },
+          "pack": {
+            "size": 20,
+            "unit": "KG",
+            "label": "20KG"
+          },
           "pricingModelKey": "FLAT",
-          "prices": [{ "min": null, "max": null, "pricePerPack": 650 }]
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 650
+            }
+          ]
         }
       ]
     },
@@ -1175,33 +2632,75 @@
       "name": "Wood Primer",
       "category": "ENAMEL_PRIMER",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
           "sku": "WOOD-PRIMER-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 1330 },
-            { "min": 21, "max": null, "pricePerPack": 1265 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1330
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1265
+            }
           ]
         },
         {
           "sku": "WOOD-PRIMER-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 350 },
-            { "min": 21, "max": null, "pricePerPack": 330 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 350
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 330
+            }
           ]
         },
         {
           "sku": "WOOD-PRIMER-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 175 },
-            { "min": 21, "max": null, "pricePerPack": 170 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 175
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 170
+            }
           ]
         }
       ]
@@ -1212,33 +2711,75 @@
       "name": "Metal Primer",
       "category": "ENAMEL_PRIMER",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L", "ML"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L",
+          "ML"
+        ]
+      },
       "variants": [
         {
           "sku": "METAL-PRIMER-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 1075 },
-            { "min": 21, "max": null, "pricePerPack": 1020 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1075
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1020
+            }
           ]
         },
         {
           "sku": "METAL-PRIMER-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 295 },
-            { "min": 21, "max": null, "pricePerPack": 280 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 295
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 280
+            }
           ]
         },
         {
           "sku": "METAL-PRIMER-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 150 },
-            { "min": 21, "max": null, "pricePerPack": 140 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 150
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 140
+            }
           ]
         }
       ]
@@ -2494,46 +4035,115 @@
       "name": "Terracotta",
       "category": "SPECIALTY",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "TERRACOTTA-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 13185 },
-            { "min": 81, "max": 250, "pricePerPack": 12527 },
-            { "min": 251, "max": null, "pricePerPack": 11900 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 13185
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 12527
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 11900
+            }
           ]
         },
         {
           "sku": "TERRACOTTA-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 7270 },
-            { "min": 81, "max": 250, "pricePerPack": 6860 },
-            { "min": 251, "max": null, "pricePerPack": 6515 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 7270
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 6860
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 6515
+            }
           ]
         },
         {
           "sku": "TERRACOTTA-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2890 },
-            { "min": 81, "max": 250, "pricePerPack": 2749 },
-            { "min": 251, "max": null, "pricePerPack": 2610 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2890
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2749
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2610
+            }
           ]
         },
         {
           "sku": "TERRACOTTA-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 745 },
-            { "min": 81, "max": 250, "pricePerPack": 709 },
-            { "min": 251, "max": null, "pricePerPack": 673 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 745
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 709
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 673
+            }
           ]
         }
       ]
@@ -2544,16 +4154,37 @@
       "name": "Floor paint Gripcoat (A)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "GM", "allowed": ["GM"] },
+      "uom": {
+        "base": "GM",
+        "allowed": [
+          "GM"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-GRIPCOAT-A-500GM",
-          "pack": { "size": 500, "unit": "GM", "label": "500GM" },
+          "pack": {
+            "size": 500,
+            "unit": "GM",
+            "label": "500GM"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 935 },
-            { "min": 6, "max": 10, "pricePerPack": 890 },
-            { "min": 11, "max": null, "pricePerPack": 846 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 935
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 890
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 846
+            }
           ]
         }
       ]
@@ -2564,16 +4195,37 @@
       "name": "Floor paint Gripcoat (B)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "GM", "allowed": ["GM"] },
+      "uom": {
+        "base": "GM",
+        "allowed": [
+          "GM"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-GRIPCOAT-B-500GM",
-          "pack": { "size": 500, "unit": "GM", "label": "500GM" },
+          "pack": {
+            "size": 500,
+            "unit": "GM",
+            "label": "500GM"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 735 },
-            { "min": 6, "max": 10, "pricePerPack": 700 },
-            { "min": 11, "max": null, "pricePerPack": 665 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 735
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 700
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 665
+            }
           ]
         }
       ]
@@ -2584,16 +4236,37 @@
       "name": "Floor paint True Bond (A)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-TRUE-BOND-A-3_5KG",
-          "pack": { "size": 3.5, "unit": "KG", "label": "3.5KG" },
+          "pack": {
+            "size": 3.5,
+            "unit": "KG",
+            "label": "3.5KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 9997 },
-            { "min": 6, "max": 10, "pricePerPack": 9521 },
-            { "min": 11, "max": null, "pricePerPack": 9068 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 9997
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 9521
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 9068
+            }
           ]
         }
       ]
@@ -2604,16 +4277,37 @@
       "name": "Floor paint True Bond (B)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "GM", "allowed": ["GM"] },
+      "uom": {
+        "base": "GM",
+        "allowed": [
+          "GM"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-TRUE-BOND-B-300GM",
-          "pack": { "size": 300, "unit": "GM", "label": "300GM" },
+          "pack": {
+            "size": 300,
+            "unit": "GM",
+            "label": "300GM"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 1100 },
-            { "min": 6, "max": 10, "pricePerPack": 1047 },
-            { "min": 11, "max": null, "pricePerPack": 997 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 1100
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 1047
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 997
+            }
           ]
         }
       ]
@@ -2624,16 +4318,37 @@
       "name": "Floor paint Prime Shine (A)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-PRIME-SHINE-A-2_5KG",
-          "pack": { "size": 2.5, "unit": "KG", "label": "2.5KG" },
+          "pack": {
+            "size": 2.5,
+            "unit": "KG",
+            "label": "2.5KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 8330 },
-            { "min": 6, "max": 10, "pricePerPack": 7935 },
-            { "min": 11, "max": null, "pricePerPack": 7557 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 8330
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 7935
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 7557
+            }
           ]
         }
       ]
@@ -2644,16 +4359,37 @@
       "name": "Floor paint Prime Shine (B)",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "GM", "allowed": ["GM"] },
+      "uom": {
+        "base": "GM",
+        "allowed": [
+          "GM"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-PRIME-SHINE-B-300GM",
-          "pack": { "size": 300, "unit": "GM", "label": "300GM" },
+          "pack": {
+            "size": 300,
+            "unit": "GM",
+            "label": "300GM"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 1085 },
-            { "min": 6, "max": 10, "pricePerPack": 1033 },
-            { "min": 11, "max": null, "pricePerPack": 984 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 1085
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 1033
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 984
+            }
           ]
         }
       ]
@@ -2664,16 +4400,37 @@
       "name": "Granite surface paint",
       "category": "GRANITE_FLOOR",
       "description": "",
-      "uom": { "base": "KG", "allowed": ["KG"] },
+      "uom": {
+        "base": "KG",
+        "allowed": [
+          "KG"
+        ]
+      },
       "variants": [
         {
           "sku": "GRANITE-FLOOR-SURFACE-2KG",
-          "pack": { "size": 2, "unit": "KG", "label": "2KG" },
+          "pack": {
+            "size": 2,
+            "unit": "KG",
+            "label": "2KG"
+          },
           "pricingModelKey": "BKT_1_5_6_10_11_PLUS",
           "prices": [
-            { "min": 1, "max": 5, "pricePerPack": 2526 },
-            { "min": 6, "max": 10, "pricePerPack": 2400 },
-            { "min": 11, "max": null, "pricePerPack": 2280 }
+            {
+              "min": 1,
+              "max": 5,
+              "pricePerPack": 2526
+            },
+            {
+              "min": 6,
+              "max": 10,
+              "pricePerPack": 2400
+            },
+            {
+              "min": 11,
+              "max": null,
+              "pricePerPack": 2280
+            }
           ]
         }
       ]
@@ -2684,46 +4441,115 @@
       "name": "Meitu Damp-Proof",
       "category": "SPECIALTY",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "MEITU-DAMP-PROOF-20L",
-          "pack": { "size": 20, "unit": "L", "label": "20L" },
+          "pack": {
+            "size": 20,
+            "unit": "L",
+            "label": "20L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 14160 },
-            { "min": 81, "max": 250, "pricePerPack": 13451 },
-            { "min": 251, "max": null, "pricePerPack": 12775 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 14160
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 13451
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 12775
+            }
           ]
         },
         {
           "sku": "MEITU-DAMP-PROOF-10L",
-          "pack": { "size": 10, "unit": "L", "label": "10L" },
+          "pack": {
+            "size": 10,
+            "unit": "L",
+            "label": "10L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 7095 },
-            { "min": 81, "max": 250, "pricePerPack": 6743 },
-            { "min": 251, "max": null, "pricePerPack": 6405 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 7095
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 6743
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 6405
+            }
           ]
         },
         {
           "sku": "MEITU-DAMP-PROOF-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 2895 },
-            { "min": 81, "max": 250, "pricePerPack": 2754 },
-            { "min": 251, "max": null, "pricePerPack": 2615 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 2895
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 2754
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 2615
+            }
           ]
         },
         {
           "sku": "MEITU-DAMP-PROOF-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "VOL_L_1_80_81_250_251_PLUS",
           "prices": [
-            { "min": 1, "max": 80, "pricePerPack": 735 },
-            { "min": 81, "max": 250, "pricePerPack": 701 },
-            { "min": 251, "max": null, "pricePerPack": 665 }
+            {
+              "min": 1,
+              "max": 80,
+              "pricePerPack": 735
+            },
+            {
+              "min": 81,
+              "max": 250,
+              "pricePerPack": 701
+            },
+            {
+              "min": 251,
+              "max": null,
+              "pricePerPack": 665
+            }
           ]
         }
       ]
@@ -2734,24 +4560,53 @@
       "name": "Aluminum Paints",
       "category": "SPECIALTY",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "ALUMINUM-PAINTS-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 715 },
-            { "min": 21, "max": null, "pricePerPack": 681 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 715
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 681
+            }
           ]
         },
         {
           "sku": "ALUMINUM-PAINTS-0_5L",
-          "pack": { "size": 0.5, "unit": "L", "label": "0.5L" },
+          "pack": {
+            "size": 0.5,
+            "unit": "L",
+            "label": "0.5L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 415 },
-            { "min": 21, "max": null, "pricePerPack": 396 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 415
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 396
+            }
           ]
         }
       ]
@@ -2762,33 +4617,74 @@
       "name": "Gold Color",
       "category": "SPECIALTY",
       "description": "",
-      "uom": { "base": "ML", "allowed": ["ML"] },
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
+        ]
+      },
       "variants": [
         {
           "sku": "GOLD-COLOR-500ML",
-          "pack": { "size": 500, "unit": "ML", "label": "500ML" },
+          "pack": {
+            "size": 500,
+            "unit": "ML",
+            "label": "500ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 1500 },
-            { "min": 21, "max": null, "pricePerPack": 1432 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 1500
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 1432
+            }
           ]
         },
         {
           "sku": "GOLD-COLOR-200ML",
-          "pack": { "size": 200, "unit": "ML", "label": "200ML" },
+          "pack": {
+            "size": 200,
+            "unit": "ML",
+            "label": "200ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 640 },
-            { "min": 21, "max": null, "pricePerPack": 608 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 640
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 608
+            }
           ]
         },
         {
           "sku": "GOLD-COLOR-100ML",
-          "pack": { "size": 100, "unit": "ML", "label": "100ML" },
+          "pack": {
+            "size": 100,
+            "unit": "ML",
+            "label": "100ML"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 355 },
-            { "min": 21, "max": null, "pricePerPack": 336 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 355
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 336
+            }
           ]
         }
       ]
@@ -2799,33 +4695,74 @@
       "name": "PU Silicon Exterior/Interior Paint",
       "category": "SPECIALTY",
       "description": "",
-      "uom": { "base": "L", "allowed": ["L"] },
+      "uom": {
+        "base": "L",
+        "allowed": [
+          "L"
+        ]
+      },
       "variants": [
         {
           "sku": "PU-SILICON-EXT-INT-4L",
-          "pack": { "size": 4, "unit": "L", "label": "4L" },
+          "pack": {
+            "size": 4,
+            "unit": "L",
+            "label": "4L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 3395 },
-            { "min": 21, "max": null, "pricePerPack": 3234 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 3395
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 3234
+            }
           ]
         },
         {
           "sku": "PU-SILICON-EXT-INT-1L",
-          "pack": { "size": 1, "unit": "L", "label": "1L" },
+          "pack": {
+            "size": 1,
+            "unit": "L",
+            "label": "1L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 945 },
-            { "min": 21, "max": null, "pricePerPack": 896 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 945
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 896
+            }
           ]
         },
         {
           "sku": "PU-SILICON-EXT-INT-0_5L",
-          "pack": { "size": 0.5, "unit": "L", "label": "0.5L" },
+          "pack": {
+            "size": 0.5,
+            "unit": "L",
+            "label": "0.5L"
+          },
           "pricingModelKey": "TOTALVOL_L_1_20_21_PLUS",
           "prices": [
-            { "min": 1, "max": 20, "pricePerPack": 480 },
-            { "min": 21, "max": null, "pricePerPack": 457 }
+            {
+              "min": 1,
+              "max": 20,
+              "pricePerPack": 480
+            },
+            {
+              "min": 21,
+              "max": null,
+              "pricePerPack": 457
+            }
           ]
         }
       ]
@@ -2836,11 +4773,20 @@
       "name": "Manual Machine",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-MANUAL-MACHINE-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2860,11 +4806,20 @@
       "name": "Automatic Machine",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-AUTOMATIC-MACHINE-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2884,11 +4839,20 @@
       "name": "Color Mixing Machine",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-COLOR-MIXING-MACHINE-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2908,11 +4872,20 @@
       "name": "Spray Gun With Set",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "SET", "allowed": ["SET"] },
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-SPRAY-GUN-WITH-SET-1SET",
-          "pack": { "size": 1, "unit": "SET", "label": "1SET" },
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2932,11 +4905,20 @@
       "name": "Spray Gun Head",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-SPRAY-GUN-HEAD-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2956,11 +4938,20 @@
       "name": "Real Stone Paint Gun",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-REAL-STONE-PAINT-GUN-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2980,11 +4971,20 @@
       "name": "Air Compressor machine",
       "category": "TOOLS_ACCESSORIES",
       "description": "",
-      "uom": { "base": "PC", "allowed": ["PC"] },
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
+        ]
+      },
       "variants": [
         {
           "sku": "TOOLS-AIR-COMPRESSOR-MACHINE-1PC",
-          "pack": { "size": 1, "unit": "PC", "label": "1PC" },
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
           "pricingModelKey": "FLAT",
           "prices": [
             {
@@ -2998,1062 +4998,1557 @@
         }
       ]
     },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SEWING-TAPE",
-    "name": "Sewing Tape",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "M", "allowed": ["M"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SEWING-TAPE-50M",
-        "pack": { "size": 50, "unit": "M", "label": "50M" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 67,
-            "priceExclTax": 67,
-            "priceInclTax": 77
-          }
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SEWING-TAPE",
+      "name": "Sewing Tape",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "M",
+        "allowed": [
+          "M"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-FLOOR-ROLLER-9IN-SET",
-    "name": "9” Floor Paints Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-FLOOR-ROLLER-9IN-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 220,
-            "priceExclTax": 220,
-            "priceInclTax": 256
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SEWING-TAPE-50M",
+          "pack": {
+            "size": 50,
+            "unit": "M",
+            "label": "50M"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 67,
+              "priceExclTax": 67,
+              "priceInclTax": 77
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-FLOOR-ROLLER-9IN-SET",
+      "name": "9” Floor Paints Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-FLOOR-ROLLER-4IN",
-    "name": "4” Floor Paints Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-FLOOR-ROLLER-4IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 50,
-            "priceExclTax": 50,
-            "priceInclTax": 57
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-FLOOR-ROLLER-9IN-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 220,
+              "priceExclTax": 220,
+              "priceInclTax": 256
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-FLOOR-ROLLER-4IN",
+      "name": "4” Floor Paints Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-FLOOR-ROLLER-HANDLE-4IN",
-    "name": "4” Floor Paints Roller Handle",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-FLOOR-ROLLER-HANDLE-4IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 55,
-            "priceExclTax": 55,
-            "priceInclTax": 63
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-FLOOR-ROLLER-4IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 50,
+              "priceExclTax": 50,
+              "priceInclTax": 57
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-FLOOR-ROLLER-HANDLE-4IN",
+      "name": "4” Floor Paints Roller Handle",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-REGULAR-ROLLER-7IN-SET",
-    "name": "7” Regular Paint Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-REGULAR-ROLLER-7IN-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 95,
-            "priceExclTax": 95,
-            "priceInclTax": 111
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-FLOOR-ROLLER-HANDLE-4IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 55,
+              "priceExclTax": 55,
+              "priceInclTax": 63
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-REGULAR-ROLLER-7IN-SET",
+      "name": "7” Regular Paint Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH",
-    "name": "Paint Brush",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 23,
-            "priceExclTax": 23,
-            "priceInclTax": 26
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-REGULAR-ROLLER-7IN-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 95,
+              "priceExclTax": 95,
+              "priceInclTax": 111
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH",
+      "name": "Paint Brush",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH-1IN",
-    "name": "Paint Brush 1”",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-1IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 15,
-            "priceExclTax": 15,
-            "priceInclTax": 18
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 23,
+              "priceExclTax": 23,
+              "priceInclTax": 26
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH-1IN",
+      "name": "Paint Brush 1”",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH-1_5IN",
-    "name": "Paint Brush 1.5”",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-1_5IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 25,
-            "priceExclTax": 25,
-            "priceInclTax": 29
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-1IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 15,
+              "priceExclTax": 15,
+              "priceInclTax": 18
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH-1_5IN",
+      "name": "Paint Brush 1.5”",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH-2IN",
-    "name": "Paint Brush 2”",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-2IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 35,
-            "priceExclTax": 35,
-            "priceInclTax": 40
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-1_5IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 25,
+              "priceExclTax": 25,
+              "priceInclTax": 29
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH-2IN",
+      "name": "Paint Brush 2”",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH-2_5IN",
-    "name": "Paint Brush 2.5”",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-2_5IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 45,
-            "priceExclTax": 45,
-            "priceInclTax": 52
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-2IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 35,
+              "priceExclTax": 35,
+              "priceInclTax": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH-2_5IN",
+      "name": "Paint Brush 2.5”",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PAINT-BRUSH-3IN",
-    "name": "Paint Brush 3”",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PAINT-BRUSH-3IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 55,
-            "priceExclTax": 55,
-            "priceInclTax": 63
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-2_5IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 45,
+              "priceExclTax": 45,
+              "priceInclTax": 52
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PAINT-BRUSH-3IN",
+      "name": "Paint Brush 3”",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SANDPAPER-KHAXI-80-100-120",
-    "name": "Paper Khaksi 80/100/120",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SANDPAPER-KHAXI-80-100-120-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 17,
-            "priceExclTax": 17,
-            "priceInclTax": 20
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PAINT-BRUSH-3IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 55,
+              "priceExclTax": 55,
+              "priceInclTax": 63
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SANDPAPER-KHAXI-80-100-120",
+      "name": "Paper Khaksi 80/100/120",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SANDPAPER-ROLL-KHAXI-180-100-120",
-    "name": "Roll Khaksi 180/100/120",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "ROLL", "allowed": ["ROLL"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SANDPAPER-ROLL-KHAXI-180-100-120-1ROLL",
-        "pack": { "size": 1, "unit": "ROLL", "label": "1ROLL" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 2375,
-            "priceExclTax": 2375,
-            "priceInclTax": 2777
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SANDPAPER-KHAXI-80-100-120-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 17,
+              "priceExclTax": 17,
+              "priceInclTax": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SANDPAPER-ROLL-KHAXI-180-100-120",
+      "name": "Roll Khaksi 180/100/120",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "ROLL",
+        "allowed": [
+          "ROLL"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SAFETY-BELT-SINGLE-HOOK",
-    "name": "Safety Belt Single Hook",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SAFETY-BELT-SINGLE-HOOK-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 1890,
-            "priceExclTax": 1890,
-            "priceInclTax": 2210
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SANDPAPER-ROLL-KHAXI-180-100-120-1ROLL",
+          "pack": {
+            "size": 1,
+            "unit": "ROLL",
+            "label": "1ROLL"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2375,
+              "priceExclTax": 2375,
+              "priceInclTax": 2777
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SAFETY-BELT-SINGLE-HOOK",
+      "name": "Safety Belt Single Hook",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SAFETY-BELT-DOUBLE-HOOK",
-    "name": "Safety Belt Double Hook",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SAFETY-BELT-DOUBLE-HOOK-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 2990,
-            "priceExclTax": 2990,
-            "priceInclTax": 3496
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SAFETY-BELT-SINGLE-HOOK-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1890,
+              "priceExclTax": 1890,
+              "priceInclTax": 2210
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SAFETY-BELT-DOUBLE-HOOK",
+      "name": "Safety Belt Double Hook",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-WALL-GRINDER-MACHINE-SET",
-    "name": "Wall Grinder Machine Set",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-WALL-GRINDER-MACHINE-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 21900,
-            "priceExclTax": 21900,
-            "priceInclTax": 25613
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SAFETY-BELT-DOUBLE-HOOK-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2990,
+              "priceExclTax": 2990,
+              "priceInclTax": 3496
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-WALL-GRINDER-MACHINE-SET",
+      "name": "Wall Grinder Machine Set",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-WALL-GRINDER-MACHINE",
-    "name": "Wall Grinder Machine Pcs",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-WALL-GRINDER-MACHINE-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 16280,
-            "priceExclTax": 16280,
-            "priceInclTax": 19040
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-WALL-GRINDER-MACHINE-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 21900,
+              "priceExclTax": 21900,
+              "priceInclTax": 25613
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-WALL-GRINDER-MACHINE",
+      "name": "Wall Grinder Machine Pcs",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-FLOOR-PAINT-SHOES",
-    "name": "Floor Paint Shoes",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PAIR", "allowed": ["PAIR"] },
-    "variants": [
-      {
-        "sku": "TOOLS-FLOOR-PAINT-SHOES-1PAIR",
-        "pack": { "size": 1, "unit": "PAIR", "label": "1PAIR" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 1062,
-            "priceExclTax": 1062,
-            "priceInclTax": 1241
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-WALL-GRINDER-MACHINE-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 16280,
+              "priceExclTax": 16280,
+              "priceInclTax": 19040
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-FLOOR-PAINT-SHOES",
+      "name": "Floor Paint Shoes",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PAIR",
+        "allowed": [
+          "PAIR"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PUTTING-PATA-RECT",
-    "name": "Rectangular Putting Pata",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PUTTING-PATA-RECT-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 124,
-            "priceExclTax": 124,
-            "priceInclTax": 144
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-FLOOR-PAINT-SHOES-1PAIR",
+          "pack": {
+            "size": 1,
+            "unit": "PAIR",
+            "label": "1PAIR"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1062,
+              "priceExclTax": 1062,
+              "priceInclTax": 1241
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PUTTING-PATA-RECT",
+      "name": "Rectangular Putting Pata",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PUTTING-PATA-TRI",
-    "name": "Triangle Putting Pata",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PUTTING-PATA-TRI-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 81,
-            "priceExclTax": 81,
-            "priceInclTax": 94
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PUTTING-PATA-RECT-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 124,
+              "priceExclTax": 124,
+              "priceInclTax": 144
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PUTTING-PATA-TRI",
+      "name": "Triangle Putting Pata",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PLASTIC-COVER-20M",
-    "name": "Paint Safe Plastic Cover 20M",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "ROLL", "allowed": ["ROLL"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PLASTIC-COVER-20M-1ROLL",
-        "pack": { "size": 1, "unit": "ROLL", "label": "1ROLL" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 150,
-            "priceExclTax": 150,
-            "priceInclTax": 174
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PUTTING-PATA-TRI-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 81,
+              "priceExclTax": 81,
+              "priceInclTax": 94
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PLASTIC-COVER-20M",
+      "name": "Paint Safe Plastic Cover 20M",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "ROLL",
+        "allowed": [
+          "ROLL"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-REGULAR-ROLLER-8IN",
-    "name": "8\" Regular Paint Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-REGULAR-ROLLER-8IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 120,
-            "priceExclTax": 120,
-            "priceInclTax": 141
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PLASTIC-COVER-20M-1ROLL",
+          "pack": {
+            "size": 1,
+            "unit": "ROLL",
+            "label": "1ROLL"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 150,
+              "priceExclTax": 150,
+              "priceInclTax": 174
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-REGULAR-ROLLER-8IN",
+      "name": "8\" Regular Paint Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-REGULAR-ROLLER-10IN",
-    "name": "10\" Regular Paint Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-REGULAR-ROLLER-10IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 150,
-            "priceExclTax": 150,
-            "priceInclTax": 176
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-REGULAR-ROLLER-8IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 120,
+              "priceExclTax": 120,
+              "priceInclTax": 141
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-REGULAR-ROLLER-10IN",
+      "name": "10\" Regular Paint Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-REGULAR-ROLLER-4IN",
-    "name": "4\" Regular Paint Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-REGULAR-ROLLER-4IN-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 60,
-            "priceExclTax": 60,
-            "priceInclTax": 71
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-REGULAR-ROLLER-10IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 150,
+              "priceExclTax": 150,
+              "priceInclTax": 176
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-REGULAR-ROLLER-4IN",
+      "name": "4\" Regular Paint Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-FOAM-TAPE-2MM-3MM",
-    "name": "Foam Tape 2mm/3mm",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-FOAM-TAPE-2MM-3MM-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 100,
-            "priceExclTax": 100,
-            "priceInclTax": 115
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-REGULAR-ROLLER-4IN-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 60,
+              "priceExclTax": 60,
+              "priceInclTax": 71
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-FOAM-TAPE-2MM-3MM",
+      "name": "Foam Tape 2mm/3mm",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PUTTING-PATA-HANDLE",
-    "name": "Putting Pata With Handle",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PUTTING-PATA-HANDLE-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 140,
-            "priceExclTax": 140,
-            "priceInclTax": 165
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-FOAM-TAPE-2MM-3MM-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 100,
+              "priceExclTax": 100,
+              "priceInclTax": 115
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PUTTING-PATA-HANDLE",
+      "name": "Putting Pata With Handle",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-PUTTING-KNIFE",
-    "name": "Putting Knife",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-PUTTING-KNIFE-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 120,
-            "priceExclTax": 120,
-            "priceInclTax": 141
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PUTTING-PATA-HANDLE-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 140,
+              "priceExclTax": 140,
+              "priceInclTax": 165
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-PUTTING-KNIFE",
+      "name": "Putting Knife",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-TEXTURE-ROLLER-DECORATIVE-SET",
-    "name": "Decorative Texture Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-TEXTURE-ROLLER-DECORATIVE-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 1700,
-            "priceExclTax": 1700,
-            "priceInclTax": 2000
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-PUTTING-KNIFE-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 120,
+              "priceExclTax": 120,
+              "priceInclTax": 141
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-TEXTURE-ROLLER-DECORATIVE-SET",
+      "name": "Decorative Texture Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-DESIGN-TAPE-50M",
-    "name": "Design Tape 50M",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-DESIGN-TAPE-50M-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 1200,
-            "priceExclTax": 1200,
-            "priceInclTax": 1380
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-TEXTURE-ROLLER-DECORATIVE-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1700,
+              "priceExclTax": 1700,
+              "priceInclTax": 2000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-DESIGN-TAPE-50M",
+      "name": "Design Tape 50M",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-REFILLABLE-PAINT-ROLLER-SET",
-    "name": "Refillable Paint Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-REFILLABLE-PAINT-ROLLER-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 1200,
-            "priceExclTax": 1200,
-            "priceInclTax": 1400
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-DESIGN-TAPE-50M-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1200,
+              "priceExclTax": 1200,
+              "priceInclTax": 1380
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-REFILLABLE-PAINT-ROLLER-SET",
+      "name": "Refillable Paint Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-DESIGN-ROLLER",
-    "name": "Design Roller",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "PC", "allowed": ["PC"] },
-    "variants": [
-      {
-        "sku": "TOOLS-DESIGN-ROLLER-1PC",
-        "pack": { "size": 1, "unit": "PC", "label": "1PC" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 871,
-            "priceExclTax": 871,
-            "priceInclTax": 1024
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-REFILLABLE-PAINT-ROLLER-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1200,
+              "priceExclTax": 1200,
+              "priceInclTax": 1400
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-DESIGN-ROLLER",
+      "name": "Design Roller",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "PC",
+        "allowed": [
+          "PC"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "bhadra2082_tools_accessories",
-    "code": "TOOLS-SCAFFOLDING-SET",
-    "name": "Scaffolding",
-    "category": "TOOLS_ACCESSORIES",
-    "description": "",
-    "uom": { "base": "SET", "allowed": ["SET"] },
-    "variants": [
-      {
-        "sku": "TOOLS-SCAFFOLDING-1SET",
-        "pack": { "size": 1, "unit": "SET", "label": "1SET" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          {
-            "min": null,
-            "max": null,
-            "pricePerPack": 14500,
-            "priceExclTax": 14500,
-            "priceInclTax": 17058
-          }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-DESIGN-ROLLER-1PC",
+          "pack": {
+            "size": 1,
+            "unit": "PC",
+            "label": "1PC"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 871,
+              "priceExclTax": 871,
+              "priceInclTax": 1024
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "bhadra2082_tools_accessories",
+      "code": "TOOLS-SCAFFOLDING-SET",
+      "name": "Scaffolding",
+      "category": "TOOLS_ACCESSORIES",
+      "description": "",
+      "uom": {
+        "base": "SET",
+        "allowed": [
+          "SET"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-CARBON-BLACK-NNZ",
-    "name": "Carbon Black (NNZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-CARBON-BLACK-NNZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 998 }
+      },
+      "variants": [
+        {
+          "sku": "TOOLS-SCAFFOLDING-1SET",
+          "pack": {
+            "size": 1,
+            "unit": "SET",
+            "label": "1SET"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 14500,
+              "priceExclTax": 14500,
+              "priceInclTax": 17058
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-CARBON-BLACK-NNZ",
+      "name": "Carbon Black (NNZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-IRON-OXIDE-BLACK-NXZ",
-    "name": "Iron Oxide Black (NXZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-IRON-OXIDE-BLACK-NXZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1260 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-CARBON-BLACK-NNZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 998
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-IRON-OXIDE-BLACK-NXZ",
+      "name": "Iron Oxide Black (NXZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-IRON-OXIDE-RED-RXZ",
-    "name": "Iron Oxide Red (RXZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-IRON-OXIDE-RED-RXZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1330 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-IRON-OXIDE-BLACK-NXZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1260
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-IRON-OXIDE-RED-RXZ",
+      "name": "Iron Oxide Red (RXZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-IRON-OXIDE-YELLOW-YXZ",
-    "name": "Iron Oxide Yellow (YXZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-IRON-OXIDE-YELLOW-YXZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1330 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-IRON-OXIDE-RED-RXZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1330
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-IRON-OXIDE-YELLOW-YXZ",
+      "name": "Iron Oxide Yellow (YXZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-EVERLASTING-ORANGE-ALZ",
-    "name": "Everlasting Orange (ALZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-EVERLASTING-ORANGE-ALZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1663 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-IRON-OXIDE-YELLOW-YXZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1330
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-EVERLASTING-ORANGE-ALZ",
+      "name": "Everlasting Orange (ALZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-PHTHALEIN-GREEN-GPZ",
-    "name": "Phthalein Green (GPZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-PHTHALEIN-GREEN-GPZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1829 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-EVERLASTING-ORANGE-ALZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1663
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-PHTHALEIN-GREEN-GPZ",
+      "name": "Phthalein Green (GPZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-PHTHALEIN-BLUE-BNZ",
-    "name": "Phthalein Blue (BNZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-PHTHALEIN-BLUE-BNZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1635 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-PHTHALEIN-GREEN-GPZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1829
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-PHTHALEIN-BLUE-BNZ",
+      "name": "Phthalein Blue (BNZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-EVERLASTING-PURPLE-VLZ",
-    "name": "Everlasting Purple (VLZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-EVERLASTING-PURPLE-VLZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 2106 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-PHTHALEIN-BLUE-BNZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1635
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-EVERLASTING-PURPLE-VLZ",
+      "name": "Everlasting Purple (VLZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-TITANIUM-WHITE-WXZ",
-    "name": "Titanium White (WXZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-TITANIUM-WHITE-WXZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1720 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-EVERLASTING-PURPLE-VLZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2106
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-TITANIUM-WHITE-WXZ",
+      "name": "Titanium White (WXZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-BRIGHT-RED-RLZ",
-    "name": "Bright Red (RLZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-BRIGHT-RED-RLZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 2217 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-TITANIUM-WHITE-WXZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1720
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-BRIGHT-RED-RLZ",
+      "name": "Bright Red (RLZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-MEDIUM-YELLOW-YRZ",
-    "name": "Medium Yellow (YRZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-MEDIUM-YELLOW-YRZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 2163 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-BRIGHT-RED-RLZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2217
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-MEDIUM-YELLOW-YRZ",
+      "name": "Medium Yellow (YRZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-ORANGE-YELLOW-YMZ",
-    "name": "Orange Yellow (YMZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-ORANGE-YELLOW-YMZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 1913 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-MEDIUM-YELLOW-YRZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2163
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-ORANGE-YELLOW-YMZ",
+      "name": "Orange Yellow (YMZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-YELLOWISH-BROWN-YQZ",
-    "name": "Yellowish Brown (YQZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-YELLOWISH-BROWN-YQZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 3548 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-ORANGE-YELLOW-YMZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 1913
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-YELLOWISH-BROWN-YQZ",
+      "name": "Yellowish Brown (YQZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-DPP-RED-REZ",
-    "name": "DPP Red (REZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-DPP-RED-REZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 2772 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-YELLOWISH-BROWN-YQZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 3548
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-DPP-RED-REZ",
+      "name": "DPP Red (REZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-DPP-ORANGE-ARZ",
-    "name": "DPP Orange (ARZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-DPP-ORANGE-ARZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 4900 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-DPP-RED-REZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 2772
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-DPP-ORANGE-ARZ",
+      "name": "DPP Orange (ARZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  },
-  {
-    "datasetKey": "meitu_accessories_colorants",
-    "code": "COLORANT-ROSE-RED-PNZ",
-    "name": "Rose Red (PNZ)",
-    "category": "COLORANT",
-    "description": "",
-    "uom": { "base": "ML", "allowed": ["ML"] },
-    "variants": [
-      {
-        "sku": "COLORANT-ROSE-RED-PNZ-1000ML",
-        "pack": { "size": 1000, "unit": "ML", "label": "1000ML" },
-        "pricingModelKey": "FLAT",
-        "prices": [
-          { "min": null, "max": null, "pricePerPack": 3548 }
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-DPP-ORANGE-ARZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 4900
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "datasetKey": "meitu_accessories_colorants",
+      "code": "COLORANT-ROSE-RED-PNZ",
+      "name": "Rose Red (PNZ)",
+      "category": "COLORANT",
+      "description": "",
+      "uom": {
+        "base": "ML",
+        "allowed": [
+          "ML"
         ]
-      }
-    ]
-  }
-]
-  
+      },
+      "variants": [
+        {
+          "sku": "COLORANT-ROSE-RED-PNZ-1000ML",
+          "pack": {
+            "size": 1000,
+            "unit": "ML",
+            "label": "1000ML"
+          },
+          "pricingModelKey": "FLAT",
+          "prices": [
+            {
+              "min": null,
+              "max": null,
+              "pricePerPack": 3548
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

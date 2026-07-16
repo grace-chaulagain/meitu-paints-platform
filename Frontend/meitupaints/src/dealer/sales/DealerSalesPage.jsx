@@ -16,6 +16,7 @@ import {
   SectionHeader,
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { getPrimaryImage } from "../inventory/inventoryHelpers.js";
 import { Toast } from "../../components/dashboard/Toast.jsx";
 import NewSaleModal from "./NewSaleModal.jsx";
@@ -766,7 +767,16 @@ export default function DealerSalesPage() {
             </div>
           </Surface>
 
-          <Pagination page={currentDayPage} totalPages={totalDayPages} totalCount={dayGroups.length} pageSize={DAYS_PER_PAGE} onChange={setDayPage} />
+          <Pagination
+            page={currentDayPage}
+            totalPages={totalDayPages}
+            totalCount={dayGroups.length}
+            pageSize={DAYS_PER_PAGE}
+            onChange={(next) => {
+              setDayPage(next);
+              scrollResultsToTop();
+            }}
+          />
         </>
       )}
 

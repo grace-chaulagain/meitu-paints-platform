@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useGetAllStockHistoryQuery } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import { EmptyState, GhostButton, Pill, SearchField, SectionHeader, Surface } from "../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../components/dashboard/ApplePickers.jsx";
 import { MovementBadge } from "../factoryUI.jsx";
 import { STOCK_REASONS, formatDayHeading, formatTimeOnly, localDayKey } from "../factoryHelpers.js";
@@ -10,12 +11,13 @@ const REASON_OPTIONS = [{ key: "ALL", label: "All reasons" }, ...STOCK_REASONS.m
 const PAGE_SIZE = 50;
 
 function exportCsv(items) {
-  const headers = ["Date", "Product", "Old", "New", "Difference", "Reason", "Factory User"];
+  const headers = ["Date", "Product", "Size", "Old", "New", "Difference", "Reason", "Factory User"];
   const rows = items.map((row) => [
     formatDayHeading(row.changedAt) === "Today" || formatDayHeading(row.changedAt) === "Yesterday"
       ? `${formatDayHeading(row.changedAt)} ${formatTimeOnly(row.changedAt)}`
       : `${new Date(row.changedAt).toLocaleDateString("en-US")} ${formatTimeOnly(row.changedAt)}`,
     row.productName || row.sku || "",
+    row.packLabel || "",
     row.previousQuantity ?? "",
     row.newQuantity ?? "",
     row.delta ?? "",
@@ -149,11 +151,11 @@ export default function FactoryStockHistoryPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "var(--color-fog, #f5f5f7)" }}>
-                    {["Time", "Product", "Old", "New", "Movement", "Reason", "Factory User"].map((head, index) => (
+                    {["Time", "Product", "Size", "Old", "New", "Movement", "Reason", "Factory User"].map((head, index) => (
                       <th
                         key={head}
                         style={{
-                          textAlign: index >= 2 && index <= 4 ? "right" : "left",
+                          textAlign: index >= 3 && index <= 5 ? "right" : "left",
                           padding: "10px 16px",
                           fontSize: 10.5,
                           fontWeight: 700,
@@ -170,7 +172,7 @@ export default function FactoryStockHistoryPage() {
                 <tbody>
                   {dayGroups.flatMap((group) => [
                     <tr key={`day-${group.key}`} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
-                      <td colSpan={7} style={{ padding: "9px 16px", background: "rgba(0,0,0,.02)" }}>
+                      <td colSpan={8} style={{ padding: "9px 16px", background: "rgba(0,0,0,.02)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "-.01em", color: "var(--color-ink, #1d1d1f)" }}>{group.label}</span>
                           <Pill size="small">{group.rows.length}</Pill>
@@ -181,6 +183,7 @@ export default function FactoryStockHistoryPage() {
                       <tr key={row._id} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
                         <td style={{ padding: "10px 16px", fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatTimeOnly(row.changedAt)}</td>
                         <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>{row.productName || row.sku}</td>
+                        <td style={{ padding: "10px 16px", fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{row.packLabel || "—"}</td>
                         <td style={{ padding: "10px 16px", textAlign: "right", fontSize: 13 }}>{row.previousQuantity}</td>
                         <td style={{ padding: "10px 16px", textAlign: "right", fontSize: 13 }}>{row.newQuantity}</td>
                         <td style={{ padding: "10px 16px", textAlign: "right" }}>
@@ -204,13 +207,25 @@ export default function FactoryStockHistoryPage() {
                 Showing {rangeStart}-{rangeEnd} of {totalCount} movements
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <GhostButton onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1}>
+                <GhostButton
+                  onClick={() => {
+                    setPage((value) => Math.max(1, value - 1));
+                    scrollResultsToTop();
+                  }}
+                  disabled={page <= 1}
+                >
                   Previous
                 </GhostButton>
                 <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
                   Page {page} of {totalPages}
                 </span>
-                <GhostButton onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages}>
+                <GhostButton
+                  onClick={() => {
+                    setPage((value) => Math.min(totalPages, value + 1));
+                    scrollResultsToTop();
+                  }}
+                  disabled={page >= totalPages}
+                >
                   Next
                 </GhostButton>
               </div>

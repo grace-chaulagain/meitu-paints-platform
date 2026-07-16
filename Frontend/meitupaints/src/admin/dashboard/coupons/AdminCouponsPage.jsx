@@ -32,9 +32,11 @@ import {
   Pill,
   PrimaryButton,
   SearchField,
+  DashboardUIStyles,
   SectionHeader,
   Spinner,
   Surface,
+  TabBar,
   ToggleSwitch,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { Toast } from "../../../components/dashboard/Toast.jsx";
@@ -538,6 +540,7 @@ function GenerateTab({ onToast }) {
   const settingsQuery = useGetRewardSettingsQuery();
   const weightFactor = settingsQuery.data?.weightFactor ?? null;
   const catalogQuery = useGetAdminPointsCatalogProductsQuery({ limit: 500 });
+  const catalogLoading = catalogQuery.isLoading;
 
   const catalogProducts = useMemo(
     () => (catalogQuery.data?.items || []).filter((product) => product.isActive !== false),
@@ -672,44 +675,54 @@ function GenerateTab({ onToast }) {
     <div className="coupon-generate-layout">
       <form onSubmit={handleReviewGenerate} className="coupon-generate-form">
         <div className="coupon-generate-panel">
-          <div className="coupon-generate-card">
-            <div className="coupon-section-header">
-              <div>
-                <div className="admin-coupons-section-eyebrow" style={{ marginBottom: 0 }}>New Batch</div>
-                <div className="coupon-section-title">Create coupons</div>
-                <div className="coupon-section-subtitle">Choose product, expiry, and quantity. Review before anything is generated.</div>
-              </div>
-              <div className="coupon-settings-anchor">
-                <button
-                  type="button"
-                  className={`coupon-settings-btn${settingsOpen ? " is-active" : ""}`}
-                  onClick={() => setSettingsOpen((value) => !value)}
-                  aria-label="Reward settings"
-                  title="Reward settings (weight factor)"
-                >
-                  <DashboardIcon name="gear" size={15} strokeWidth={1.8} />
-                </button>
-                {settingsOpen ? (
-                  <>
-                    <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setSettingsOpen(false)} />
-                    <RewardSettingsPopover onToast={onToast} />
-                  </>
-                ) : null}
-              </div>
-            </div>
+          <Surface padding={16}>
+            <SectionHeader
+              eyebrow="New Batch"
+              title="Create coupons"
+              subtitle="Choose product, expiry, and quantity. Review before anything is generated."
+              size="small"
+              action={
+                <div className="coupon-settings-anchor">
+                  <button
+                    type="button"
+                    className={`coupon-settings-btn${settingsOpen ? " is-active" : ""}`}
+                    onClick={() => setSettingsOpen((value) => !value)}
+                    aria-label="Reward settings"
+                    title="Reward settings (weight factor)"
+                  >
+                    <DashboardIcon name="gear" size={15} strokeWidth={1.8} />
+                  </button>
+                  {settingsOpen ? (
+                    <>
+                      <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setSettingsOpen(false)} />
+                      <RewardSettingsPopover onToast={onToast} />
+                    </>
+                  ) : null}
+                </div>
+              }
+            />
+            <div style={{ marginTop: 14 }}>
             <Surface padding={0} className="coupon-product-card">
               <ProductRow icon="store" label="Category">
-                <AppleDropdown
-                  value={category}
-                  options={categoryOptions}
-                  onChange={handleCategoryChange}
-                  placeholder={categoryOptions.length ? "Choose category" : "Loading…"}
-                  style={{ width: "100%" }}
-                />
+                {catalogLoading ? (
+                  <div className="coupon-field-skeleton" />
+                ) : categoryOptions.length ? (
+                  <AppleDropdown
+                    value={category}
+                    options={categoryOptions}
+                    onChange={handleCategoryChange}
+                    placeholder="Choose category"
+                    style={{ width: "100%" }}
+                  />
+                ) : (
+                  <span className="coupon-field-placeholder">No catalog products yet — add one in Catalog.</span>
+                )}
               </ProductRow>
 
               <ProductRow icon="package" label="Product" primary>
-                {category ? (
+                {catalogLoading ? (
+                  <div className="coupon-field-skeleton" />
+                ) : category ? (
                   <AppleDropdown
                     value={schemeProductId}
                     options={productOptions}
@@ -718,7 +731,10 @@ function GenerateTab({ onToast }) {
                     style={{ width: "100%" }}
                   />
                 ) : (
-                  <span className="coupon-field-placeholder">Choose a category first</span>
+                  <div className="coupon-field-waiting">
+                    <DashboardIcon name="package" size={13} strokeWidth={1.8} />
+                    Select a category above to see products
+                  </div>
                 )}
               </ProductRow>
 
@@ -736,19 +752,46 @@ function GenerateTab({ onToast }) {
                   </div>
                 </ProductRow>
               ) : null}
-
-              {selectedProduct ? (
-                <ProductRow icon="shield" label="Resolves To" tone="resolved">
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Pill tone={resolvedType === "GOLDEN" ? "caution" : "positive"} size="small">{couponTypeLabel(resolvedType)}</Pill>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{resolvedPoints != null ? `${resolvedPoints} pts` : "—"}</span>
-                  </div>
-                </ProductRow>
-              ) : null}
             </Surface>
-          </div>
+            </div>
+          </Surface>
 
           <div className="coupon-field-grid coupon-field-grid-meta">
+            <div className={`coupon-preview-card${selectedProduct ? " is-filled" : ""}`}>
+              {selectedProduct ? (
+                <>
+                  <div className="coupon-preview-head">
+                    <span className="coupon-preview-icon">
+                      <DashboardIcon name="package" size={15} strokeWidth={1.8} />
+                    </span>
+                    <div className="coupon-preview-title">
+                      <div className="coupon-preview-name">{selectedProduct.name}</div>
+                      <div className="coupon-preview-meta">
+                        {selectedProduct.category}
+                        {selectedProduct.pricingMode === "SIZES" && size ? ` · ${size}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="coupon-preview-stats">
+                    <Pill tone={resolvedType === "GOLDEN" ? "caution" : "positive"} size="small">{couponTypeLabel(resolvedType)}</Pill>
+                    <span className="coupon-preview-points">
+                      {resolvedPoints != null ? `${resolvedPoints} pts per coupon` : "Choose a size to resolve points"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="coupon-preview-empty">
+                  <span className="coupon-preview-icon is-muted">
+                    <DashboardIcon name="shield" size={15} strokeWidth={1.8} />
+                  </span>
+                  <div>
+                    <div className="coupon-preview-empty-title">Coupon preview</div>
+                    <div className="coupon-preview-empty-helper">Pick a product to see its coupon type and point value here.</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <FieldCard icon="calendar" label="Expiry">
               <AppleDateField value={expiresAt} onChange={setExpiresAt} />
             </FieldCard>
@@ -1716,53 +1759,14 @@ function SettlementTab() {
   );
 }
 
-function CouponWorkspaceHeader({ tab, onTabChange }) {
-  const activeTab = COUPON_TABS.find((item) => item.key === tab) || COUPON_TABS[0];
-
-  return (
-    <section className="admin-coupons-hero">
-      <div className="admin-coupons-hero-copy">
-        <div className="admin-coupons-hero-eyebrow">
-          <DashboardIcon name="shield" size={14} strokeWidth={1.8} />
-          Dealer rewards
-        </div>
-        <h1>Coupon Studio</h1>
-        <p>{COUPON_TAB_HINTS[activeTab.key]}</p>
-      </div>
-
-      <nav className="admin-coupons-nav" aria-label="Coupon workspace sections">
-        {COUPON_TABS.map((item) => {
-          const active = item.key === tab;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              className={`admin-coupons-nav-btn${active ? " is-active" : ""}`}
-              onClick={() => onTabChange(item.key)}
-              aria-current={active ? "page" : undefined}
-            >
-              <span className="admin-coupons-nav-icon">
-                <DashboardIcon name={item.icon} size={15} strokeWidth={1.8} />
-              </span>
-              <span className="admin-coupons-nav-copy">
-                <span className="admin-coupons-nav-label">{item.label}</span>
-                <span className="admin-coupons-nav-sub">{item.subtitle}</span>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-    </section>
-  );
-}
-
 export default function AdminCouponsPage() {
   const [tab, setTab] = useState("generate");
   const [toast, setToast] = useState(null);
 
   return (
     <div className="admin-coupons-page">
-      <CouponWorkspaceHeader tab={tab} onTabChange={setTab} />
+      <DashboardUIStyles />
+      <TabBar options={COUPON_TABS} value={tab} onChange={setTab} />
 
       <div className="admin-coupons-content">
         {tab === "generate" ? (
@@ -1785,152 +1789,17 @@ export default function AdminCouponsPage() {
       <style>{`
         .admin-coupons-page{
           display:grid;
-          gap:12px;
+          gap:16px;
           color:var(--color-ink, #1d1d1f);
           font-family:var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif);
         }
 
-        .admin-coupons-hero{
-          display:grid;
-          grid-template-columns:minmax(220px, .56fr) minmax(0, 1fr);
-          align-items:center;
-          gap:10px;
-          padding:10px;
-          border-radius:22px;
-          border:1px solid var(--color-silver-mist, #e8e8ed);
-          background:var(--color-snow, #fff);
-          box-shadow:none;
-        }
-
-        .admin-coupons-hero-copy{
-          min-width:0;
-          display:grid;
-          gap:4px;
-          padding:10px 12px;
-          border-radius:18px;
-          background:var(--color-fog, #f5f5f7);
-        }
-
-        .admin-coupons-hero-eyebrow{
-          display:inline-flex;
-          align-items:center;
-          gap:6px;
-          width:max-content;
-          color:var(--color-graphite, #707070);
-          font-size:11px;
-          font-weight:650;
-          letter-spacing:-.01em;
-        }
-
-        .admin-coupons-hero h1{
-          margin:0;
-          font-family:var(--font-sf-pro-display, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif);
-          font-size:24px;
-          line-height:1;
-          letter-spacing:-.045em;
-          font-weight:750;
-          color:var(--color-ink, #1d1d1f);
-        }
-
-        .admin-coupons-hero p{
-          margin:0;
-          color:var(--color-graphite, #707070);
-          font-size:12.5px;
-          line-height:1.35;
-          letter-spacing:-.01em;
-        }
-
-        .admin-coupons-nav{
-          display:flex;
-          align-items:center;
-          justify-content:flex-end;
-          gap:4px;
-          flex:1 1 auto;
-          min-width:0;
-          padding:4px;
-          border-radius:999px;
-          background:var(--color-fog, #f5f5f7);
-          overflow-x:auto;
-          scrollbar-width:none;
-        }
-
-        .admin-coupons-nav::-webkit-scrollbar{
-          display:none;
-        }
-
-        .admin-coupons-nav-btn{
-          flex:0 0 auto;
-          min-height:36px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          gap:6px;
-          padding:4px 12px 4px 7px;
-          border-radius:999px;
-          border:1px solid transparent;
-          background:transparent;
-          color:var(--color-ink, #1d1d1f);
-          text-align:left;
-          font-family:inherit;
-          cursor:pointer;
-          transition:background .14s ease, border-color .14s ease, color .14s ease, transform .14s var(--ease-out, ease);
-        }
-
-        .admin-coupons-nav-btn:hover{
-          background:rgba(255,255,255,.78);
-        }
-
-        .admin-coupons-nav-btn:active{
-          transform:scale(.975);
-        }
-
-        .admin-coupons-nav-btn:focus-visible,
         .coupon-settings-btn:focus-visible,
         .coupon-catalog-icon-btn:focus-visible,
         .coupon-batch-icon-btn:focus-visible,
         .coupon-batch-bulk-delete-btn:focus-visible{
           outline:none;
           box-shadow:0 0 0 3px rgba(0,113,227,.18);
-        }
-
-        .admin-coupons-nav-btn.is-active{
-          background:var(--color-ink, #1d1d1f);
-          color:#fff;
-        }
-
-        .admin-coupons-nav-icon{
-          width:24px;
-          height:24px;
-          flex-shrink:0;
-          border-radius:999px;
-          display:grid;
-          place-items:center;
-          background:rgba(255,255,255,.85);
-          color:var(--color-ink, #1d1d1f);
-        }
-
-        .admin-coupons-nav-btn.is-active .admin-coupons-nav-icon{
-          background:rgba(255,255,255,.16);
-          color:#fff;
-        }
-
-        .admin-coupons-nav-copy{
-          min-width:0;
-          display:block;
-        }
-
-        .admin-coupons-nav-label{
-          overflow:hidden;
-          text-overflow:ellipsis;
-          white-space:nowrap;
-          font-size:12px;
-          line-height:1;
-          font-weight:700;
-          letter-spacing:-.01em;
-        }
-
-        .admin-coupons-nav-sub{
-          display:none;
         }
 
         .admin-coupons-content{
@@ -1962,21 +1831,6 @@ export default function AdminCouponsPage() {
           border-color:rgba(0,113,227,.4);
           box-shadow:0 0 0 3px rgba(0,113,227,.12);
         }
-        .admin-coupons-section-eyebrow{
-          margin-bottom:10px;
-          padding-left:4px;
-          font-size:11px;
-          font-weight:700;
-          letter-spacing:.07em;
-          text-transform:uppercase;
-          color:var(--color-graphite, #707070);
-        }
-        .admin-coupons-section-eyebrow-muted{
-          text-transform:none;
-          font-weight:500;
-          letter-spacing:0;
-          opacity:.7;
-        }
         .coupon-generate-layout{
           display:grid;
           gap:14px;
@@ -1990,34 +1844,6 @@ export default function AdminCouponsPage() {
           grid-template-columns:minmax(0, 1.45fr) minmax(230px, .62fr);
           gap:12px;
           align-items:stretch;
-        }
-        .coupon-generate-card{
-          border-radius:24px;
-          border:1px solid var(--color-silver-mist, #e8e8ed);
-          background:var(--color-snow, #fff);
-          padding:16px;
-        }
-        .coupon-section-header{
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:12px;
-          margin-bottom:12px;
-        }
-        .coupon-section-title{
-          margin-top:4px;
-          font-family:var(--font-sf-pro-display, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif);
-          font-size:24px;
-          line-height:1.08;
-          font-weight:750;
-          letter-spacing:-.045em;
-          color:var(--color-ink, #1d1d1f);
-        }
-        .coupon-section-subtitle{
-          margin-top:4px;
-          color:var(--color-graphite, #707070);
-          font-size:13px;
-          line-height:1.38;
         }
         .coupon-settings-anchor{
           position:relative;
@@ -2200,10 +2026,6 @@ export default function AdminCouponsPage() {
         .coupon-product-row.is-primary .apple-dropdown-menu-trigger:hover{
           background:#fff;
         }
-        .coupon-product-row.tone-resolved .coupon-product-icon{
-          background:#fff;
-          color:var(--color-azure, #0071e3);
-        }
         .coupon-field-grid{
           display:grid;
           grid-template-columns:1fr;
@@ -2242,6 +2064,106 @@ export default function AdminCouponsPage() {
           height:44px;
           font-size:13px;
           color:var(--color-graphite, #707070);
+        }
+        .coupon-field-skeleton{
+          width:100%;
+          height:44px;
+          border-radius:999px;
+          background:linear-gradient(90deg, rgba(0,0,0,.045), rgba(0,0,0,.02), rgba(0,0,0,.045));
+        }
+        .coupon-field-waiting{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          width:100%;
+          height:44px;
+          padding:0 14px;
+          border-radius:999px;
+          border:1px dashed rgba(29,29,31,.14);
+          background:rgba(232,232,237,.32);
+          color:var(--color-graphite, #86868b);
+          font-size:12.5px;
+          font-weight:600;
+        }
+        .coupon-preview-card{
+          display:flex;
+          flex-direction:column;
+          gap:10px;
+          padding:14px;
+          border-radius:20px;
+          background:var(--color-snow, #fff);
+          border:1px dashed var(--color-silver-mist, #e8e8ed);
+        }
+        .coupon-preview-card.is-filled{
+          border-style:solid;
+          border-color:rgba(0,113,227,.16);
+          background:linear-gradient(160deg, rgba(0,113,227,.05), rgba(255,255,255,.9));
+        }
+        .coupon-preview-head{
+          display:flex;
+          align-items:center;
+          gap:10px;
+        }
+        .coupon-preview-icon{
+          width:32px;
+          height:32px;
+          flex-shrink:0;
+          border-radius:11px;
+          display:grid;
+          place-items:center;
+          background:var(--color-ink, #1d1d1f);
+          color:#fff;
+        }
+        .coupon-preview-icon.is-muted{
+          background:var(--color-fog, #f5f5f7);
+          color:var(--color-graphite, #86868b);
+        }
+        .coupon-preview-title{
+          min-width:0;
+        }
+        .coupon-preview-name{
+          font-size:14px;
+          font-weight:750;
+          color:var(--color-ink, #1d1d1f);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+        .coupon-preview-meta{
+          margin-top:1px;
+          font-size:11.5px;
+          font-weight:600;
+          color:var(--color-graphite, #86868b);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+        }
+        .coupon-preview-stats{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+        }
+        .coupon-preview-points{
+          font-size:12.5px;
+          font-weight:700;
+          color:var(--color-ink, #1d1d1f);
+        }
+        .coupon-preview-empty{
+          display:flex;
+          align-items:center;
+          gap:10px;
+        }
+        .coupon-preview-empty-title{
+          font-size:12.5px;
+          font-weight:700;
+          color:var(--color-graphite, #707070);
+        }
+        .coupon-preview-empty-helper{
+          margin-top:1px;
+          font-size:11.5px;
+          line-height:1.4;
+          color:var(--color-graphite, #86868b);
         }
         .coupon-field-input{
           width:100%;

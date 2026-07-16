@@ -18,6 +18,7 @@ import {
   SegmentedControl,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
 
 const HISTORY_DAYS_PAGE_SIZE = 6;
 
@@ -514,7 +515,15 @@ export default function AdminDealerProductHistoryPage() {
                   />
                 ))}
               </div>
-              <ProductHistoryPagination page={currentPage} totalPages={totalPages} totalCount={dayGroups.length} onChange={setPage} />
+              <ProductHistoryPagination
+                page={currentPage}
+                totalPages={totalPages}
+                totalCount={dayGroups.length}
+                onChange={(next) => {
+                  setPage(next);
+                  scrollResultsToTop();
+                }}
+              />
             </>
           )}
         </div>

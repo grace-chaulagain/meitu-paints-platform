@@ -168,15 +168,17 @@ function getPrimaryImage(images = []) {
 
 // Order line items only snapshot productId/sku/code — not an image — so the
 // thumbnail is resolved the same way DealerCartPage resolves cart-line images:
-// cross-referencing the live product/family catalog by sku/code.
+// cross-referencing the live product/family catalog by sku/code. The line
+// item is a specific ordered size, so its own product image takes priority
+// over the family's shared image.
 export function resolveOrderItemImage(item, productsMap, familyMap) {
   const product = productsMap?.[item?.sku] || null;
   const familyByCode = familyMap?.[item?.code] || null;
   return (
+    getPrimaryImage(product?.images || []) ||
     getPrimaryImage(product?.familyImages || []) ||
     getPrimaryImage(product?.family?.images || []) ||
     getPrimaryImage(familyByCode?.images || []) ||
-    getPrimaryImage(product?.images || []) ||
     null
   );
 }

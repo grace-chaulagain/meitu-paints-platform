@@ -480,3 +480,98 @@ export async function restoreProductService(productId) {
 
   return product;
 }
+
+export async function uploadProductImageService(productId, file) {
+  if (!file?.buffer) {
+    throw new Error("Image file is required");
+  }
+
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product not found");
+  const existingImages = Array.isArray(product.images) ? product.images : [];
+  const previousPrimary =
+    existingImages.find((img) => img?.isPrimary) || existingImages[0] || null;
+
+  const result = await uploadBufferToCloudinary(file.buffer, {
+    folder: "meitu-products",
+    public_id: `${product.sku}-${Date.now()}`,
+    overwrite: false,
+  });
+
+  const nextImage = {
+    url: result.secure_url,
+    publicId: result.public_id,
+    alt: product.name,
+    isPrimary: true,
+  };
+
+  const retainedImages = existingImages
+    .filter((img) => img?.publicId !== previousPrimary?.publicId)
+    .map((img) => ({
+      ...(img.toObject?.() ?? img),
+      isPrimary: false,
+    }));
+
+  product.images = [nextImage, ...retainedImages];
+
+  await product.save();
+
+  if (previousPrimary?.publicId) {
+    try {
+      await cloudinary.uploader.destroy(previousPrimary.publicId);
+    } catch (error) {
+      console.warn(
+        "[admin-catalog] Failed to delete replaced product image from Cloudinary:",
+        error?.message || error,
+      );
+    }
+  }
+
+  return product;
+}
+
+export async function setPrimaryProductImageService(productId, publicId) {
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product not found");
+
+  let found = false;
+
+  product.images = (product.images || []).map((img) => {
+    const match = img.publicId === publicId;
+    if (match) found = true;
+    return {
+      ...(img.toObject?.() ?? img),
+      isPrimary: match,
+    };
+  });
+
+  if (!found) {
+    throw new Error("Image not found");
+  }
+
+  await product.save();
+  return product;
+}
+
+export async function deleteProductImageService(productId, publicId) {
+  const product = await Product.findById(productId);
+  if (!product) throw new Error("Product not found");
+
+  const existing = (product.images || []).find(
+    (img) => img.publicId === publicId,
+  );
+  if (!existing) throw new Error("Image not found");
+
+  await cloudinary.uploader.destroy(publicId);
+
+  product.images = (product.images || []).filter(
+    (img) => img.publicId !== publicId,
+  );
+
+  if (product.images.length > 0 && !product.images.some((img) => img.isPrimary)) {
+    product.images[0].isPrimary = true;
+  }
+
+  await product.save();
+  return product;
+}

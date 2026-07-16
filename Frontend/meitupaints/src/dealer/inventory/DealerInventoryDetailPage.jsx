@@ -16,6 +16,7 @@ import {
   SegmentedControl,
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import {
   categoryLabel,
   formatMoney,
@@ -477,7 +478,10 @@ export default function DealerInventoryDetailPage() {
             query={historyQuery}
             page={historyPage}
             totalPages={historyTotalPages}
-            onPageChange={setHistoryPage}
+            onPageChange={(next) => {
+              setHistoryPage(next);
+              scrollResultsToTop();
+            }}
             emptySubtitle="Nothing matches these filters yet."
           />
         </>

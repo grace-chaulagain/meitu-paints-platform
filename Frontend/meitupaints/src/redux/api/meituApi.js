@@ -348,6 +348,18 @@ export const meituApi = createApi({
       ],
     }),
 
+    deleteAdminProductImage: builder.mutation({
+      query: ({ productId, publicId }) => ({
+        url: `/api/admin/catalog/products/${productId}/image/${encodeURIComponent(publicId)}`,
+        method: "DELETE",
+      }),
+      transformResponse: (response) => getItem(response) || response,
+      invalidatesTags: (_result, _error, arg) => [
+        listTag("Product"),
+        { type: "Product", id: arg?.productId },
+      ],
+    }),
+
     uploadAdminFamilyImage: builder.mutation({
       query: ({ familyId, file }) => ({
         url: `/api/admin/catalog/product-families/${familyId}/image`,
@@ -1568,6 +1580,7 @@ export const {
   useDeleteAdminProductMutation,
   useRestoreAdminProductMutation,
   useUploadAdminProductImageMutation,
+  useDeleteAdminProductImageMutation,
   useUploadAdminFamilyImageMutation,
   useDeleteAdminFamilyImageMutation,
   useGetDealerOrdersQuery,
