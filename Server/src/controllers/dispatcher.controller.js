@@ -9,12 +9,14 @@ import {
   getMyAssignedDealerById,
   listMyOrders,
   getMyOrderById,
+  getMyOrderStockCheck,
   verifyAssignedOrder,
   rejectAssignedOrder,
   amendAssignedOrder,
   listMyOrderArchive,
   createDispatcherReplenishmentOrder,
   getMyDispatcherStock,
+  getMyDispatcherStockHistory,
   dispatchAssignedOrder,
   listMyReplenishmentOrders,
   getMyReplenishmentOrderById,
@@ -213,6 +215,24 @@ export async function getMyOrderByIdController(req, res, next) {
   }
 }
 
+export async function getMyOrderStockCheckController(req, res, next) {
+  try {
+    const { orderId } = req.params;
+
+    const item = await getMyOrderStockCheck({
+      user: req.user,
+      orderId,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      item,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function verifyAssignedOrderController(req, res, next) {
   try {
     const { orderId } = req.params;
@@ -320,6 +340,30 @@ export async function getMyDispatcherStockController(req, res, next) {
 
     const out = await getMyDispatcherStock({
       user: req.user,
+      page,
+      limit,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      ...out,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getMyDispatcherStockHistoryController(req, res, next) {
+  try {
+    const { q, type, from, to, sort, page, limit } = req.query || {};
+
+    const out = await getMyDispatcherStockHistory({
+      user: req.user,
+      q,
+      type,
+      from,
+      to,
+      sort,
       page,
       limit,
     });

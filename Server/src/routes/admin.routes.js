@@ -99,6 +99,7 @@ import {
   listPainterSalesController,
   promotePainterController,
   getPainterIdCardDownloadUrlController,
+  getPainterIdCardPhotoUrlController,
   regeneratePainterIdCardWithPhotoController,
   getPainterIdCardTemplateController,
   getPainterPointsController,
@@ -475,6 +476,11 @@ router.get(
   "/painters/:painterId/id-card",
   validateParams(painterIdParamsSchema),
   getPainterIdCardDownloadUrlController,
+);
+router.get(
+  "/painters/:painterId/id-card-photo",
+  validateParams(painterIdParamsSchema),
+  getPainterIdCardPhotoUrlController,
 );
 router.post(
   "/painters/:painterId/id-card",

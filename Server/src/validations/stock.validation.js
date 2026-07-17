@@ -33,6 +33,7 @@ export const stockHistoryQuerySchema = z
     // out of the factory. Left off by default so any other consumer of this
     // endpoint still sees the full audit trail unless it asks not to.
     onlyMovements: z.enum(["true", "false"]).optional(),
+    sort: z.enum(["asc", "desc"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })

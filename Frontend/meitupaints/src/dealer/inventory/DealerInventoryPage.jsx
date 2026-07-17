@@ -384,6 +384,7 @@ export default function DealerInventoryPage() {
   const [historyType, setHistoryType] = useState("ALL");
   const [historyDateFrom, setHistoryDateFrom] = useState("");
   const [historyDateTo, setHistoryDateTo] = useState("");
+  const [historySort, setHistorySort] = useState("desc");
   const [historyPage, setHistoryPage] = useState(1);
 
   const inventoryQuery = useGetDealerInventoryQuery({
@@ -399,6 +400,7 @@ export default function DealerInventoryPage() {
       type: historyType,
       from: historyDateFrom || undefined,
       to: historyDateTo || undefined,
+      sort: historySort,
       page: historyPage,
       limit: HISTORY_PAGE_SIZE,
     },
@@ -414,6 +416,11 @@ export default function DealerInventoryPage() {
   function changeHistoryType(next) {
     setHistoryPage(1);
     setHistoryType(next);
+  }
+
+  function toggleHistorySortOrder() {
+    setHistoryPage(1);
+    setHistorySort((current) => (current === "asc" ? "desc" : "asc"));
   }
 
   const allItems = useMemo(() => inventoryQuery.data?.items || [], [inventoryQuery.data]);
@@ -532,6 +539,18 @@ export default function DealerInventoryPage() {
               <Dropdown value={historyType} options={HISTORY_TYPE_OPTIONS} onChange={changeHistoryType} style={{ width: 180 }} />
               <AppleDateField value={historyDateFrom} onChange={(value) => { setHistoryPage(1); setHistoryDateFrom(value); }} />
               <AppleDateField value={historyDateTo} onChange={(value) => { setHistoryPage(1); setHistoryDateTo(value); }} />
+              <GhostButton onClick={toggleHistorySortOrder}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    transform: historySort === "asc" ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform .22s var(--ease-out, ease)",
+                  }}
+                >
+                  <DashboardIcon name="sort" size={14} />
+                </span>
+                {historySort === "asc" ? "Oldest First" : "Newest First"}
+              </GhostButton>
               {historyQuery.isFetching ? <Pill tone="accent" size="small">Updating…</Pill> : null}
             </div>
           </Surface>

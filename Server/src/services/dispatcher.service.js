@@ -14,8 +14,10 @@ import {
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { sendDealerStatusEmail } from "./factory.service.js";
 import {
+  checkDispatcherOrderStock,
   consumeDispatcherStockForOrder,
   listDispatcherStock,
+  listDispatcherStockHistory,
 } from "./dispatcherStock.service.js";
 import { recordPurchaseMovement } from "./dealerInventory.service.js";
 
@@ -391,6 +393,21 @@ export async function getMyOrderById({ user, orderId } = {}) {
   }
 
   return order;
+}
+
+export async function getMyOrderStockCheck({ user, orderId } = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const order = await Order.findOne({ _id: orderId, dispatcherId })
+    .select("items")
+    .lean();
+
+  if (!order) {
+    throw new Error("Assigned order not found");
+  }
+
+  return checkDispatcherOrderStock({ dispatcherId, order });
 }
 
 export async function getMyReplenishmentCatalog({ user, q } = {}) {
@@ -825,6 +842,21 @@ export async function getMyDispatcherStock({
   return listDispatcherStock({ dispatcherId, page, limit });
 }
 
+export async function getMyDispatcherStockHistory({
+  user,
+  q,
+  type,
+  from,
+  to,
+  sort,
+  page = 1,
+  limit = 50,
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+  return listDispatcherStockHistory({ dispatcherId, q, type, from, to, sort, page, limit });
+}
+
 // ----------------------------
 // Single-step fulfillment for a dispatcher's assigned dealer orders:
 // Verified -> Dispatched (goods leave the dispatcher's warehouse - deducts
@@ -899,6 +931,7 @@ export async function dispatchAssignedOrder({
       await consumeDispatcherStockForOrder({
         dispatcherId,
         items: updated.items,
+        orderId: updated._id,
         actorUser: user,
         session,
       });

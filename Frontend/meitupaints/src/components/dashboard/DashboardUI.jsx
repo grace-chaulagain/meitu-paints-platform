@@ -4,7 +4,7 @@
 // hardcoded hex values. Everything here reads from the design tokens
 // already defined in src/index.css (--color-ink, --color-azure, etc.)
 // so dashboard chrome and the public site share one visual language.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "./DashboardIcons.jsx";
@@ -310,7 +310,7 @@ export function MetricTile({ label, value, helper = "", icon = "", tone = "neutr
   );
 }
 
-export function Pill({ children, tone = "neutral", size = "default" }) {
+export function Pill({ children, tone = "neutral", size = "default", style = {} }) {
   const tones = {
     neutral: { bg: "rgba(29,29,31,.06)", color: "var(--color-slate, #474747)" },
     accent: { bg: "rgba(0,113,227,.1)", color: "var(--color-azure, #0071e3)" },
@@ -333,6 +333,7 @@ export function Pill({ children, tone = "neutral", size = "default" }) {
         fontSize: isSmall ? 11 : 12,
         fontWeight: 750,
         whiteSpace: "nowrap",
+        ...style,
       }}
     >
       {children}
@@ -563,8 +564,9 @@ export function TabBar({ options, value, onChange }) {
 // touch/screen-reader behavior for free, and on macOS a native <select>
 // renders as the system's own popup menu, which is the most authentically
 // "Apple" version of this control anyway.
-export function Dropdown({ value, options, onChange, placeholder = "Select", icon = "", style = {} }) {
+export function Dropdown({ value, options, onChange, placeholder = "Select", icon = "", critical = false, style = {} }) {
   const hasValue = options.some((option) => option.key === value);
+  const iconColor = critical ? "#b42318" : "var(--color-graphite, #707070)";
 
   return (
     <div style={{ position: "relative", ...style }}>
@@ -578,7 +580,7 @@ export function Dropdown({ value, options, onChange, placeholder = "Select", ico
             top: "50%",
             left: 12,
             transform: "translateY(-50%)",
-            color: "var(--color-graphite, #707070)",
+            color: iconColor,
             pointerEvents: "none",
           }}
         />
@@ -591,9 +593,9 @@ export function Dropdown({ value, options, onChange, placeholder = "Select", ico
           width: "100%",
           height: 44,
           borderRadius: 999,
-          border: "none",
-          background: "rgba(232,232,237,.72)",
-          color: "var(--color-ink, #1d1d1f)",
+          border: critical ? "1.5px solid rgba(180,35,24,.22)" : "none",
+          background: critical ? "rgba(180,35,24,.06)" : "rgba(232,232,237,.72)",
+          color: critical ? "#b42318" : "var(--color-ink, #1d1d1f)",
           fontSize: 13,
           fontWeight: 650,
           padding: icon ? "0 30px 0 32px" : "0 30px 0 12px",
@@ -621,7 +623,7 @@ export function Dropdown({ value, options, onChange, placeholder = "Select", ico
           top: "50%",
           right: 12,
           transform: "translateY(-50%) rotate(90deg)",
-          color: "var(--color-graphite, #707070)",
+          color: iconColor,
           pointerEvents: "none",
         }}
       />
@@ -792,12 +794,13 @@ export function BulkActionBar({ count, onClear, children }) {
   );
 }
 
-export function RowCheckbox({ checked, onChange, label = "Select row" }) {
+export function RowCheckbox({ checked, indeterminate = false, onChange, label = "Select row" }) {
+  const filled = checked || indeterminate;
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={checked}
+      aria-checked={indeterminate ? "mixed" : checked}
       aria-label={label}
       onClick={(event) => {
         event.stopPropagation();
@@ -809,8 +812,8 @@ export function RowCheckbox({ checked, onChange, label = "Select row" }) {
         height: 18,
         flex: "0 0 auto",
         borderRadius: 5,
-        border: checked ? "none" : "1.5px solid rgba(0,0,0,.2)",
-        background: checked ? "var(--color-azure, #0071e3)" : "transparent",
+        border: filled ? "none" : "1.5px solid rgba(0,0,0,.2)",
+        background: filled ? "var(--color-azure, #0071e3)" : "transparent",
         display: "grid",
         placeItems: "center",
         color: "#fff",
@@ -819,7 +822,11 @@ export function RowCheckbox({ checked, onChange, label = "Select row" }) {
         transition: "transform .14s var(--ease-out, ease), background .14s ease, border-color .14s ease",
       }}
     >
-      {checked ? <DashboardIcon name="checkmark" size={12} strokeWidth={2.4} /> : null}
+      {indeterminate ? (
+        <DashboardIcon name="minus" size={12} strokeWidth={2.8} />
+      ) : checked ? (
+        <DashboardIcon name="checkmark" size={12} strokeWidth={2.4} />
+      ) : null}
     </button>
   );
 }
@@ -915,10 +922,148 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
   );
 }
 
+// Dense, enterprise-grade table primitive shared across admin data tabs -
+// one header row (field labels are never repeated per row), numeric columns
+// isolated + right-aligned with tabular-nums via `align`/`cellClassName`,
+// status conveyed through a Pill passed into `render`, not a decorative
+// per-row icon. Selection renders its own leading checkbox column (not part
+// of the caller's `columns`) using RowCheckbox, which already stops
+// propagation on click - so `onRowClick` (navigation) and selection coexist
+// on the same row with no extra wrapper logic. `renderGroupHeader(row)` can
+// return a full-width divider (e.g. day grouping) rendered just above that
+// row; `footerCells` renders a real <tfoot> totals row.
+export function DataTable({
+  columns,
+  rows,
+  getRowKey,
+  onRowClick = null,
+  selection = null,
+  loading = false,
+  skeletonRowCount = 6,
+  emptyState = null,
+  renderGroupHeader = null,
+  footerCells = null,
+  minWidth = 640,
+}) {
+  const hasSelection = Boolean(selection);
+  const selectedSet = hasSelection ? new Set(selection.selectedIds) : null;
+  const totalCols = columns.length + (hasSelection ? 1 : 0);
+
+  if (!loading && rows.length === 0) {
+    return emptyState ? <EmptyState {...emptyState} /> : null;
+  }
+
+  const allOnPageSelected = hasSelection && rows.length > 0 && rows.every((row) => selectedSet.has(getRowKey(row)));
+  const someOnPageSelected = hasSelection && !allOnPageSelected && rows.some((row) => selectedSet.has(getRowKey(row)));
+
+  return (
+    <Surface padding={0} className="dash-table-surface">
+      <div className="dash-table-scroll">
+        <table className="dash-table" style={{ minWidth }}>
+          <thead>
+            <tr>
+              {hasSelection ? (
+                <th className="dash-table-check-cell">
+                  <RowCheckbox
+                    checked={allOnPageSelected}
+                    indeterminate={someOnPageSelected}
+                    onChange={() => selection.onToggleAll()}
+                    label="Select all on this page"
+                  />
+                </th>
+              ) : null}
+              {columns.map((column) => (
+                <th
+                  key={column.key}
+                  className={column.align === "right" ? "align-right" : ""}
+                  style={column.width ? { width: column.width } : undefined}
+                >
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: skeletonRowCount }).map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    {hasSelection ? <td className="dash-table-check-cell" /> : null}
+                    {columns.map((column, columnIndex) => (
+                      <td key={column.key}>
+                        <span
+                          className="dash-table-skeleton-bar"
+                          style={{ width: `${38 + ((index * 17 + columnIndex * 11) % 48)}%` }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : rows.map((row) => {
+                  const rowKey = getRowKey(row);
+                  const group = renderGroupHeader ? renderGroupHeader(row) : null;
+                  const selected = hasSelection && selectedSet.has(rowKey);
+                  return (
+                    <Fragment key={rowKey}>
+                      {group ? (
+                        <tr className="dash-table-group-row">
+                          <td colSpan={totalCols}>{group}</td>
+                        </tr>
+                      ) : null}
+                      <tr
+                        className={`${onRowClick ? "is-clickable" : ""} ${selected ? "is-selected" : ""}`}
+                        onClick={onRowClick ? () => onRowClick(row) : undefined}
+                        tabIndex={onRowClick ? 0 : undefined}
+                        onKeyDown={
+                          onRowClick
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  onRowClick(row);
+                                }
+                              }
+                            : undefined
+                        }
+                      >
+                        {hasSelection ? (
+                          <td className="dash-table-check-cell">
+                            <RowCheckbox checked={selected} onChange={() => selection.onToggleSelect(rowKey)} />
+                          </td>
+                        ) : null}
+                        {columns.map((column) => (
+                          <td
+                            key={column.key}
+                            className={`${column.align === "right" ? "align-right" : ""} ${column.cellClassName ? column.cellClassName(row) : ""}`}
+                          >
+                            {column.render(row)}
+                          </td>
+                        ))}
+                      </tr>
+                    </Fragment>
+                  );
+                })}
+          </tbody>
+          {footerCells ? (
+            <tfoot>
+              <tr>
+                {hasSelection ? <td /> : null}
+                {footerCells.map((cell) => (
+                  <td key={cell.key} className={cell.align === "right" ? "align-right" : ""}>
+                    {cell.content}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </Surface>
+  );
+}
+
 // Small rotating-ring loading indicator for inline use inside buttons -
 // a fast spin reads as "working quickly" (perceived performance), guarded
 // by prefers-reduced-motion like every other animation in this file.
-export function Spinner({ size = 15 }) {
+export function Spinner({ size = 15, color = "#fff" }) {
   return (
     <span
       aria-hidden="true"
@@ -927,8 +1072,8 @@ export function Spinner({ size = 15 }) {
         width: size,
         height: size,
         borderRadius: 999,
-        border: "2px solid rgba(255,255,255,.35)",
-        borderTopColor: "#fff",
+        border: `2px solid ${color === "#fff" ? "rgba(255,255,255,.35)" : "rgba(29,29,31,.16)"}`,
+        borderTopColor: color,
         display: "inline-block",
         flexShrink: 0,
       }}
@@ -1123,6 +1268,71 @@ export function DashboardUIStyles() {
         to{ transform:rotate(360deg); }
       }
 
+      .dash-table-surface{ overflow:hidden; }
+      .dash-table-scroll{ overflow-x:auto; }
+      .dash-table{ width:100%; border-collapse:collapse; }
+      .dash-table thead tr{ background:var(--color-fog, #f5f5f7); }
+      .dash-table th{
+        text-align:left;
+        padding:11px 16px;
+        font-size:10.5px;
+        font-weight:700;
+        letter-spacing:.05em;
+        text-transform:uppercase;
+        color:var(--color-graphite, #707070);
+        white-space:nowrap;
+      }
+      .dash-table th.align-right,
+      .dash-table td.align-right{ text-align:right; }
+      .dash-table td{
+        padding:12px 16px;
+        font-size:13px;
+        border-top:1px solid rgba(0,0,0,.05);
+        color:var(--color-ink, #1d1d1f);
+      }
+      .dash-table tbody tr:not(.dash-table-group-row){ transition:background .12s ease; }
+      .dash-table tbody tr.is-clickable{ cursor:pointer; }
+      .dash-table tbody tr.is-clickable:hover{ background:rgba(0,113,227,.035); }
+      .dash-table tbody tr.is-clickable:focus-visible{
+        outline:2px solid rgba(0,113,227,.36);
+        outline-offset:-2px;
+      }
+      .dash-table tbody tr.is-selected{ background:rgba(0,113,227,.06) !important; }
+      .dash-table-check-cell{ width:40px; padding-right:0 !important; }
+      .dash-table-mono{
+        font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-weight:700;
+        letter-spacing:-.01em;
+      }
+      .dash-table-tabular{ font-variant-numeric:tabular-nums; }
+      .dash-table-group-row td{
+        padding:14px 16px 6px;
+        background:transparent;
+        border-top:none;
+        font-size:12px;
+        font-weight:650;
+        color:var(--color-graphite, #707070);
+      }
+      .dash-table-group-row:first-child td{ padding-top:6px; }
+      .dash-table-group-dot{
+        width:7px;
+        height:7px;
+        border-radius:999px;
+        background:var(--color-azure, #0071e3);
+        box-shadow:0 0 0 3px rgba(0,113,227,.1);
+        display:inline-block;
+        margin-right:8px;
+      }
+      .dash-table-group-row strong{ color:var(--color-ink, #1d1d1f); font-weight:800; }
+      .dash-table tfoot tr{ border-top:2px solid rgba(29,29,31,.12); background:rgba(0,113,227,.04); }
+      .dash-table tfoot td{ padding:12px 16px; font-size:13px; font-weight:800; color:var(--color-ink, #1d1d1f); }
+      .dash-table-skeleton-bar{
+        display:block;
+        height:14px;
+        border-radius:7px;
+        background:linear-gradient(90deg, rgba(0,0,0,.045), rgba(0,0,0,.02), rgba(0,0,0,.045));
+      }
+
       @media (prefers-reduced-motion: reduce){
         .dash-fade-up{ animation: none; }
         .dash-metric-tile,
@@ -1133,6 +1343,7 @@ export function DashboardUIStyles() {
         .dash-toggle-track,
         .dash-toggle-thumb,
         .dash-pagination-btn,
+        .dash-table tbody tr,
         .factory-ui-close-btn{ transition:none !important; }
         .admin-ui-primary-btn:active:not(:disabled),
         .admin-ui-ghost-btn:active:not(:disabled),

@@ -6,7 +6,7 @@ import {
   useGetProductsQuery,
 } from "../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../redux/api/selectors.js";
-import { downloadOrderSummaryPdf } from "../utils/downloadOrderSummaryPdf.js";
+import { downloadOrderSummaryPdf } from "../utils/downloadOrderSummaryPdf.jsx";
 import { formatMoney } from "./pricing.js";
 import { DashboardIcon } from "../components/dashboard/DashboardIcons.jsx";
 import { EmptyState, GhostButton, Pill, Surface } from "../components/dashboard/DashboardUI.jsx";

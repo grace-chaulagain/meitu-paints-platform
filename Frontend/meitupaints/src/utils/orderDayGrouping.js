@@ -23,12 +23,19 @@ export function formatRelativeDayLabel(value) {
   return null;
 }
 
+// dateField is normally a flat property name ("createdAt"), but callers that
+// sort/label by a computed fallback chain (e.g. "sentToFactoryAt if set,
+// else updatedAt, else createdAt") can pass a resolver function instead -
+// otherwise the groups get built off a different timestamp than whatever
+// the list is actually sorted and labeled by, which desyncs the day
+// headers from both the row order and the row order's own "x ago" text.
 export function groupOrdersByDay(orders, dateField = "createdAt") {
+  const resolveDate = typeof dateField === "function" ? dateField : (order) => order[dateField];
   const groups = [];
   const indexByKey = new Map();
 
   orders.forEach((order) => {
-    const value = order[dateField];
+    const value = resolveDate(order);
     const key = formatDayKey(value);
     if (!indexByKey.has(key)) {
       indexByKey.set(key, groups.length);

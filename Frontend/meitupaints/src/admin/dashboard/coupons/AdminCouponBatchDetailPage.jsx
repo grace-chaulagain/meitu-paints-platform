@@ -8,32 +8,14 @@ import {
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { EmptyState, Pill, SectionHeader, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import { DashboardUIStyles, DataTable, EmptyState, Pill, SectionHeader, Surface } from "../../../components/dashboard/DashboardUI.jsx";
 import { Toast } from "../../../components/dashboard/Toast.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
-
-function couponTypeLabel(type) {
-  return type === "GOLDEN" ? "Golden Coupon" : "Green Coupon";
-}
-
-function couponStatusTone(status) {
-  if (status === "REDEEMED") return "positive";
-  if (status === "EXPIRED") return "caution";
-  return "neutral";
-}
-
-function formatMoney(value) {
-  return `NPR ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-}
-
-function formatDateTime(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-}
+import { couponStatusTone, couponTypeLabel, formatDateTime, formatMoney } from "./couponFormatting.js";
 
 // Full page (not a modal) for one generate-batch's coupons, reached by
-// clicking a batch card in CouponsTab - same "list drills into its own
-// page" convention as AdminPainterProfilePage.jsx/AdminDealerProfilePage.jsx.
+// clicking a batch row in BatchesTab - same "list drills into its own page"
+// convention as AdminPainterProfilePage.jsx/AdminDealerProfilePage.jsx.
 // No QR image here: the raw redeem token is never persisted (only its
 // hash), by design, so a past batch can only ever show coupon data, not a
 // re-scannable code.
@@ -113,6 +95,47 @@ export default function AdminCouponBatchDetailPage() {
     }
   }
 
+  const columns = [
+    { key: "code", header: "Code", cellClassName: () => "dash-table-mono", render: (coupon) => coupon.couponCode },
+    {
+      key: "status",
+      header: "Status",
+      render: (coupon) => {
+        const displayStatus = coupon.isExpired && coupon.status === "UNUSED" ? "EXPIRED" : coupon.status;
+        return <Pill tone={couponStatusTone(displayStatus)} size="small">{displayStatus}</Pill>;
+      },
+    },
+    { key: "points", header: "Points", align: "right", cellClassName: () => "dash-table-tabular", render: (coupon) => coupon.points },
+    {
+      key: "cash",
+      header: "Cash",
+      align: "right",
+      cellClassName: () => "dash-table-tabular",
+      render: (coupon) => <span style={{ fontWeight: 700 }}>{formatMoney(coupon.cashAmount)}</span>,
+    },
+    {
+      key: "expires",
+      header: "Expires",
+      render: (coupon) => <span style={{ whiteSpace: "nowrap", color: "var(--color-graphite, #707070)" }}>{formatDateTime(coupon.expiresAt)}</span>,
+    },
+    { key: "dealer", header: "Dealer", render: (coupon) => coupon.redeemedByDealerId?.companyName || "—" },
+    { key: "painter", header: "Painter", render: (coupon) => coupon.painterId?.name || "—" },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 56,
+      render: (coupon) =>
+        coupon.status === "REDEEMED" ? (
+          <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>—</span>
+        ) : (
+          <button type="button" className="coupon-batch-icon-btn" style={{ width: 28, height: 28 }} title="Delete coupon" onClick={() => setDeleteTarget(coupon)}>
+            <DashboardIcon name="trash" size={13} strokeWidth={1.8} />
+          </button>
+        ),
+    },
+  ];
+
   if (detailQuery.isLoading) {
     return (
       <div style={{ display: "grid", gap: 16 }}>
@@ -135,6 +158,7 @@ export default function AdminCouponBatchDetailPage() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <DashboardUIStyles />
       {backButton}
 
       <Surface padding={22} className="dash-fade-up">
@@ -160,55 +184,7 @@ export default function AdminCouponBatchDetailPage() {
         </div>
       </Surface>
 
-      <Surface padding={0}>
-        <div style={{ overflowX: "auto" }}>
-          <table className="admin-coupons-table" style={{ minWidth: 620 }}>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Status</th>
-                <th className="align-right">Points</th>
-                <th className="align-right">Cash</th>
-                <th>Expires</th>
-                <th>Redeemed By</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((coupon) => {
-                const displayStatus = coupon.isExpired && coupon.status === "UNUSED" ? "EXPIRED" : coupon.status;
-                return (
-                  <tr key={coupon._id}>
-                    <td className="admin-coupons-mono">{coupon.couponCode}</td>
-                    <td>
-                      <Pill tone={couponStatusTone(displayStatus)} size="small">{displayStatus}</Pill>
-                    </td>
-                    <td className="align-right admin-coupons-tabular">{coupon.points}</td>
-                    <td className="align-right admin-coupons-tabular" style={{ fontWeight: 700 }}>{formatMoney(coupon.cashAmount)}</td>
-                    <td style={{ whiteSpace: "nowrap", color: "var(--color-graphite, #707070)" }}>{formatDateTime(coupon.expiresAt)}</td>
-                    <td>{coupon.redeemedByDealerId?.companyName || "—"}</td>
-                    <td>
-                      {coupon.status === "REDEEMED" ? (
-                        <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>—</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="coupon-batch-icon-btn"
-                          style={{ width: 28, height: 28 }}
-                          title="Delete coupon"
-                          onClick={() => setDeleteTarget(coupon)}
-                        >
-                          <DashboardIcon name="trash" size={13} strokeWidth={1.8} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Surface>
+      <DataTable columns={columns} rows={items} getRowKey={(coupon) => coupon._id} minWidth={780} />
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
@@ -301,47 +277,6 @@ export default function AdminCouponBatchDetailPage() {
         .coupon-batch-icon-btn:disabled{
           opacity:.4;
           cursor:not-allowed;
-        }
-        .admin-coupons-mono{
-          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-          font-weight:700;
-          letter-spacing:-.01em;
-        }
-        .admin-coupons-tabular{
-          font-variant-numeric: tabular-nums;
-        }
-        .admin-coupons-table{
-          width:100%;
-          border-collapse:collapse;
-        }
-        .admin-coupons-table thead tr{
-          background:var(--color-fog, #f5f5f7);
-        }
-        .admin-coupons-table th{
-          text-align:left;
-          padding:12px 18px;
-          font-size:10.5px;
-          font-weight:700;
-          letter-spacing:.05em;
-          text-transform:uppercase;
-          color:var(--color-graphite, #707070);
-          white-space:nowrap;
-        }
-        .admin-coupons-table th.align-right,
-        .admin-coupons-table td.align-right{
-          text-align:right;
-        }
-        .admin-coupons-table td{
-          padding:13px 18px;
-          font-size:13px;
-          border-top:1px solid rgba(0,0,0,.05);
-          color:var(--color-ink, #1d1d1f);
-        }
-        .admin-coupons-table tbody tr{
-          transition:background .12s ease;
-        }
-        .admin-coupons-table tbody tr:hover{
-          background:rgba(0,113,227,.035);
         }
         @media (prefers-reduced-motion: reduce){
           .coupon-batch-back-btn,

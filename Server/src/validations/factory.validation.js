@@ -22,6 +22,11 @@ export const factoryOrderListQuerySchema = z
       ])
       .optional(),
     dealerId: objectIdSchema.optional(),
+    // Defaults to FACTORY-only in the service (matches the factory kanban's
+    // existing behavior) - the Invoice Center is the one caller that passes
+    // ALL/DISPATCHER explicitly to see every order regardless of who
+    // fulfills it.
+    fulfillmentMode: z.enum(["ALL", "FACTORY", "DISPATCHER", "all", "factory", "dispatcher"]).optional(),
     q: optionalTrimmedString(120),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -34,6 +39,17 @@ export const factoryShipmentBodySchema = z
     driverPhone: z.string().trim().min(5).max(80),
     vehicleNumber: optionalTrimmedString(80),
     remarks: optionalTrimmedString(1000),
+  })
+  .strict();
+
+export const factoryDispatchPrepBodySchema = z
+  .object({
+    stockConfirmed: z.boolean().optional(),
+    packingConfirmed: z.boolean().optional(),
+    driverName: optionalTrimmedString(160),
+    driverPhone: optionalTrimmedString(80),
+    vehicleNumber: optionalTrimmedString(80),
+    generateProforma: z.boolean().optional(),
   })
   .strict();
 

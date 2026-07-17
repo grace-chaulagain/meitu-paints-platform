@@ -749,7 +749,7 @@ function StockStatusPill({ status }) {
   );
 }
 
-export function StockCheckPanel({ stockCheck, loading, error }) {
+export function StockCheckPanel({ stockCheck, loading, error, title = "Factory Stock Check" }) {
   const rows = stockCheck?.items || [];
   const ok = stockCheck?.ok === true;
   const checkedAt = stockCheck?.checkedAt
@@ -761,7 +761,7 @@ export function StockCheckPanel({ stockCheck, loading, error }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <DashboardIcon name="stock" size={15} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)" }} />
-          <Label>Factory Stock Check</Label>
+          <Label>{title}</Label>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {checkedAt ? (

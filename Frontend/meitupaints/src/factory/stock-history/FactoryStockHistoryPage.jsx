@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useGetAllStockHistoryQuery } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import { EmptyState, GhostButton, Pill, SearchField, SectionHeader, Surface } from "../../components/dashboard/DashboardUI.jsx";
+import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../components/dashboard/ApplePickers.jsx";
 import { MovementBadge } from "../factoryUI.jsx";
-import { STOCK_REASONS, formatDayHeading, formatTimeOnly, localDayKey } from "../factoryHelpers.js";
+import { STOCK_REASONS, compactDateWithYear, formatDayHeading, formatTimeOnly, localDayKey } from "../factoryHelpers.js";
 
 const REASON_OPTIONS = [{ key: "ALL", label: "All reasons" }, ...STOCK_REASONS.map((item) => ({ key: item, label: item }))];
 const PAGE_SIZE = 50;
@@ -13,9 +15,10 @@ const PAGE_SIZE = 50;
 function exportCsv(items) {
   const headers = ["Date", "Product", "Size", "Old", "New", "Difference", "Reason", "Factory User"];
   const rows = items.map((row) => [
-    formatDayHeading(row.changedAt) === "Today" || formatDayHeading(row.changedAt) === "Yesterday"
-      ? `${formatDayHeading(row.changedAt)} ${formatTimeOnly(row.changedAt)}`
-      : `${new Date(row.changedAt).toLocaleDateString("en-US")} ${formatTimeOnly(row.changedAt)}`,
+    // Always an exact date - "Today"/"Yesterday" (used for the on-screen
+    // section headings) would be meaningless once this file is opened on
+    // any day other than the one it was exported on.
+    compactDateWithYear(row.changedAt),
     row.productName || row.sku || "",
     row.packLabel || "",
     row.previousQuantity ?? "",
@@ -34,13 +37,69 @@ function exportCsv(items) {
   URL.revokeObjectURL(url);
 }
 
+// Landing here from a product's "View full history" link (Factory Stock's
+// adjustment modal) passes the SKU as ?q= - read once at mount so the page
+// opens already filtered to that product's history, instead of requiring an
+// extra manual search after arriving.
+function initialQueryFromUrl(search) {
+  return new URLSearchParams(search).get("q") || "";
+}
+
+function initialSortFromUrl(search) {
+  return new URLSearchParams(search).get("sort") === "asc" ? "asc" : "desc";
+}
+
 export default function FactoryStockHistoryPage() {
-  const [draftQuery, setDraftQuery] = useState("");
-  const [query, setQuery] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [draftQuery, setDraftQuery] = useState(() => initialQueryFromUrl(location.search));
+  const [query, setQuery] = useState(() => initialQueryFromUrl(location.search));
+  const [sortOrder, setSortOrder] = useState(() => initialSortFromUrl(location.search));
   const [reason, setReason] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+
+  // Keeps the URL's ?q=/&sort= in lockstep with the committed search and
+  // sequencing - deep links in with either, and changing them is reflected
+  // right back in the address bar, so a refresh at any point reproduces
+  // exactly what's on screen instead of reverting to whatever the page
+  // first loaded with.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    let changed = false;
+
+    if (query) {
+      if (params.get("q") !== query) {
+        params.set("q", query);
+        changed = true;
+      }
+    } else if (params.has("q")) {
+      params.delete("q");
+      changed = true;
+    }
+
+    if (sortOrder === "asc") {
+      if (params.get("sort") !== "asc") {
+        params.set("sort", "asc");
+        changed = true;
+      }
+    } else if (params.has("sort")) {
+      params.delete("sort");
+      changed = true;
+    }
+
+    if (!changed) return;
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+    // Only ever reacts to the committed search/sort changing - re-running
+    // this for every location change would fight the navigation it just made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, sortOrder]);
+
+  function toggleSortOrder() {
+    setPage(1);
+    setSortOrder((value) => (value === "desc" ? "asc" : "desc"));
+  }
 
   const historyQuery = useGetAllStockHistoryQuery({
     q: query,
@@ -48,6 +107,7 @@ export default function FactoryStockHistoryPage() {
     dateFrom,
     dateTo,
     onlyMovements: "true",
+    sort: sortOrder,
     page,
     limit: PAGE_SIZE,
   });
@@ -55,8 +115,9 @@ export default function FactoryStockHistoryPage() {
   const pagination = historyQuery.data?.pagination || { page: 1, limit: PAGE_SIZE, total: items.length, pages: 1 };
   const loadError = historyQuery.error ? getQueryErrorMessage(historyQuery.error, "Failed to load stock history.") : "";
 
-  // Rows already arrive newest-first from the API, so grouping preserves
-  // that order - each bucket just collects consecutive same-day rows.
+  // Rows already arrive pre-sorted from the API (newest-first by default,
+  // oldest-first when reversed), so grouping preserves whichever order that
+  // is - each bucket just collects consecutive same-day rows.
   const dayGroups = useMemo(() => {
     const groups = [];
     const byKey = new Map();
@@ -98,7 +159,17 @@ export default function FactoryStockHistoryPage() {
           <div style={{ maxWidth: 300, flex: "1 1 220px" }}>
             <SearchField
               value={draftQuery}
-              onChange={setDraftQuery}
+              onChange={(next) => {
+                setDraftQuery(next);
+                // The "x" clear button in SearchField calls onChange("")
+                // directly (no submit) - clear immediately instead of
+                // leaving the list (and the URL) stuck on the old search
+                // until the field happens to get submitted again.
+                if (next === "") {
+                  setPage(1);
+                  setQuery("");
+                }
+              }}
               onSubmit={() => {
                 setPage(1);
                 setQuery(draftQuery.trim());
@@ -129,6 +200,18 @@ export default function FactoryStockHistoryPage() {
               setDateTo(value);
             }}
           />
+          <GhostButton onClick={toggleSortOrder}>
+            <span
+              style={{
+                display: "inline-flex",
+                transform: sortOrder === "asc" ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform .22s var(--ease-out, ease)",
+              }}
+            >
+              <DashboardIcon name="sort" size={14} />
+            </span>
+            {sortOrder === "asc" ? "Oldest First" : "Newest First"}
+          </GhostButton>
         </div>
 
         {loadError ? (

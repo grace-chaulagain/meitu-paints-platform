@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Spinner } from "../../../components/dashboard/DashboardUI.jsx";
 
 const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
 
@@ -59,8 +60,13 @@ export default function ConfirmActionModal({
                   ...primaryBtnStyle,
                   ...(danger ? dangerBtnStyle : {}),
                   opacity: loading ? 0.7 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
                 }}
               >
+                {loading ? <Spinner size={13} /> : null}
                 {loading ? "Processing..." : confirmText}
               </button>
             </div>

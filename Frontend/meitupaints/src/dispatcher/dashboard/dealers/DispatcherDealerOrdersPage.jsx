@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGetDispatcherDealerQuery, useGetDispatcherOrdersQuery } from "../../../redux/api/meituApi.js";
-import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
+import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
   Avatar,

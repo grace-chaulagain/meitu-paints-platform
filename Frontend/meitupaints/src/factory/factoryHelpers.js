@@ -112,8 +112,26 @@ export function productCount(order) {
   return (order?.items || []).length;
 }
 
+// Folds an item's pack/variant size into its name ("Ceiling White (20L)")
+// instead of a separate column - lets a size-less SKU column be dropped from
+// compact tables without losing which size is actually being handled.
+export function productDisplayName(item) {
+  const size = item?.packLabel || item?.variantLabel;
+  return size ? `${item?.name || "Product"} (${size})` : item?.name || "Product";
+}
+
+// The one "how long has this been sitting in MY queue" timestamp - a
+// dealer's original createdAt doesn't matter for factory triage, what
+// matters is when the order actually landed on the factory's plate (or was
+// last touched, for older orders that predate the sentToFactoryAt field).
+// Sorting, the row's "x ago" label, priority, and day-grouping all need to
+// agree on this same value, or the list looks internally inconsistent.
+export function factoryQueueTimestamp(order) {
+  return order?.factory?.sentToFactoryAt || order?.updatedAt || order?.createdAt || null;
+}
+
 export function priorityForOrder(order) {
-  const ageMs = Date.now() - new Date(order?.factory?.sentToFactoryAt || order?.updatedAt || order?.createdAt || Date.now()).getTime();
+  const ageMs = Date.now() - new Date(factoryQueueTimestamp(order) || Date.now()).getTime();
   const hours = ageMs / 36e5;
   if (hours >= 24) return "High";
   if (hours >= 8) return "Medium";
@@ -295,6 +313,13 @@ export function computeProformaTotals(items = [], { discount = 0 } = {}) {
 
     return { ...item, netUnitPrice, netAmount };
   });
+
+  // Grouped by category (same alphabetical-label ordering as the Admin
+  // catalog page) so a long product list reads in a predictable sequence
+  // instead of whatever order the order's items happened to be added in.
+  // No heading is shown per group - this only controls row order. Array#sort
+  // is stable, so items sharing a category keep their original relative order.
+  lines.sort((a, b) => titleCaseLabel(a.category).localeCompare(titleCaseLabel(b.category)));
 
   const buckets = PROFORMA_TAX_BUCKET_ORDER.filter((key) => bucketAmounts.has(key)).map((key) => {
     const meta = PROFORMA_TAX_BUCKET_META[key];

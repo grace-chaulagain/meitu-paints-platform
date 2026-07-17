@@ -156,10 +156,14 @@ async function buildStatusHistoryEntry({
   };
 }
 
-function baseFactoryQuery() {
-  return {
+// Defaults to FACTORY-only, matching every existing caller (the operational
+// kanban and the dashboard overview only ever want orders the factory
+// itself fulfills). The Invoice Center is the one caller that overrides this
+// to ALL/DISPATCHER so it can show a proforma for every order regardless of
+// who fulfills it.
+function baseFactoryQuery(fulfillmentMode = "FACTORY") {
+  const query = {
     isDeleted: { $ne: true },
-    "dealerSnapshot.fulfillmentMode": "FACTORY",
     status: {
       $in: [
         ORDER_STATUS.VERIFIED,
@@ -169,6 +173,15 @@ function baseFactoryQuery() {
       ],
     },
   };
+
+  const normalized = normalize(fulfillmentMode || "FACTORY");
+  if (normalized === "DISPATCHER") {
+    query["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
+  } else if (normalized !== "ALL") {
+    query["dealerSnapshot.fulfillmentMode"] = "FACTORY";
+  }
+
+  return query;
 }
 
 function applySearch(query, q = "") {
@@ -244,10 +257,11 @@ export async function listFactoryOrders({
   q = "",
   page = 1,
   limit = 50,
+  fulfillmentMode = "FACTORY",
 } = {}) {
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(100, Math.max(1, Number(limit || 50)));
-  const query = applySearch(applyStage(baseFactoryQuery(), stage), q);
+  const query = applySearch(applyStage(baseFactoryQuery(fulfillmentMode), stage), q);
   const normalizedStatus = normalize(status);
   if (normalizedStatus) query.status = normalizedStatus;
 
@@ -393,6 +407,7 @@ export async function markOutForDelivery({
         await creditDispatcherStock({
           dispatcherId: updated.dispatcherCustomerId,
           items: updated.items,
+          orderId: updated._id,
           actorUser: factoryUser,
           session,
         });
@@ -579,6 +594,42 @@ export async function amendFactoryOrder({
     await order.save();
   }
 
+  return order;
+}
+
+// Persists the factory's pre-dispatch checklist/driver-details progress
+// onto the order itself, so closing the order modal before clicking
+// Dispatch (or a page reload) doesn't lose it - reopening the same order
+// rehydrates from this instead of forcing the Proforma Invoice and
+// checklist toggles to be redone. Only meaningful while the order is still
+// awaiting factory dispatch; once dispatched, `order.factory.*` is the
+// source of truth instead.
+export async function updateDispatchPrep({ orderId, factoryUser, patch = {} }) {
+  requireActor(factoryUser, "FACTORY");
+  const order = await loadFactoryOrder(orderId);
+  if (order.status !== ORDER_STATUS.VERIFIED) {
+    throw new ApiError(400, `Dispatch preparation is not available from status ${order.status}`);
+  }
+
+  const current = order.dispatchPrep || {};
+  const next = { ...(current.toObject?.() || current) };
+
+  if (typeof patch.stockConfirmed === "boolean") next.stockConfirmed = patch.stockConfirmed;
+  if (typeof patch.packingConfirmed === "boolean") next.packingConfirmed = patch.packingConfirmed;
+  if (patch.driverName !== undefined) next.driverName = clean(patch.driverName);
+  if (patch.driverPhone !== undefined) next.driverPhone = clean(patch.driverPhone);
+  if (patch.vehicleNumber !== undefined) next.vehicleNumber = clean(patch.vehicleNumber);
+
+  // Editing driver details after the PI was already generated (fixing a
+  // mistake) keeps the original generatedAt/By stamp - only an explicit
+  // (re)generate action bumps it, which is what actually re-renders the PDF.
+  if (patch.generateProforma) {
+    next.proformaGeneratedAt = new Date();
+    next.proformaGeneratedBy = actorId(factoryUser);
+  }
+
+  order.dispatchPrep = next;
+  await order.save();
   return order;
 }
 

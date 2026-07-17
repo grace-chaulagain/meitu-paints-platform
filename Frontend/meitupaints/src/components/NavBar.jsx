@@ -2,11 +2,36 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { useNotifications } from "../notifications/notificationContext.js";
 import SEARCH_ITEMS from "../ProductsList/allProductsSearch.json";
+
+// Both nav-extension panels (search + account) grow downward from a fixed
+// point right under the navbar - never translating the panel itself, so it
+// can't visually slide down over/through the navbar's own contents. A
+// "strong" ease-out (e.g. cubic-bezier(0.16,1,0.3,1)) front-loads almost
+// all the visible clip-path travel into the first ~100-150ms and then
+// barely moves for the rest of the duration - measured, it reveals ~70% of
+// the panel by 100ms into a 500ms animation - which reads as "it just
+// appeared" rather than "it's growing." Material's standard easing spreads
+// the motion evenly across the whole duration instead, so the growth stays
+// visible/watchable the entire time (Apple.com's own mega-menu cadence).
+// Exit stays a sharp ease-in - closing should feel snappier than opening.
+const PANEL_EASE_OUT = [0.4, 0, 0.2, 1];
+const PANEL_ENTER = { duration: 0.62, ease: PANEL_EASE_OUT };
+const PANEL_EXIT = { duration: 0.3, ease: [0.4, 0, 1, 1] };
+const SCRIM_ENTER = { duration: 0.38, ease: "easeOut" };
+const SCRIM_EXIT = { duration: 0.22, ease: "easeIn" };
+// The panel's own clip-path reveal carries no opacity change - it should
+// read as a solid shade physically extending, not a translucent fade. The
+// content inside gets its own quick, slightly-delayed fade so it settles
+// into place just as the shade finishes opening, instead of both racing
+// together and blurring the "growing" motion into a generic cross-fade.
+const PANEL_CONTENT_ENTER = { duration: 0.45, ease: "easeOut", delay: 0.14 };
+const PANEL_CONTENT_EXIT = { duration: 0.18, ease: "easeIn" };
 
 function formatBadgeCount(count) {
   const value = Number(count || 0);
@@ -182,6 +207,7 @@ function NavBar() {
   const dealerOrdersHref = "/dealer/orders";
   const notificationsHref = "/notifications";
   const unreadBadge = formatBadgeCount(notifications?.totalUnread || 0);
+  const shouldReduceMotion = useReducedMotion();
 
   const [scrolled, setScrolled] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -367,6 +393,14 @@ function NavBar() {
     setSearchOpen(true);
   };
 
+  const toggleSearch = () => {
+    if (searchOpen) {
+      closeSearch();
+      return;
+    }
+    openSearch();
+  };
+
   const toggleAccountPanel = () => {
     setMobileOpen(false);
     setSearchOpen(false);
@@ -481,20 +515,12 @@ function NavBar() {
     }
 
     if (role === "DEALER") {
-      items.push(
-        {
-          label: "Catalog",
-          description: "Build a dealer order",
-          href: dealerCatalogHref,
-          icon: "catalog",
-        },
-        {
-          label: "Orders",
-          description: "Review order history",
-          href: dealerOrdersHref,
-          icon: "orders",
-        },
-      );
+      items.push({
+        label: "Order",
+        description: "Review order history",
+        href: dealerOrdersHref,
+        icon: "orders",
+      });
     }
 
     if (role === "DISPATCHER") {
@@ -531,7 +557,6 @@ function NavBar() {
     account.role,
     adminCatalogHref,
     dashboardHref,
-    dealerCatalogHref,
     dealerOrdersHref,
     dispatcherDashboardHref,
     factoryDashboardHref,
@@ -640,9 +665,9 @@ function NavBar() {
             <button
               type="button"
               className="nav-search-trigger"
-              aria-label="Search Meitu products"
+              aria-label={searchOpen ? "Close search" : "Search Meitu products"}
               aria-expanded={searchOpen}
-              onClick={openSearch}
+              onClick={toggleSearch}
             >
               <svg
                 width="17"
@@ -707,21 +732,39 @@ function NavBar() {
 
       <div className="nav-spacer" aria-hidden="true" />
 
-      {searchOpen ? (
-        <>
-          <button
+      <AnimatePresence>
+        {searchOpen ? (
+          <motion.button
+            key="search-scrim"
             type="button"
             className="search-page-scrim"
             aria-label="Close search"
             onClick={closeSearch}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_ENTER }}
+            exit={{ opacity: 0, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_EXIT }}
           />
-          <section
-            className="nav-search-extension show"
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {searchOpen ? (
+          <motion.section
+            key="search-panel"
+            className="nav-search-extension"
             ref={searchPanelRef}
             aria-label="Product search"
             onClick={(e) => e.stopPropagation()}
+            initial={{ clipPath: "inset(0 0 100% 0)" }}
+            animate={{ clipPath: "inset(0 0 0% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_ENTER }}
+            exit={{ clipPath: "inset(0 0 100% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_EXIT }}
           >
-            <div className="nav-search-extension-inner">
+            <motion.div
+              className="nav-search-extension-inner"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_ENTER }}
+              exit={{ opacity: 0, y: -6, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_EXIT }}
+            >
               <div className="nav-search-field">
                 <svg
                   width="20"
@@ -861,26 +904,44 @@ function NavBar() {
                   </div>
                 )}
               </div>
-            </div>
-          </section>
-        </>
-      ) : null}
+            </motion.div>
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
 
-      {profileMenuOpen ? (
-        <>
-          <button
+      <AnimatePresence>
+        {profileMenuOpen ? (
+          <motion.button
+            key="account-scrim"
             type="button"
             className="account-page-scrim"
             aria-label="Close account menu"
             onClick={closeAccountPanel}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_ENTER }}
+            exit={{ opacity: 0, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_EXIT }}
           />
-          <section
-            className="account-nav-extension show"
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {profileMenuOpen ? (
+          <motion.section
+            key="account-panel"
+            className="account-nav-extension"
             ref={accountPanelRef}
             aria-label="Account menu"
             onClick={(e) => e.stopPropagation()}
+            initial={{ clipPath: "inset(0 0 100% 0)" }}
+            animate={{ clipPath: "inset(0 0 0% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_ENTER }}
+            exit={{ clipPath: "inset(0 0 100% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_EXIT }}
           >
-            <div className="account-nav-extension-inner">
+            <motion.div
+              className="account-nav-extension-inner"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_ENTER }}
+              exit={{ opacity: 0, y: -6, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_EXIT }}
+            >
               <div className="account-nav-head">
                 <div>
                   <div className="account-nav-kicker">
@@ -941,10 +1002,10 @@ function NavBar() {
                   </button>
                 ) : null}
               </div>
-            </div>
-          </section>
-        </>
-      ) : null}
+            </motion.div>
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
 
       <div className={`mobile-nav ${mobileOpen ? "show" : ""}`}>
         <Link to="/" onClick={() => setMobileOpen(false)}>
@@ -1383,8 +1444,9 @@ function NavBar() {
           inset:44px 0 0;
           z-index:9990;
           border:0;
-          background:rgba(245,245,247,.50);
-          animation:searchScrimIn var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          background:rgba(245,245,247,.5);
+          backdrop-filter:blur(20px);
+          -webkit-backdrop-filter:blur(20px);
           cursor:default;
         }
 
@@ -1460,28 +1522,15 @@ function NavBar() {
           z-index:9995;
           background:var(--color-fog, #f5f5f7);
           border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
-          transform:translateY(-34px);
-          opacity:0;
-          pointer-events:none;
           overflow:hidden;
-          max-height:0;
-          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
-                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
-                    max-height var(--duration-primary, 0.344s) var(--ease-smooth, ease);
-        }
-
-        .nav-search-extension.show{
-          transform:translateY(0);
-          opacity:1;
-          pointer-events:auto;
-          max-height:320px;
-          animation:searchBarLower var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          max-height:640px;
+          transform-origin:top center;
         }
 
         .nav-search-extension-inner{
           width:min(620px, calc(100vw - 40px));
           margin:0 auto;
-          padding:16px 0 18px;
+          padding:56px 0 64px;
         }
 
         .nav-search-field{
@@ -1996,8 +2045,9 @@ function NavBar() {
           inset:44px 0 0;
           z-index:9990;
           border:0;
-          background:rgba(245,245,247,.38);
-          animation:searchScrimIn var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          background:rgba(245,245,247,.44);
+          backdrop-filter:blur(20px);
+          -webkit-backdrop-filter:blur(20px);
           cursor:default;
         }
 
@@ -2009,28 +2059,15 @@ function NavBar() {
           z-index:9995;
           background:var(--color-fog, #f5f5f7);
           border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
-          transform:translateY(-34px);
-          opacity:0;
-          pointer-events:none;
           overflow:hidden;
-          max-height:0;
-          transition:opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease),
-                    transform var(--duration-primary, 0.344s) var(--ease-smooth, ease),
-                    max-height var(--duration-primary, 0.344s) var(--ease-smooth, ease);
-        }
-
-        .account-nav-extension.show{
-          transform:translateY(0);
-          opacity:1;
-          pointer-events:auto;
-          max-height:380px;
-          animation:searchBarLower var(--duration-primary, 0.344s) var(--ease-smooth, ease) both;
+          max-height:500px;
+          transform-origin:top center;
         }
 
         .account-nav-extension-inner{
           width:min(640px, calc(100vw - 40px));
           margin:0 auto;
-          padding:16px 0 18px;
+          padding:56px 0 64px;
         }
 
         .account-nav-head{
@@ -2352,46 +2389,6 @@ function NavBar() {
           cursor:pointer;
         }
 
-        /* ─── Keyframes ─── */
-
-        @keyframes searchScrimIn{
-          from{ opacity:0; }
-          to{ opacity:1; }
-        }
-
-        @keyframes searchBarLower{
-          from{
-            transform:translateY(-34px);
-            clip-path:inset(0 0 100% 0);
-          }
-          to{
-            transform:translateY(0);
-            clip-path:inset(0 0 0 0);
-          }
-        }
-
-        @keyframes mobilePanelReveal{
-          from{
-            opacity:0;
-            clip-path:inset(0 0 100% 0);
-          }
-          to{
-            opacity:1;
-            clip-path:inset(0 0 0 0);
-          }
-        }
-
-        @keyframes mobilePanelContentIn{
-          from{
-            opacity:0;
-            transform:translateY(-10px);
-          }
-          to{
-            opacity:1;
-            transform:translateY(0);
-          }
-        }
-
         /* ─── Responsive ─── */
 
         @media (max-width:1040px){
@@ -2506,34 +2503,16 @@ function NavBar() {
             top:var(--nav-height, 44px);
             bottom:0;
             z-index:9995;
-            transform:translateY(0);
             transform-origin:top center;
-            clip-path:inset(0 0 100% 0);
             max-height:none;
             overflow-y:auto;
             -webkit-overflow-scrolling:touch;
-            transition:
-              clip-path .42s cubic-bezier(.22,.61,.36,1),
-              opacity .28s ease;
-          }
-
-          .nav-search-extension.show,
-          .account-nav-extension.show{
-            transform:translateY(0);
-            clip-path:inset(0 0 0 0);
-            max-height:none;
-            animation:mobilePanelReveal .44s cubic-bezier(.22,.61,.36,1) both;
-          }
-
-          .nav-search-extension.show .nav-search-extension-inner,
-          .account-nav-extension.show .account-nav-extension-inner{
-            animation:mobilePanelContentIn .34s ease .08s both;
           }
 
           .nav-search-extension-inner,
           .account-nav-extension-inner{
             width:min(680px, calc(100vw - 32px));
-            padding:28px 0 44px;
+            padding:44px 0 56px;
           }
 
           .nav-search-content{
@@ -2564,11 +2543,11 @@ function NavBar() {
           }
           .nav-search-extension-inner{
             width:calc(100vw - 28px);
-            padding:22px 0 26px;
+            padding:36px 0 44px;
           }
           .account-nav-extension-inner{
             width:calc(100vw - 28px);
-            padding:14px 0 16px;
+            padding:36px 0 44px;
           }
           .account-nav-grid{
             grid-template-columns:1fr;

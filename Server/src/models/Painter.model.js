@@ -69,6 +69,14 @@ const PainterSchema = new mongoose.Schema(
     // that shouldn't sit behind a guessable public link anyway. Download
     // links are minted fresh per-request (admin-only route), not stored.
     idCardGeneratedAt: { type: Date, default: null },
+
+    // Distinct from idCardGeneratedAt: that field is set the moment ANY
+    // card exists, including the blank-photo one auto-generated on TTP
+    // promotion - it does not mean a headshot has ever actually been
+    // composited in. This field is set ONLY by regeneratePainterIdCardWithPhoto
+    // (never by the promotion-time auto-generate), so it's the true signal
+    // for "this card has a real photo" - what gates the Download action.
+    idCardPhotoAddedAt: { type: Date, default: null },
   },
   { timestamps: true, versionKey: false },
 );

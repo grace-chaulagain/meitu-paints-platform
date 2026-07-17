@@ -1,35 +1,32 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
-import { downloadProformaPdf } from "../../../factory/invoices/downloadProformaPdf.jsx";
 import {
-  useAmendAdminOrderMutation,
-  useDeleteAdminOrderMutation,
-  useGetAdminOrderQuery,
-  useGetAdminOrderStockCheckQuery,
-  useRejectAdminOrderMutation,
-  useVerifyAdminOrderMutation,
+  useAmendDispatcherOrderMutation,
+  useDispatchDispatcherOrderMutation,
+  useGetDispatcherOrderQuery,
+  useGetDispatcherOrderStockCheckQuery,
+  useRejectDispatcherOrderMutation,
+  useVerifyDispatcherOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
-import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
+import AdminDecisionModal from "../../../admin/dashboard/components/AdminDecisionModal.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { Spinner, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import { SectionHeader, Surface } from "../../../components/dashboard/DashboardUI.jsx";
 import { Toast } from "../../../components/dashboard/Toast.jsx";
 import { OrderDetailStyles, OrderMilestoneStepper } from "../../../dealer/orderDetailUI.jsx";
-import { formatFullDateTime, money } from "./orderFormatting.js";
+import { normalizeStatus } from "../../../dealer/orderDetailLogic.js";
+import { formatFullDateTime, money } from "../../../admin/dashboard/orders/orderFormatting.js";
+import { StockCheckPanel } from "../../../admin/dashboard/orders/AdminOrdersPage.jsx";
 import {
   ActionButton,
-  AmendModal,
+  AmendOrderModal,
   CardLabel,
   DetailItem,
   GlassCard,
   OrderItemsTable,
-  OriginBadge,
-  RoutingBadge,
-  SectionHeader,
   StatusBadge,
-  StockCheckPanel,
-} from "./AdminOrdersPage.jsx";
+} from "./DispatcherOrdersPage.jsx";
 
 function BackButton({ onClick }) {
   return (
@@ -81,59 +78,54 @@ function DetailSkeleton() {
   );
 }
 
-export default function AdminOrderDetailPage() {
+// Same shape as Admin's own order detail page (see
+// admin/dashboard/orders/AdminOrderDetailPage.jsx) - reached only from the
+// Pending tab, since that's the one place a dispatcher actually makes a
+// verify/reject/amend decision. Trimmed to what a dispatcher can actually
+// do: no delete, no factory Proforma Invoice, no cross-fulfillment routing
+// badges - just the order, the dealer, and the two real steps (verify then
+// dispatch) a dispatcher's own assigned order goes through.
+export default function DispatcherOrderDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const orderId = useMemo(() => {
-    const match = location.pathname.match(
-      /^\/admin\/dashboard\/orders\/([^/]+)$/,
-    );
+    const match = location.pathname.match(/^\/dispatcher\/dashboard\/orders\/([^/]+)$/);
     return match?.[1] || "";
   }, [location.pathname]);
 
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
   const [amending, setAmending] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
   const [verifyNote, setVerifyNote] = useState("");
-  const [pdfBusy, setPdfBusy] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const orderQuery = useGetAdminOrderQuery(orderId, { skip: !orderId });
+  const orderQuery = useGetDispatcherOrderQuery(orderId, { skip: !orderId });
   const order = orderQuery.data?.item || null;
 
-  const [verifyAdminOrder] = useVerifyAdminOrderMutation();
-  const [rejectAdminOrder] = useRejectAdminOrderMutation();
-  const [amendAdminOrder] = useAmendAdminOrderMutation();
-  const [deleteAdminOrder] = useDeleteAdminOrderMutation();
+  const [verifyDispatcherOrder] = useVerifyDispatcherOrderMutation();
+  const [rejectDispatcherOrder] = useRejectDispatcherOrderMutation();
+  const [amendDispatcherOrder] = useAmendDispatcherOrderMutation();
+  const [dispatchDispatcherOrder] = useDispatchDispatcherOrderMutation();
 
-  const dealer = order?.dealerSnapshot || order?.dealerId || {};
-  const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
-  const isFactoryFulfillment = (dealer?.fulfillmentMode || "FACTORY") === "FACTORY";
-  // Once the factory has actually dispatched the order, its driver details
-  // are saved on order.factory - the Proforma Invoice can be (re)generated
-  // straight from that record, mirroring the factory dashboard's own
-  // "Download Proforma Invoice" affordance for Shipment/Completed orders.
-  const hasDispatchRecord = Boolean(order?.factory?.driverName);
-  const shouldCheckStock =
-    Boolean(order?._id) && order?.status === "SUBMITTED" && isFactoryFulfillment;
-
-  const stockCheckQuery = useGetAdminOrderStockCheckQuery(order?._id, {
-    skip: !shouldCheckStock,
-  });
+  const dealer = order?.dealerId || order?.dealerSnapshot || {};
+  const normalizedStatus = normalizeStatus(order?.status);
+  const canAct = normalizedStatus === "SUBMITTED";
+  const canFulfill = normalizedStatus === "VERIFIED";
+  const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED" || normalizedStatus === "COMPLETED";
+  // Dispatcher orders never touch the central factory stock ledger - they're
+  // covered by the dispatcher's own stock, only actually consumed at
+  // dispatch time (see consumeDispatcherStockForOrder). So this stays
+  // visible through both pre-dispatch stages (not just pre-verify like
+  // Admin's factory stock check), and only the Dispatch action - the real
+  // consumption point - gets blocked by it, not Verify.
+  const shouldCheckStock = Boolean(order?._id) && (canAct || canFulfill);
+  const stockCheckQuery = useGetDispatcherOrderStockCheckQuery(order?._id, { skip: !shouldCheckStock });
   const stockCheck = stockCheckQuery.data;
-  const stockCheckError = stockCheckQuery.error
-    ? getQueryErrorMessage(stockCheckQuery.error)
-    : "";
-  const stockCheckLoading =
-    shouldCheckStock &&
-    (stockCheckQuery.isLoading || (stockCheckQuery.isFetching && !stockCheck));
-  const stockBlocksVerify =
-    shouldCheckStock &&
-    (stockCheckLoading || Boolean(stockCheckError) || stockCheck?.ok !== true);
+  const stockCheckError = stockCheckQuery.error ? getQueryErrorMessage(stockCheckQuery.error) : "";
+  const stockCheckLoading = shouldCheckStock && (stockCheckQuery.isLoading || (stockCheckQuery.isFetching && !stockCheck));
+  const stockBlocksDispatch = canFulfill && (stockCheckLoading || Boolean(stockCheckError) || stockCheck?.ok !== true);
 
   async function runAction(actionKey, request) {
     try {
@@ -150,19 +142,19 @@ export default function AdminOrderDetailPage() {
   }
 
   // If we arrived here by clicking a row in the list, go back via browser
-  // history so the list's exact filters/page/scroll (all preserved in its URL
-  // and the shell's scroll cache) are restored, instead of a fresh default list.
+  // history so the list's exact filters/page/scroll are restored, instead
+  // of a fresh default list.
   const goBackToOrders = () => {
     if (location.state?.fromOrdersList) {
       navigate(-1);
     } else {
-      navigate("/admin/dashboard/orders");
+      navigate("/dispatcher/dashboard/orders");
     }
   };
 
   const handleVerify = async () => {
     const success = await runAction(`verify-${order._id}`, () =>
-      verifyAdminOrder({
+      verifyDispatcherOrder({
         orderId: order._id,
         payload: { reviewNote: verifyNote.trim() },
       }).unwrap(),
@@ -173,33 +165,24 @@ export default function AdminOrderDetailPage() {
       setToast({
         tone: "success",
         title: "Order verified",
-        description: `${order.orderNumber} moved into the factory queue.`,
+        description: `${order.orderNumber} is ready to dispatch.`,
       });
     }
   };
 
-  const handleDownloadProforma = async () => {
-    if (!order) return;
-    setPdfBusy(true);
-    try {
-      await downloadProformaPdf({
+  const handleDispatch = async () => {
+    const success = await runAction(`dispatch-${order._id}`, () =>
+      dispatchDispatcherOrder({
         orderId: order._id,
-        orderNumber: order.orderNumber,
-        generatedAt: new Date().toISOString(),
-        dealer,
-        payment: order.payment || {},
-        driver: {
-          name: order.factory?.driverName || "",
-          phone: order.factory?.driverPhone || "",
-          vehicleNumber: order.factory?.vehicleNumber || "",
-        },
-        items: order.items || [],
-        totals: order.totals || {},
+        payload: { note: "" },
+      }).unwrap(),
+    );
+    if (success) {
+      setToast({
+        tone: "success",
+        title: "Order dispatched",
+        description: `${order.orderNumber} has been dispatched and your stock deducted.`,
       });
-    } catch (err) {
-      setActionError(getQueryErrorMessage(err, "Failed to generate the Proforma Invoice."));
-    } finally {
-      setPdfBusy(false);
     }
   };
 
@@ -208,7 +191,7 @@ export default function AdminOrderDetailPage() {
     if (reviewNote === null) return;
 
     const success = await runAction(`reject-${order._id}`, () =>
-      rejectAdminOrder({
+      rejectDispatcherOrder({
         orderId: order._id,
         payload: { reviewNote: reviewNote.trim() },
       }).unwrap(),
@@ -219,51 +202,41 @@ export default function AdminOrderDetailPage() {
   const handleSaveAmendment = async (payload) => {
     if (!order?._id) return;
 
-    const success = await runAction(`amend-${order._id}`, async () => {
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      const subtotal = items.reduce(
-        (sum, item) => sum + Number(item?.lineTotal || 0),
-        0,
-      );
-
-      await amendAdminOrder({
+    const success = await runAction(`amend-${order._id}`, () =>
+      amendDispatcherOrder({
         orderId: order._id,
         payload: {
-          items,
+          items: payload.items,
           totals: {
-            subtotal,
+            subtotal: payload.subtotal,
             discount: 0,
-            taxableAmount: subtotal,
+            taxableAmount: payload.subtotal,
             tax: 0,
-            total: subtotal,
+            total: payload.subtotal,
             currency: order?.totals?.currency || "NPR",
           },
           dealerNote: payload.dealerNote,
           internalNote: payload.internalNote,
-          reason: payload.reason,
-          note: payload.note,
-        },
-      }).unwrap();
-    });
-
-    if (success) setAmending(false);
-  };
-
-  const handleHardDelete = async () => {
-    if (!order?._id) return;
-
-    const success = await runAction(`delete-${order._id}`, () =>
-      deleteAdminOrder({
-        orderId: order._id,
-        payload: {
-          confirmation: deleteConfirmation,
-          reason: "Admin moved order to trash",
+          reviewNote: payload.reviewNote,
         },
       }).unwrap(),
     );
 
-    if (success) goBackToOrders();
+    if (success) setAmending(false);
   };
+
+  function handleDownloadPdf() {
+    downloadOrderSummaryPdf({
+      order,
+      dealer: {
+        companyName: dealer?.companyName || "",
+        contactName: dealer?.contactName || "",
+        email: dealer?.email || "",
+        phone: dealer?.phone || "",
+        address: dealer?.address || "",
+      },
+    });
+  }
 
   if (orderQuery.isLoading && !order) {
     return <DetailSkeleton />;
@@ -272,11 +245,9 @@ export default function AdminOrderDetailPage() {
   if (!orderQuery.isLoading && !order) {
     return (
       <Surface padding={26} style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>
-          Order not found
-        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>Order not found</div>
         <div style={{ marginTop: 6, fontSize: 13, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-          It may have been moved to trash or the link is out of date.
+          It may not be assigned to you, or the link is out of date.
         </div>
         <div style={{ marginTop: 16 }}>
           <BackButton onClick={goBackToOrders} />
@@ -286,14 +257,11 @@ export default function AdminOrderDetailPage() {
   }
 
   const contactLine = [dealer?.contactName, dealer?.phone].filter(Boolean).join(" · ");
-  const paymentLine = [order?.payment?.method, order?.payment?.reference]
-    .filter(Boolean)
-    .join(" · ");
+  const paymentLine = [order?.payment?.method, order?.payment?.reference].filter(Boolean).join(" · ");
   const notes = [
     { label: "Dealer note", value: order?.dealerNote },
     { label: "Internal note", value: order?.internalNote },
     { label: "Review note", value: order?.review?.reviewNote },
-    { label: "Payment note", value: order?.payment?.note },
   ].filter((note) => note.value);
 
   return (
@@ -305,86 +273,44 @@ export default function AdminOrderDetailPage() {
       <Surface padding={20} className="dash-fade-up">
         <SectionHeader
           title={order.orderNumber || "Order Detail"}
-          subtitle={
-            order?.createdAt
-              ? `Submitted ${formatFullDateTime(order.createdAt)}`
-              : "Order detail"
-          }
+          subtitle={order?.createdAt ? `Submitted ${formatFullDateTime(order.createdAt)}` : "Order detail"}
           action={
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <ActionButton
-                subtle
-                icon="download"
-                onClick={() => downloadOrderSummaryPdf({ order, dealer })}
-              >
+              <ActionButton subtle icon="download" onClick={handleDownloadPdf} disabled={!canDownloadPdf}>
                 PDF
               </ActionButton>
 
-              {hasDispatchRecord ? (
-                <ActionButton
-                  subtle
-                  icon={pdfBusy ? "" : "invoice"}
-                  onClick={handleDownloadProforma}
-                  disabled={pdfBusy}
-                >
-                  {pdfBusy ? (
-                    <>
-                      <Spinner size={13} color="var(--color-graphite, #707070)" />
-                      Generating…
-                    </>
-                  ) : (
-                    "Proforma Invoice"
-                  )}
-                </ActionButton>
-              ) : null}
-
-              {order.status === "SUBMITTED" ? (
+              {canAct ? (
                 <>
-                  <ActionButton
-                    subtle
-                    icon="edit"
-                    onClick={() => setAmending(true)}
-                    disabled={busyAction === `amend-${order._id}`}
-                  >
+                  <ActionButton subtle icon="edit" onClick={() => setAmending(true)} disabled={busyAction === `amend-${order._id}`}>
                     Amend
                   </ActionButton>
-                  <ActionButton
-                    icon="checkmark"
-                    onClick={() => setVerifyModalOpen(true)}
-                    disabled={busyAction === `verify-${order._id}` || stockBlocksVerify}
-                  >
-                    {stockBlocksVerify ? "Stock blocked" : "Verify"}
+                  <ActionButton icon="checkmark" onClick={() => setVerifyModalOpen(true)} disabled={busyAction === `verify-${order._id}`}>
+                    Verify
                   </ActionButton>
-                  <ActionButton
-                    danger
-                    icon="reject"
-                    onClick={handleReject}
-                    disabled={busyAction === `reject-${order._id}`}
-                  >
+                  <ActionButton danger icon="reject" onClick={handleReject} disabled={busyAction === `reject-${order._id}`}>
                     {busyAction === `reject-${order._id}` ? "Rejecting..." : "Reject"}
                   </ActionButton>
                 </>
+              ) : canFulfill ? (
+                <ActionButton
+                  icon="checkmark"
+                  onClick={handleDispatch}
+                  disabled={busyAction === `dispatch-${order._id}` || stockBlocksDispatch}
+                >
+                  {busyAction === `dispatch-${order._id}`
+                    ? "Dispatching..."
+                    : stockBlocksDispatch
+                      ? "Stock blocked"
+                      : "Dispatch (deducts your stock)"}
+                </ActionButton>
               ) : null}
-
-              <ActionButton
-                danger
-                icon="trash"
-                onClick={() => {
-                  setDeleteConfirmOpen(true);
-                  setDeleteConfirmation("");
-                }}
-                disabled={busyAction === `delete-${order._id}`}
-              >
-                {busyAction === `delete-${order._id}` ? "Moving..." : "Delete"}
-              </ActionButton>
             </div>
           }
         />
 
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <StatusBadge status={order.status} />
-          <RoutingBadge mode={dealer?.fulfillmentMode || "FACTORY"} />
-          <OriginBadge origin={order?.orderOrigin} />
         </div>
 
         <div
@@ -416,13 +342,7 @@ export default function AdminOrderDetailPage() {
         ) : null}
       </Surface>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1fr) minmax(300px,.85fr)",
-          gap: 16,
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(300px,.85fr)", gap: 16 }}>
         <GlassCard style={{ padding: 18 }}>
           <CardLabel icon="package">Order Items</CardLabel>
           <div style={{ marginTop: 8 }}>
@@ -438,9 +358,6 @@ export default function AdminOrderDetailPage() {
               {contactLine ? <DetailItem label="Contact" value={contactLine} /> : null}
               {dealer?.email ? <DetailItem label="Email" value={dealer.email} /> : null}
               {dealer?.address ? <DetailItem label="Address" value={dealer.address} /> : null}
-              {dealer?.fulfillmentMode === "DISPATCHER" ? (
-                <DetailItem label="Assigned Dispatcher" value={dispatcher?.name || "Unassigned"} />
-              ) : null}
             </div>
           </GlassCard>
 
@@ -469,13 +386,14 @@ export default function AdminOrderDetailPage() {
 
       {shouldCheckStock ? (
         <StockCheckPanel
+          title="My Stock Check"
           stockCheck={stockCheck}
           loading={stockCheckLoading || stockCheckQuery.isFetching}
           error={stockCheckError}
         />
       ) : null}
 
-      <AmendModal
+      <AmendOrderModal
         open={amending}
         order={order}
         saving={busyAction === `amend-${order._id}`}
@@ -486,46 +404,15 @@ export default function AdminOrderDetailPage() {
       />
 
       <AdminDecisionModal
-        open={deleteConfirmOpen}
-        title="Delete Order"
-        subtitle="This moves the order to Settings Trash for 30 days before permanent database deletion. It can be restored during that window."
-        tone="danger"
-        confirmLabel="Move to Trash"
-        busy={busyAction === `delete-${order._id}`}
-        details={[
-          { label: "Order", value: order?.orderNumber },
-          { label: "Status", value: order?.status },
-          { label: "Dealer", value: dealer?.companyName },
-          {
-            label: "Total",
-            value: money(order?.totals?.total, order?.totals?.currency || "NPR"),
-          },
-        ]}
-        requireText={order?.orderNumber || ""}
-        confirmationText={deleteConfirmation}
-        onConfirmationTextChange={setDeleteConfirmation}
-        onClose={() => {
-          if (!busyAction) {
-            setDeleteConfirmOpen(false);
-            setDeleteConfirmation("");
-          }
-        }}
-        onConfirm={handleHardDelete}
-      />
-
-      <AdminDecisionModal
         open={verifyModalOpen}
         title="Verify this order?"
-        subtitle="Stock is reserved and the order moves into the factory queue. You can leave a note for the record — it's optional."
+        subtitle="The order becomes ready to dispatch. You can leave a note for the record — it's optional."
         confirmLabel="Verify Order"
         busy={busyAction === `verify-${order._id}`}
         details={[
           { label: "Order", value: order?.orderNumber },
           { label: "Dealer", value: dealer?.companyName },
-          {
-            label: "Total",
-            value: money(order?.totals?.total, order?.totals?.currency || "NPR"),
-          },
+          { label: "Total", value: money(order?.totals?.total, order?.totals?.currency || "NPR") },
         ]}
         onClose={() => {
           if (!busyAction) {

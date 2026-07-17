@@ -456,6 +456,7 @@ export async function listCoupons({ status = "ALL", type = "ALL", batchId = "", 
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "redeemedByDealerId", select: "companyName contactName" })
+      .populate({ path: "painterId", select: "name" })
       .lean(),
     Coupon.countDocuments(filter),
   ]);

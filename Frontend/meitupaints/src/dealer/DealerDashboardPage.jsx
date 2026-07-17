@@ -9,7 +9,6 @@ const SECTIONS = {
   CATALOG: "catalog",
   CART: "cart",
   ORDERS: "orders",
-  REPORTS: "reports",
   INVENTORY: "inventory",
   SALES: "sales",
   LOGOUT: "logout",
@@ -19,13 +18,11 @@ const ROUTES = {
   [SECTIONS.CATALOG]: "/dealer/catalog",
   [SECTIONS.CART]: "/dealer/cart",
   [SECTIONS.ORDERS]: "/dealer/orders",
-  [SECTIONS.REPORTS]: "/dealer/orders/reports",
   [SECTIONS.INVENTORY]: "/dealer/inventory",
   [SECTIONS.SALES]: "/dealer/sales",
 };
 
 function sectionFromPath(pathname = "") {
-  if (pathname.startsWith(ROUTES[SECTIONS.REPORTS])) return SECTIONS.REPORTS;
   if (pathname.startsWith(ROUTES[SECTIONS.ORDERS])) return SECTIONS.ORDERS;
   if (pathname.startsWith(ROUTES[SECTIONS.CART])) return SECTIONS.CART;
   if (pathname.startsWith(ROUTES[SECTIONS.INVENTORY])) return SECTIONS.INVENTORY;
@@ -48,7 +45,6 @@ export default function DealerDashboardPage({ children }) {
         { key: SECTIONS.CATALOG, title: "Catalog", icon: "store" },
         { key: SECTIONS.CART, title: "Cart", icon: "package" },
         { key: SECTIONS.ORDERS, title: "Orders", icon: "orders" },
-        { key: SECTIONS.REPORTS, title: "Reports", icon: "chart" },
       ],
     },
     {

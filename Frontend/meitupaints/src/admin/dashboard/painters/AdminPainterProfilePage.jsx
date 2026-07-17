@@ -5,7 +5,6 @@ import {
   useGetAdminPainterQuery,
   useGetPainterPointsQuery,
   useGetPainterSalesQuery,
-  useLazyGetPainterIdCardUrlQuery,
   usePromotePainterToTtpMutation,
   useUpdatePainterMutation,
 } from "../../../redux/api/meituApi.js";
@@ -22,9 +21,10 @@ import {
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { Toast } from "../../../components/dashboard/Toast.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
-import PainterIdCardPhotoModal from "./PainterIdCardPhotoModal.jsx";
+import PainterIdCardModal from "./PainterIdCardModal.jsx";
 
 const OVERVIEW_PREVIEW_SIZE = 5;
 const POINTS_PAGE_SIZE = 10;
@@ -76,17 +76,6 @@ function painterInitials(painter) {
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString()}`;
-}
-
-// "FirstName-LastName-PainterCard.pdf" - first word + last word of the
-// painter's free-text name (middle names dropped), sanitized so the
-// filename is safe on every OS regardless of what's in the name field.
-function painterCardFilename(painter) {
-  const safe = (s) => s.replace(/[^a-zA-Z0-9]/g, "") || "Painter";
-  const words = String(painter?.name || "").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "Painter-PainterCard.pdf";
-  if (words.length === 1) return `${safe(words[0])}-PainterCard.pdf`;
-  return `${safe(words[0])}-${safe(words[words.length - 1])}-PainterCard.pdf`;
 }
 
 function formatDate(value) {
@@ -170,8 +159,9 @@ export default function AdminPainterProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
-  const [photoModalOpen, setPhotoModalOpen] = useState(false);
+  const [idCardModalOpen, setIdCardModalOpen] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [toast, setToast] = useState(null);
   const [pointsPage, setPointsPage] = useState(1);
 
   const painterQuery = useGetAdminPainterQuery(painterId, { skip: !painterId });
@@ -191,38 +181,16 @@ export default function AdminPainterProfilePage() {
   const [updatePainter, { isLoading: saving }] = useUpdatePainterMutation();
   const [deletePainter, { isLoading: deleting }] = useDeletePainterMutation();
   const [promotePainter, { isLoading: promoting }] = usePromotePainterToTtpMutation();
-  const [fetchIdCardUrl, { isFetching: downloadingIdCard }] = useLazyGetPainterIdCardUrlQuery();
 
   async function handlePromote() {
     try {
       setActionError("");
       await promotePainter({ painterId, payload: {} }).unwrap();
       setPromoteOpen(false);
+      setToast({ tone: "success", title: "Promoted to TTP", description: `${painter?.name || "Painter"}'s Painter ID has been generated.` });
     } catch (err) {
       setActionError(getQueryErrorMessage(err, "Failed to promote painter."));
       setPromoteOpen(false);
-    }
-  }
-
-  async function handleDownloadIdCard() {
-    try {
-      setActionError("");
-      const { url } = await fetchIdCardUrl(painterId).unwrap();
-      // Fetched as a blob (rather than a plain window.open) so the browser
-      // uses our own filename - Cloudinary's Content-Disposition otherwise
-      // just says "file.pdf". Cloudinary's response allows CORS from any
-      // origin, so this fetch isn't blocked.
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Could not download the ID card.");
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = painterCardFilename(painter);
-      link.click();
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      setActionError(getQueryErrorMessage(err, "Failed to fetch the ID card."));
     }
   }
 
@@ -235,6 +203,7 @@ export default function AdminPainterProfilePage() {
       setActionError("");
       await updatePainter({ painterId, payload }).unwrap();
       setEditOpen(false);
+      setToast({ tone: "success", title: "Painter updated", description: payload?.name || painter?.name || "" });
     } catch (err) {
       setActionError(getQueryErrorMessage(err, "Failed to save painter."));
     }
@@ -310,13 +279,8 @@ export default function AdminPainterProfilePage() {
               </GhostButton>
             ) : null}
             {painter.type === "TTP" ? (
-              <GhostButton icon="user" onClick={() => setPhotoModalOpen(true)}>
-                Add Photo to ID Card
-              </GhostButton>
-            ) : null}
-            {painter.type === "TTP" && painter.idCardGeneratedAt ? (
-              <GhostButton icon="download" disabled={downloadingIdCard} onClick={handleDownloadIdCard}>
-                {downloadingIdCard ? "Preparing…" : "Download ID Card"}
+              <GhostButton icon="download" onClick={() => setIdCardModalOpen(true)}>
+                Download ID Card
               </GhostButton>
             ) : null}
             <GhostButton icon="edit" onClick={() => setEditOpen(true)}>
@@ -472,8 +436,8 @@ export default function AdminPainterProfilePage() {
         onConfirm={handlePromote}
       />
 
-      {photoModalOpen ? (
-        <PainterIdCardPhotoModal painter={painter} onClose={() => setPhotoModalOpen(false)} />
+      {idCardModalOpen ? (
+        <PainterIdCardModal painter={painter} onClose={() => setIdCardModalOpen(false)} />
       ) : null}
 
       <PainterFormModal
@@ -499,6 +463,8 @@ export default function AdminPainterProfilePage() {
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
       />
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <style>{`
         .painter-profile-breadcrumb{

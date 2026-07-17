@@ -133,6 +133,11 @@ function uploadPainterIdCardPdf(buffer, licenseId) {
         type: "authenticated",
         format: "pdf",
         overwrite: true,
+        // Without this, Cloudinary's CDN can keep serving the previous PDF
+        // at this same public_id for a while after a regenerate - the admin
+        // downloading right after replacing a photo could otherwise still
+        // get the old file even though the new one uploaded successfully.
+        invalidate: true,
       },
       (error, result) => {
         if (error) return reject(error);
@@ -166,6 +171,59 @@ async function generatePainterIdCard(painter) {
   }
 }
 
+// Deterministic Cloudinary public_id for a painter's saved headshot -
+// same convention as painterIdCardPublicId above.
+function painterIdCardPhotoPublicId(licenseId) {
+  return `meitu-painter-id-cards/${licenseId}-id-card-photo`;
+}
+
+// Persists the exact cropped headshot the admin composited into the PDF, as
+// its own small Cloudinary asset - so reopening the "already generated"
+// card can show the real photo in the preview instead of a placeholder
+// glyph. This is a deliberate reversal of the original "never persist the
+// photo" design: that decision only ever served "don't store more personal
+// data than needed", which the ID card PDF itself already contains anyway
+// once a photo has been added. Kept "authenticated" + short-lived signed
+// URLs for delivery, same posture as the PDF.
+function uploadPainterIdCardPhoto(buffer, licenseId) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        public_id: painterIdCardPhotoPublicId(licenseId),
+        resource_type: "image",
+        type: "authenticated",
+        format: "jpg",
+        overwrite: true,
+        invalidate: true,
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      },
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
+
+// Admin: mints a fresh, short-lived signed URL for the painter's saved
+// headshot (see uploadPainterIdCardPhoto above) - directly embeddable as an
+// <img src>, unlike the PDF download URL which forces an attachment.
+export async function getPainterIdCardPhotoUrl(painterId) {
+  const painter = await Painter.findById(painterId).lean();
+  if (!painter) throw new ApiError(404, "Painter not found");
+  if (!painter.licenseId || !painter.idCardPhotoAddedAt) {
+    throw new ApiError(404, "This painter does not have a saved photo yet.");
+  }
+
+  return cloudinary.url(painterIdCardPhotoPublicId(painter.licenseId), {
+    resource_type: "image",
+    type: "authenticated",
+    format: "jpg",
+    sign_url: true,
+    secure: true,
+  });
+}
+
 // Admin: mints a fresh, short-lived signed download URL for an already-
 // generated TTP ID card PDF (never a stored/reusable link - see the
 // idCardGeneratedAt schema comment). 5 minutes is comfortably enough for
@@ -175,6 +233,13 @@ export async function getPainterIdCardDownloadUrl(painterId) {
   if (!painter) throw new ApiError(404, "Painter not found");
   if (!painter.licenseId || !painter.idCardGeneratedAt) {
     throw new ApiError(404, "This painter does not have a generated ID card yet.");
+  }
+  // idCardGeneratedAt alone can mean a blank-photo card auto-generated on
+  // TTP promotion - refuse to hand out a download link until a real photo
+  // has actually been composited in, mirroring the frontend's own gate
+  // rather than trusting it alone.
+  if (!painter.idCardPhotoAddedAt) {
+    throw new ApiError(400, "Add a photo to this painter's ID card before downloading it.");
   }
 
   return cloudinary.utils.private_download_url(painterIdCardPublicId(painter.licenseId), "pdf", {
@@ -187,13 +252,11 @@ export async function getPainterIdCardDownloadUrl(painterId) {
 
 // Admin: re-renders the ID card with a headshot composited in, replacing
 // whatever card (with or without a photo) currently exists in Cloudinary.
-// The photo itself is deliberately never persisted anywhere - not on the
-// Painter document, not as a separate Cloudinary asset - it exists only as
-// an in-memory multer buffer for the duration of this one request, baked
-// into the generated PDF, then discarded. If the admin wants to change the
-// photo later, or the promotion-time auto-generated card never got one,
-// they re-upload and re-adjust it here from scratch; there's nothing to
-// "already have on file" by design.
+// The uploaded crop is also saved as its own asset (uploadPainterIdCardPhoto)
+// so the "already generated" preview can show the real photo on a later
+// visit - if the admin wants to change it again, they re-upload and
+// re-adjust from scratch same as before; there's just now something to show
+// while they decide whether to.
 export async function regeneratePainterIdCardWithPhoto(painterId, photoFile) {
   if (!photoFile?.buffer) throw new ApiError(400, "A photo file is required.");
   if (!String(photoFile.mimetype || "").startsWith("image/")) {
@@ -215,8 +278,10 @@ export async function regeneratePainterIdCardWithPhoto(painterId, photoFile) {
     photoMimeType: photoFile.mimetype,
   });
   await uploadPainterIdCardPdf(pdfBuffer, painter.licenseId);
+  await uploadPainterIdCardPhoto(photoFile.buffer, painter.licenseId);
 
   painter.idCardGeneratedAt = new Date();
+  painter.idCardPhotoAddedAt = new Date();
   await painter.save();
 
   // Mint the signed URL directly from the painter doc already in hand

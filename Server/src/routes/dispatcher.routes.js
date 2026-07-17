@@ -11,12 +11,14 @@ import {
   getMyAssignedDealerByIdController,
   listMyOrdersController,
   getMyOrderByIdController,
+  getMyOrderStockCheckController,
   verifyAssignedOrderController,
   rejectAssignedOrderController,
   amendAssignedOrderController,
   listMyOrderArchiveController,
   createReplenishmentOrderController,
   getMyDispatcherStockController,
+  getMyDispatcherStockHistoryController,
   dispatchAssignedOrderController,
   getMyReplenishmentCatalogController,
   listMyReplenishmentOrdersController,
@@ -94,6 +96,14 @@ router.get(
   getMyOrderByIdController,
 );
 
+router.get(
+  "/me/orders/:orderId/stock-check",
+  auth,
+  requireRole("DISPATCHER"),
+  validateParams(orderIdParamsSchema),
+  getMyOrderStockCheckController,
+);
+
 router.patch(
   "/me/orders/:orderId/verify",
   auth,
@@ -139,6 +149,13 @@ router.get(
   auth,
   requireRole("DISPATCHER"),
   getMyDispatcherStockController,
+);
+
+router.get(
+  "/me/stock/history",
+  auth,
+  requireRole("DISPATCHER"),
+  getMyDispatcherStockHistoryController,
 );
 
 router.get(

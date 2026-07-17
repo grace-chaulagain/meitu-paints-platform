@@ -12,8 +12,10 @@ import {
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
 import { AppleDateField, AppleDropdown, PopoverListMenu } from "../../components/dashboard/ApplePickers.jsx";
+import { Toast } from "../../components/dashboard/Toast.jsx";
 import { groupOrdersByDay } from "../../utils/orderDayGrouping.js";
 import {
+  factoryQueueTimestamp,
   money,
   orderMatchesLane,
   priorityForOrder,
@@ -39,11 +41,27 @@ const PRIORITY_OPTIONS = [
   { key: "Normal", label: "Normal priority" },
 ];
 
-const ORIGIN_OPTIONS = [
+// Same routing segments as the Admin Orders page's route filter
+// (view=ARCHIVE&route=ALL), minus "Dispatcher Routed" (dealer orders
+// fulfilled through a dispatcher rather than the factory directly) - the
+// factory never dispatches those itself, only its own dealers' orders and
+// dispatchers' own replenishment orders, so that option doesn't belong on
+// this page. Applied server-side (fulfillmentMode/origin) rather than as a
+// client-side filter, since the factory orders endpoint defaults to
+// FACTORY-only otherwise.
+const ROUTE_MODES = [
   { key: "ALL", label: "All" },
-  { key: "DEALER", label: "Dealer" },
+  { key: "FACTORY", label: "Factory" },
   { key: "DISPATCHER_REPLENISHMENT", label: "Dispatcher" },
 ];
+
+function routeModeParams(routeMode) {
+  if (routeMode === "FACTORY") return { fulfillmentMode: "FACTORY" };
+  if (routeMode === "DISPATCHER_REPLENISHMENT") {
+    return { fulfillmentMode: "ALL", origin: "DISPATCHER_REPLENISHMENT" };
+  }
+  return { fulfillmentMode: "ALL" };
+}
 
 const SORT_OPTIONS = [
   { key: "received-desc", label: "Newest first" },
@@ -76,14 +94,14 @@ function FactoryOrderTabs({ options, value, onChange }) {
   );
 }
 
-function FactoryOriginMenu({ value, onChange }) {
-  const selectedOption = ORIGIN_OPTIONS.find((option) => option.key === value) || ORIGIN_OPTIONS[0];
+function FactoryRouteMenu({ value, onChange }) {
+  const selectedOption = ROUTE_MODES.find((option) => option.key === value) || ROUTE_MODES[0];
 
   return (
     <PopoverListMenu
-      ariaLabel="Factory order source"
+      ariaLabel="Order routing"
       menuClassName="factory-route-menu"
-      options={ORIGIN_OPTIONS}
+      options={ROUTE_MODES}
       value={value}
       onChange={onChange}
       trigger={({ open, onClick, triggerRef }) => (
@@ -138,7 +156,7 @@ function OrderRow({ order, onOpen }) {
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <DashboardIcon name="history" size={12} strokeWidth={1.8} />
-            {timeAgo(order.factory?.sentToFactoryAt || order.updatedAt || order.createdAt)}
+            {timeAgo(factoryQueueTimestamp(order))}
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <DashboardIcon name="truck" size={12} strokeWidth={1.8} />
@@ -168,11 +186,13 @@ export default function FactoryOrdersPage() {
   const [date, setDate] = useState("");
   const [dealer, setDealer] = useState("");
   const [priority, setPriority] = useState("ALL");
-  const [origin, setOrigin] = useState("ALL");
+  const [routeMode, setRouteMode] = useState("FACTORY");
   const [sort, setSort] = useState("received-desc");
+  const [sortOrder, setSortOrder] = useState("desc");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const listQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: query, limit: 100 });
+  const listQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: query, limit: 100, ...routeModeParams(routeMode) });
   const allOrders = listQuery.data?.items || [];
 
   const counts = ORDER_LANES.reduce((acc, item) => {
@@ -186,7 +206,6 @@ export default function FactoryOrdersPage() {
       if (date && todayKey(order.createdAt) !== date) return false;
       if (dealer && !String(order.dealerSnapshot?.companyName || "").toLowerCase().includes(dealer.toLowerCase())) return false;
       if (priority !== "ALL" && priorityForOrder(order) !== priority) return false;
-      if (origin !== "ALL" && (order.orderOrigin || "DEALER") !== origin) return false;
       return true;
     })
     .sort((a, b) => {
@@ -195,15 +214,20 @@ export default function FactoryOrdersPage() {
       if (sort === "dealer") {
         return String(a.dealerSnapshot?.companyName || "").localeCompare(String(b.dealerSnapshot?.companyName || ""));
       }
-      return (
-        new Date(b.factory?.sentToFactoryAt || b.updatedAt || b.createdAt || 0) -
-        new Date(a.factory?.sentToFactoryAt || a.updatedAt || a.createdAt || 0)
-      );
+      const diff = new Date(factoryQueueTimestamp(b) || 0) - new Date(factoryQueueTimestamp(a) || 0);
+      return sortOrder === "asc" ? -diff : diff;
     });
 
-  const groupedOrders = useMemo(() => groupOrdersByDay(items), [items]);
+  const groupedOrders = useMemo(() => groupOrdersByDay(items, factoryQueueTimestamp), [items]);
 
-  const hasFilters = Boolean(query || draftQuery || date || dealer || priority !== "ALL" || origin !== "ALL" || sort !== "received-desc");
+  const hasFilters = Boolean(
+    query || draftQuery || date || dealer || priority !== "ALL" || routeMode !== "FACTORY" || sort !== "received-desc" || sortOrder !== "desc",
+  );
+
+  function toggleSortOrder() {
+    setSort("received-desc");
+    setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+  }
 
   function clearFilters() {
     setDraftQuery("");
@@ -211,11 +235,38 @@ export default function FactoryOrdersPage() {
     setDate("");
     setDealer("");
     setPriority("ALL");
-    setOrigin("ALL");
+    setRouteMode("FACTORY");
     setSort("received-desc");
+    setSortOrder("desc");
   }
 
   const loadError = listQuery.error ? getQueryErrorMessage(listQuery.error, "Failed to load factory orders.") : "";
+
+  // Both handlers close the order card and jump to the lane the order just
+  // moved into - staying on a now-stale card (or one that's vanished from
+  // the current lane's filter) would just confuse whoever dispatched it.
+  // The toast is what carries the "yes, it worked" confirmation across that
+  // transition, since it's rendered here rather than inside the modal that's
+  // about to unmount.
+  function handleDispatched(order) {
+    setSelectedOrderId(null);
+    setLane("SHIPMENT");
+    setToast({
+      tone: "success",
+      title: "Order dispatched",
+      description: `${order.orderNumber} moved to Shipment.`,
+    });
+  }
+
+  function handleDelivered(order) {
+    setSelectedOrderId(null);
+    setLane("COMPLETED");
+    setToast({
+      tone: "success",
+      title: "Order completed",
+      description: `${order.orderNumber} marked delivered.`,
+    });
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -244,7 +295,19 @@ export default function FactoryOrdersPage() {
               placeholder="Search order number or dealer…"
             />
           </div>
-          <FactoryOriginMenu value={origin} onChange={setOrigin} />
+          <FactoryRouteMenu value={routeMode} onChange={setRouteMode} />
+          <GhostButton onClick={toggleSortOrder}>
+            <span
+              style={{
+                display: "inline-flex",
+                transform: sortOrder === "asc" ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform .22s var(--ease-out, ease)",
+              }}
+            >
+              <DashboardIcon name="sort" size={14} />
+            </span>
+            {sortOrder === "asc" ? "Oldest First" : "Newest First"}
+          </GhostButton>
           <GhostButton
             icon="filter"
             onClick={() => setFiltersOpen((value) => !value)}
@@ -321,7 +384,16 @@ export default function FactoryOrdersPage() {
         </div>
       )}
 
-      <FactoryOrderModal key={selectedOrderId || "none"} orderId={selectedOrderId} orders={allOrders} onClose={() => setSelectedOrderId(null)} />
+      <FactoryOrderModal
+        key={selectedOrderId || "none"}
+        orderId={selectedOrderId}
+        orders={allOrders}
+        onClose={() => setSelectedOrderId(null)}
+        onDispatched={handleDispatched}
+        onDelivered={handleDelivered}
+      />
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <style>{`
         .factory-order-dealer-filter{

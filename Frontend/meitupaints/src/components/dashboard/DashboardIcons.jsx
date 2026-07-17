@@ -291,6 +291,19 @@ const paths = {
       <circle cx="12" cy="9.5" r="2.4" />
     </>
   ),
+  cart: (
+    <>
+      <path d="M3 4h2l2.2 11.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 8H6" />
+      <circle cx="9.5" cy="20" r="1.4" />
+      <circle cx="17.5" cy="20" r="1.4" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M4 8h3l1.6-2.2h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+      <circle cx="12" cy="13.2" r="3.4" />
+    </>
+  ),
 };
 
 export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = "", style }) {

@@ -175,6 +175,7 @@ export const meituApi = createApi({
     "Insight",
     "AdminInsight",
     "DispatcherStock",
+    "DispatcherStockMovement",
     "DispatcherCatalog",
     "DispatcherReplenishmentOrder",
     "DealerInventory",
@@ -731,6 +732,16 @@ export const meituApi = createApi({
       ],
     }),
 
+    getDispatcherOrderStockCheck: builder.query({
+      query: (orderId) => ({ url: `/api/dispatchers/me/orders/${orderId}/stock-check` }),
+      transformResponse: getItem,
+      keepUnusedDataFor: 15,
+      providesTags: (_response, _error, orderId) => [
+        listTag("DispatcherStock"),
+        ...(orderId ? [{ type: "Order", id: orderId }] : []),
+      ],
+    }),
+
     getDispatcherOrdersArchive: builder.query({
       query: (params = {}) => ({
         url: "/api/dispatchers/me/orders/archive",
@@ -786,6 +797,11 @@ export const meituApi = createApi({
       query: (params = {}) => ({ url: "/api/dispatchers/me/stock", params }),
       keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
       providesTags: [listTag("DispatcherStock")],
+    }),
+
+    getMyDispatcherStockHistory: builder.query({
+      query: (params = {}) => ({ url: "/api/dispatchers/me/stock/history", params }),
+      providesTags: () => [listTag("DispatcherStockMovement")],
     }),
 
     getDispatcherReplenishmentCatalog: builder.query({
@@ -1382,6 +1398,16 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
     }),
 
+    updateFactoryDispatchPrep: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/factory/orders/${orderId}/dispatch-prep`,
+        method: "PATCH",
+        data: payload,
+      }),
+      transformResponse: getItem,
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
     getProformaInvoice: builder.query({
       query: (orderId) => ({ url: `/api/factory/orders/${orderId}/proforma` }),
       transformResponse: getItem,
@@ -1411,16 +1437,6 @@ export const meituApi = createApi({
       transformResponse: getItem,
       keepUnusedDataFor: REPORT_CACHE_SECONDS,
       providesTags: () => [listTag("Report"), { type: "Report", id: "ADMIN_ORDER_STATEMENT" }],
-    }),
-
-    getDealerOrderStatementReport: builder.query({
-      query: (params = {}) => ({
-        url: "/api/dealer/reports/order-statements",
-        params,
-      }),
-      transformResponse: getItem,
-      keepUnusedDataFor: REPORT_CACHE_SECONDS,
-      providesTags: () => [listTag("Report"), { type: "Report", id: "DEALER_ORDER_STATEMENT" }],
     }),
 
     getAdminInsights: builder.query({
@@ -1524,6 +1540,13 @@ export const meituApi = createApi({
       query: (painterId) => ({ url: `/api/admin/painters/${painterId}/id-card` }),
     }),
 
+    // Same short-lived-signed-URL pattern as above, for the painter's saved
+    // headshot - directly usable as an <img src> to show the real photo in
+    // the "already generated" preview.
+    getPainterIdCardPhotoUrl: builder.query({
+      query: (painterId) => ({ url: `/api/admin/painters/${painterId}/id-card-photo` }),
+    }),
+
     // The exact template artwork, unmodified - fetched once (lazily, on
     // first use of the photo-adjustment modal) and reused as the preview
     // backdrop so the "final card" preview is backed by the real design,
@@ -1624,12 +1647,14 @@ export const {
   useDeleteAdminOrderMutation,
   useGetDispatcherOrdersQuery,
   useGetDispatcherOrderQuery,
+  useGetDispatcherOrderStockCheckQuery,
   useGetDispatcherOrdersArchiveQuery,
   useVerifyDispatcherOrderMutation,
   useRejectDispatcherOrderMutation,
   useAmendDispatcherOrderMutation,
   useDispatchDispatcherOrderMutation,
   useGetMyDispatcherStockQuery,
+  useGetMyDispatcherStockHistoryQuery,
   useGetDispatcherReplenishmentCatalogQuery,
   useGetDispatcherReplenishmentOrdersQuery,
   useGetDispatcherReplenishmentOrderQuery,
@@ -1691,11 +1716,11 @@ export const {
   useMarkFactoryOrderDeliveredMutation,
   useRejectFactoryOrderMutation,
   useAmendFactoryOrderMutation,
+  useUpdateFactoryDispatchPrepMutation,
   useGetProformaInvoiceQuery,
   useLazyGetProformaInvoiceQuery,
   useIssueFactoryInvoiceMutation,
   useLazyGetAdminOrderStatementReportQuery,
-  useLazyGetDealerOrderStatementReportQuery,
   useGetAdminInsightsQuery,
   useGetAdminPointsCatalogProductsQuery,
   useGetAdminPointsCatalogProductQuery,
@@ -1711,6 +1736,7 @@ export const {
   usePromotePainterToTtpMutation,
   useGetPainterPointsQuery,
   useLazyGetPainterIdCardUrlQuery,
+  useLazyGetPainterIdCardPhotoUrlQuery,
   useLazyGetPainterIdCardTemplateQuery,
   useRegeneratePainterIdCardWithPhotoMutation,
   useSearchPaintersQuery,

@@ -486,6 +486,26 @@ const OrderSchema = new mongoose.Schema(
       remarks: { type: String, default: "", trim: true },
     },
 
+    // Working state for the factory's pre-dispatch checklist (Stock
+    // Available / Packing Complete / Proforma Invoice) and the driver
+    // details entered while preparing it - persisted so closing the order
+    // modal before clicking Dispatch doesn't lose progress and force the
+    // Proforma Invoice to be regenerated from scratch. Superseded by the
+    // `factory` fields above once the order actually dispatches.
+    dispatchPrep: {
+      stockConfirmed: { type: Boolean, default: false },
+      packingConfirmed: { type: Boolean, default: false },
+      driverName: { type: String, default: "", trim: true },
+      driverPhone: { type: String, default: "", trim: true },
+      vehicleNumber: { type: String, default: "", trim: true },
+      proformaGeneratedAt: { type: Date, default: null },
+      proformaGeneratedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+    },
+
     rejection: {
       reason: { type: String, default: "", trim: true },
       rejectedAt: { type: Date, default: null },

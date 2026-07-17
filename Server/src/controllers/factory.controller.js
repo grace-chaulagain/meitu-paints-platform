@@ -69,6 +69,15 @@ export const amendFactoryOrderController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, message: "Order amended.", item });
 });
 
+export const updateDispatchPrepController = asyncHandler(async (req, res) => {
+  const item = await factoryService.updateDispatchPrep({
+    orderId: req.params.orderId,
+    factoryUser: req.user,
+    patch: req.body,
+  });
+  res.status(200).json({ ok: true, item });
+});
+
 export const getProformaInvoiceController = asyncHandler(async (req, res) => {
   const item = await factoryService.getProformaInvoice({
     orderId: req.params.orderId,

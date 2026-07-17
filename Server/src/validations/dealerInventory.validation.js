@@ -33,6 +33,7 @@ export const inventoryHistoryQuerySchema = z
     type: z.enum(["ALL", "PURCHASE", "SALE", "RETURN", "ADJUSTMENT", "TRANSFER_IN", "TRANSFER_OUT"]).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
+    sort: z.enum(["asc", "desc"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })

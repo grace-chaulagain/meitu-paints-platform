@@ -177,13 +177,14 @@ export const getMyInventoryMovementsController = asyncHandler(async (req, res) =
 });
 
 export const getMyInventoryHistoryController = asyncHandler(async (req, res) => {
-  const { q, type, from, to, page, limit } = req.query || {};
+  const { q, type, from, to, sort, page, limit } = req.query || {};
   const out = await dealerInventoryService.getDealerStockHistory({
     dealerId: req.user.dealerId,
     q,
     type,
     from,
     to,
+    sort,
     page,
     limit,
   });

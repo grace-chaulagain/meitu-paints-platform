@@ -165,10 +165,13 @@ function QtyStepper({ value, onChange, selected = false }) {
 // Compact inline sibling to AppleDropdown (same PopoverListMenu portal-popover
 // underneath, same checkmark-on-selected-row treatment) sized to sit inline
 // inside a single variant row instead of a toolbar - AppleDropdown's own
-// 44px-tall pill trigger is too tall for this context.
-function SizePickerDropdown({ value, options, onChange, activeQuantity = 0 }) {
+// 44px-tall pill trigger is too tall for this context. The trigger itself
+// only ever shows the selected size + a chevron - which size is queued and
+// how much is a decision made inside the popover, not a number glued onto
+// the closed pill (that read as a stray "20L 1", easy to mistake for part
+// of the size itself).
+function SizePickerDropdown({ value, options, onChange }) {
   const selectedOption = options.find((option) => option.key === value);
-  const qty = Number(activeQuantity || 0);
 
   return (
     <PopoverListMenu
@@ -188,7 +191,6 @@ function SizePickerDropdown({ value, options, onChange, activeQuantity = 0 }) {
         >
           <span>{selectedOption?.label}</span>
           <DashboardIcon name="chevron" size={10} strokeWidth={2.4} style={{ transform: "rotate(90deg)" }} />
-          {qty > 0 ? <span className="dealer-size-picker-qty">{qty}</span> : null}
         </button>
       )}
       renderRow={(option, { isSelected, isHighlighted, onClick, onMouseEnter }) => (
@@ -202,7 +204,10 @@ function SizePickerDropdown({ value, options, onChange, activeQuantity = 0 }) {
           className={`apple-dropdown-menu-row ${isHighlighted ? "is-highlighted" : ""}`}
         >
           <span>{option.label}</span>
-          {isSelected ? <DashboardIcon name="checkmark" size={13} strokeWidth={2.4} style={{ color: "var(--color-azure, #0071e3)" }} /> : null}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {option.quantity > 0 ? <span className="dealer-size-picker-row-qty">{option.quantity} in cart</span> : null}
+            {isSelected ? <DashboardIcon name="checkmark" size={13} strokeWidth={2.4} style={{ color: "var(--color-azure, #0071e3)" }} /> : null}
+          </span>
         </button>
       )}
     />
@@ -219,7 +224,10 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onS
   // getTierLabel falls back to "—" when there's no tier yet (nothing in the
   // cart at this size) - that placeholder isn't a real tier, so it shouldn't
   // render as a badge at all, only an actual tier or the "Flat" label should.
-  const showTier = Boolean(tier) && tierLabel && tierLabel !== "Flat";
+  // List view (identified by sizeOptions being passed - only its call site
+  // supplies that prop) never shows this badge at all - the bulk-pricing
+  // range ("1–80L") reads as visual noise glued onto the size picker there.
+  const showTier = Boolean(tier) && tierLabel && tierLabel !== "Flat" && !sizeOptions;
 
   return (
     <div className={`dealer-variant-row ${selected ? "selected" : ""}`} title={product.sku}>
@@ -230,7 +238,7 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onS
       <div className="dealer-variant-copy">
         <div className="dealer-variant-pack">
           {sizeOptions && sizeOptions.length > 1 ? (
-            <SizePickerDropdown value={product.sku} options={sizeOptions} onChange={onSizeChange} activeQuantity={qty} />
+            <SizePickerDropdown value={product.sku} options={sizeOptions} onChange={onSizeChange} />
           ) : (
             formatPack(product.pack)
           )}
@@ -262,7 +270,11 @@ function ProductFamilyCard({ family, quantities, cartBySku, onQtyChange, layout 
   const activeProduct = sortedItems.find((item) => item.sku === activeSku) || sortedItems[0];
 
   if (layout === "list") {
-    const sizeOptions = sortedItems.map((item) => ({ key: item.sku, label: formatPack(item.pack) }));
+    const sizeOptions = sortedItems.map((item) => ({
+      key: item.sku,
+      label: formatPack(item.pack),
+      quantity: Number(quantities[item.sku] || 0),
+    }));
 
     return (
       <Surface padding={14} className={`dealer-product-row dash-fade-up ${selected ? "selected" : ""}`}>
@@ -1246,11 +1258,17 @@ export default function DealerCatalogPage() {
           outline:2px solid rgba(0,113,227,.36);
           outline-offset:2px;
         }
-        .dealer-size-picker-qty{
-          margin-left:auto;
-          padding-left:4px;
+        .dealer-size-picker-row-qty{
+          display:inline-flex;
+          align-items:center;
+          height:20px;
+          padding:0 8px;
+          border-radius:999px;
+          background:rgba(0,113,227,.1);
           color:var(--color-azure, #0071e3);
+          font-size:11px;
           font-weight:800;
+          white-space:nowrap;
         }
 
         .dealer-catalog-category-filter .apple-dropdown-menu-trigger{

@@ -97,6 +97,31 @@ function formatPhones(phones) {
   return Array.isArray(phones) && phones.length ? phones.join(", ") : "No phone on file";
 }
 
+// ID cards only exist for TTP painters (auto-generated, blank, on promotion -
+// see painter.service.js:promotePainterToTtp). idCardPhotoAddedAt is the one
+// signal for a real, downloadable card (see PainterIdCardModal.jsx), so that
+// alone decides "Ready" vs "Photo Needed" - RTP/Unclassified painters have no
+// ID card concept at all, hence no badge.
+function painterIdCardStatus(painter) {
+  if (painter.type !== "TTP") return null;
+  return painter.idCardPhotoAddedAt
+    ? { tone: "positive", icon: "checkmark", label: "ID Ready" }
+    : { tone: "caution", icon: "camera", label: "Photo Needed" };
+}
+
+function IdCardStatusPill({ painter, style }) {
+  const status = painterIdCardStatus(painter);
+  if (!status) return null;
+  return (
+    <Pill tone={status.tone} size="small" style={style}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <DashboardIcon name={status.icon} size={10} strokeWidth={3} />
+        {status.label}
+      </span>
+    </Pill>
+  );
+}
+
 function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
   return (
     <ListRow onClick={() => onOpen(painter)}>
@@ -108,6 +133,7 @@ function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
             {painter.name || "Unnamed Painter"}
           </span>
           <Pill tone={painterTypeTone(painter.type)} size="small">{painterTypeLabel(painter.type)}</Pill>
+          <IdCardStatusPill painter={painter} />
         </div>
         <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
           {formatPhones(painter.phones)}
@@ -198,6 +224,7 @@ function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
           {painter.address || "No address on file"}
         </div>
         <div className="painter-grid-phones">{formatPhones(painter.phones)}</div>
+        <IdCardStatusPill painter={painter} style={{ justifySelf: "start" }} />
       </div>
 
       <div className="painter-grid-actions" onClick={(event) => event.stopPropagation()}>

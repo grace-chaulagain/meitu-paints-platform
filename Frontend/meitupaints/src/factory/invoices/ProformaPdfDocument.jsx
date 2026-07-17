@@ -1,17 +1,19 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { amountInWords, compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.js";
+import { MeituLogoMark } from "../../utils/pdfBrand.jsx";
 
 const MEITU_PAN = "606572561";
 
-// Mirrors FactoryInvoiceModal.jsx's on-screen layout, but declared with
-// react-pdf's flexbox primitives instead of raw HTML/CSS. Unlike the earlier
-// hand-drawn jsPDF version, wrapping and row height are handled by the same
-// Yoga (flexbox) engine React Native uses - a long dealer name or email
-// wraps and pushes sibling rows down automatically, instead of needing each
-// wrapped-line count computed and accounted for by hand.
+// Declared with react-pdf's flexbox primitives instead of raw HTML/CSS.
+// Unlike the earlier hand-drawn jsPDF version, wrapping and row height are
+// handled by the same Yoga (flexbox) engine React Native uses - a long
+// dealer name or email wraps and pushes sibling rows down automatically,
+// instead of needing each wrapped-line count computed and accounted for by
+// hand.
 const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: "Helvetica", fontSize: 10, color: "#111111" },
-  header: { textAlign: "center", position: "relative" },
+  header: { textAlign: "center", alignItems: "center", position: "relative" },
+  logo: { marginBottom: 6 },
   panLabel: {
     position: "absolute",
     top: 2,
@@ -42,7 +44,7 @@ const styles = StyleSheet.create({
   table: { marginTop: 16, borderWidth: 1, borderColor: "#cccccc", borderRadius: 4 },
   tableHeaderRow: {
     flexDirection: "row",
-    columnGap: 8,
+    columnGap: 6,
     backgroundColor: "#f2f2f2",
     borderBottomWidth: 1,
     borderBottomColor: "#cccccc",
@@ -51,18 +53,22 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: "row",
-    columnGap: 8,
+    columnGap: 6,
     borderTopWidth: 1,
     borderTopColor: "#e2e2e2",
     paddingVertical: 5,
     paddingHorizontal: 10,
   },
   headerLabel: { fontSize: 8, fontWeight: 700, color: "#666666", textTransform: "uppercase" },
-  colProduct: { flex: 2.4, fontSize: 9.5, fontWeight: 700 },
-  colQty: { flex: 0.6, fontSize: 9.5, textAlign: "right" },
-  colUnit: { flex: 0.7, fontSize: 9 },
-  colRate: { flex: 1, fontSize: 9.5, textAlign: "right" },
-  colAmount: { flex: 1.2, fontSize: 9.5, fontWeight: 700, textAlign: "right" },
+  colSN: { width: 18, fontSize: 9, textAlign: "center", color: "#666666" },
+  // Product gets a larger share of the row (long paint names wrap less),
+  // the four numeric/short-text columns give up a little width each to
+  // compensate - same total flex as before, just redistributed.
+  colProduct: { flex: 2.9, fontSize: 9.5, fontWeight: 700 },
+  colQty: { flex: 0.5, fontSize: 9.5, textAlign: "right" },
+  colUnit: { flex: 0.6, fontSize: 9, paddingLeft: 12 },
+  colRate: { flex: 0.85, fontSize: 9.5, textAlign: "right" },
+  colAmount: { flex: 1.05, fontSize: 9.5, fontWeight: 700, textAlign: "right" },
   amountInWordsRow: {
     marginTop: 12,
     paddingTop: 8,
@@ -114,14 +120,17 @@ const styles = StyleSheet.create({
     color: "#444444",
   },
   footer: {
-    marginTop: 18,
-    paddingTop: 10,
+    position: "absolute",
+    bottom: 24,
+    left: 36,
+    right: 36,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: "#dddddd",
-    fontSize: 8.5,
-    color: "#888888",
     textAlign: "center",
   },
+  footerText: { fontSize: 8.5, color: "#888888" },
+  footerId: { marginTop: 2, fontSize: 7, color: "#aaaaaa" },
 });
 
 function InfoLine({ label, value }) {
@@ -145,6 +154,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
         <Text style={styles.panLabel}>PAN: {MEITU_PAN}</Text>
+        <MeituLogoMark width={38} style={styles.logo} />
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>
         <Text style={styles.companyAddress}>Madhyapur Thimi-08, Bhaktapur</Text>
         <Text style={styles.docTitle}>PROFORMA INVOICE</Text>
@@ -156,13 +166,13 @@ function InvoicePage({ invoice, proforma, proformaId }) {
             <InfoLine label="Company Name" value={invoice.dealer?.companyName} />
             <InfoLine label="Phone" value={invoice.dealer?.phone} />
             <InfoLine label="Email" value={invoice.dealer?.email} />
-            <InfoLine label="Address" value={invoice.dealer?.address} />
             <InfoLine label="VAT / PAN No." value={invoice.dealer?.panVat} />
           </View>
           <View style={styles.infoColRight}>
             <InfoLine label="Proforma ID" value={proformaId} />
             <InfoLine label="Date" value={compactDateWithYear(invoice.generatedAt)} />
             <InfoLine label="Payment Method" value={invoice.payment?.method} />
+            <InfoLine label="Address" value={invoice.dealer?.address} />
           </View>
         </View>
       </View>
@@ -173,6 +183,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
 
       <View style={styles.table} wrap>
         <View style={styles.tableHeaderRow} fixed>
+          <Text style={[styles.headerLabel, styles.colSN]}>SN</Text>
           <Text style={[styles.headerLabel, styles.colProduct]}>PRODUCT</Text>
           <Text style={[styles.headerLabel, styles.colQty]}>QTY</Text>
           <Text style={[styles.headerLabel, styles.colUnit]}>UNIT</Text>
@@ -181,6 +192,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
         </View>
         {proforma.lines.map((item, index) => (
           <View key={item.sku || item.name || index} style={styles.tableRow} wrap={false}>
+            <Text style={styles.colSN}>{index + 1}</Text>
             <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
             <Text style={styles.colQty}>{item.quantity ?? "—"}</Text>
             <Text style={styles.colUnit}>{item.unit || item.packLabel || item.variantLabel || "—"}</Text>
@@ -274,9 +286,12 @@ function InvoicePage({ invoice, proforma, proformaId }) {
         <Text>Receiver ____________</Text>
       </View>
 
-      <Text style={styles.footer} fixed>
-        Computer-generated proforma · Not a tax invoice · {compactDateWithYear(new Date())}
-      </Text>
+      <View style={styles.footer} fixed>
+        <Text style={styles.footerText}>
+          Computer-generated proforma · Not a tax invoice · {compactDateWithYear(new Date())}
+        </Text>
+        <Text style={styles.footerId}>PI ID: {proformaId}</Text>
+      </View>
     </Page>
   );
 }

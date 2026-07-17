@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
+import { DashboardUIStyles } from "../../components/dashboard/DashboardUI.jsx";
 import {
   NOTIFICATION_CATEGORIES,
   useNotifications,
@@ -14,6 +15,7 @@ const SECTIONS = {
   DEALERS: "dealers",
   STOCK: "stock",
   ORDER_FROM_FACTORY: "orderFromFactory",
+  CART: "cart",
   ORDER_HISTORY: "orderHistory",
   NOTIFICATIONS: "notifications",
   PROFILE: "profile",
@@ -72,6 +74,10 @@ export default function DispatcherDashboardPage() {
 
     if (path.startsWith("/dispatcher/dashboard/order/history")) {
       return SECTIONS.ORDER_HISTORY;
+    }
+
+    if (path.startsWith("/dispatcher/dashboard/order/cart")) {
+      return SECTIONS.CART;
     }
 
     if (path.startsWith("/dispatcher/dashboard/order")) {
@@ -138,15 +144,23 @@ export default function DispatcherDashboardPage() {
       },
       {
         key: SECTIONS.ORDER_FROM_FACTORY,
-        title: "Order",
+        title: "My Order",
         subtitle: "Replenish your stock",
         badge: "",
         icon: "package",
         href: "/dispatcher/dashboard/order",
       },
       {
+        key: SECTIONS.CART,
+        title: "My Cart",
+        subtitle: "Review before you submit",
+        badge: "",
+        icon: "cart",
+        href: "/dispatcher/dashboard/order/cart",
+      },
+      {
         key: SECTIONS.ORDER_HISTORY,
-        title: "Order History",
+        title: "My Order History",
         subtitle: "Track factory orders",
         badge: "",
         icon: "history",
@@ -191,7 +205,12 @@ export default function DispatcherDashboardPage() {
       {
         label: "Inventory",
         items: navigationItems.filter((item) =>
-          [SECTIONS.STOCK, SECTIONS.ORDER_FROM_FACTORY, SECTIONS.ORDER_HISTORY].includes(item.key),
+          [
+            SECTIONS.STOCK,
+            SECTIONS.ORDER_FROM_FACTORY,
+            SECTIONS.CART,
+            SECTIONS.ORDER_HISTORY,
+          ].includes(item.key),
         ),
       },
       {
@@ -220,6 +239,7 @@ export default function DispatcherDashboardPage() {
       activeKey={activeSection}
       onNavigate={(item) => navigate(item.href)}
     >
+      <DashboardUIStyles />
       <Outlet />
     </DashboardShell>
   );

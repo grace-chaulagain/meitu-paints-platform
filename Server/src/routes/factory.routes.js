@@ -11,6 +11,7 @@ import {
   markDeliveredController,
   markOutForDeliveryController,
   rejectFactoryOrderController,
+  updateDispatchPrepController,
 } from "../controllers/factory.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
@@ -22,6 +23,7 @@ import {
 import {
   factoryAmendBodySchema,
   factoryDeliveryBodySchema,
+  factoryDispatchPrepBodySchema,
   factoryOrderListQuerySchema,
   factoryOrderParamsSchema,
   factoryRejectBodySchema,
@@ -43,6 +45,12 @@ router.get(
   "/orders/:orderId",
   validateParams(factoryOrderParamsSchema),
   getFactoryOrderController,
+);
+router.patch(
+  "/orders/:orderId/dispatch-prep",
+  validateParams(factoryOrderParamsSchema),
+  validateBody(factoryDispatchPrepBodySchema),
+  updateDispatchPrepController,
 );
 router.post(
   "/orders/:orderId/mark-out-for-delivery",

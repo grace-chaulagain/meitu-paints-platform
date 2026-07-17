@@ -59,7 +59,6 @@ import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
 import DealerDashboardPage from "./dealer/DealerDashboardPage.jsx";
 import DealerCatalogPage from "./dealer/DealerCatalogPage.jsx";
 import DealerCartPage from "./dealer/DealerCartPage.jsx";
-import DealerOrderReportsPage from "./dealer/DealerOrderReportsPage.jsx";
 import DealerOrdersPage from "./dealer/DealerOrdersPage.jsx";
 import DealerOrderDetailPage from "./dealer/DealerOrderDetailPage.jsx";
 import DealerInventoryPage from "./dealer/inventory/DealerInventoryPage.jsx";
@@ -77,6 +76,7 @@ import AdminProductsPage from "./admin/catalog/AdminProductsPage.jsx";
 
 import DispatcherOverviewPage from "./dispatcher/dashboard/DispatcherOverviewPage.jsx";
 import DispatcherOrdersPage from "./dispatcher/dashboard/orders/DispatcherOrdersPage.jsx";
+import DispatcherOrderDetailPage from "./dispatcher/dashboard/orders/DispatcherOrderDetailPage.jsx";
 import DispatcherDealersPage from "./dispatcher/dashboard/dealers/DispatcherDealersPage.jsx";
 import DispatcherDealerProfilePage from "./dispatcher/dashboard/dealers/DispatcherDealerProfilePage.jsx";
 import DispatcherDealerOrdersPage from "./dispatcher/dashboard/dealers/DispatcherDealerOrdersPage.jsx";
@@ -322,16 +322,6 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/dealer/orders/reports",
-        element: (
-          <RequireDealer>
-            <DealerDashboardPage>
-              <DealerOrderReportsPage />
-            </DealerDashboardPage>
-          </RequireDealer>
-        ),
-      },
-      {
         path: "/dealer/inventory",
         element: (
           <RequireDealer>
@@ -463,6 +453,10 @@ const router = createBrowserRouter([
           {
             path: "orders",
             element: <DispatcherOrdersPage />,
+          },
+          {
+            path: "orders/:orderId",
+            element: <DispatcherOrderDetailPage />,
           },
           {
             path: "dealers",

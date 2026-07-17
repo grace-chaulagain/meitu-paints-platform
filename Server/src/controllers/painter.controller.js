@@ -61,6 +61,14 @@ export const getPainterIdCardDownloadUrlController = asyncHandler(async (req, re
   res.status(200).json({ ok: true, url });
 });
 
+// Admin: signed, directly-embeddable URL for the painter's saved headshot -
+// powers the "already generated" card preview so it shows the real photo.
+export const getPainterIdCardPhotoUrlController = asyncHandler(async (req, res) => {
+  const { painterId } = req.params;
+  const url = await painterService.getPainterIdCardPhotoUrl(painterId);
+  res.status(200).json({ ok: true, url });
+});
+
 // Admin: re-renders the ID card with an uploaded headshot composited in.
 // The photo (req.file, multer memoryStorage - never touches disk) is used
 // once to build the PDF and then discarded; see the service function's own

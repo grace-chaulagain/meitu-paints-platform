@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { GhostButton, Pill, PrimaryButton } from "../../../components/dashboard/DashboardUI.jsx";
+import { GhostButton, Pill, PrimaryButton, Spinner } from "../../../components/dashboard/DashboardUI.jsx";
 
 const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
 
@@ -232,12 +232,19 @@ export default function AdminDecisionModal({
                   opacity: isConfirmBlocked ? 0.55 : 1,
                 }}
               >
-                <DashboardIcon name="trash" size={14} strokeWidth={2} />
+                {busy ? <Spinner size={14} /> : <DashboardIcon name="trash" size={14} strokeWidth={2} />}
                 {busy ? "Processing…" : confirmLabel}
               </button>
             ) : (
-              <PrimaryButton icon="checkmark" onClick={onConfirm} disabled={isConfirmBlocked}>
-                {busy ? "Processing…" : confirmLabel}
+              <PrimaryButton icon={busy ? "" : "checkmark"} onClick={onConfirm} disabled={isConfirmBlocked}>
+                {busy ? (
+                  <>
+                    <Spinner size={14} />
+                    Processing…
+                  </>
+                ) : (
+                  confirmLabel
+                )}
               </PrimaryButton>
             )}
           </div>

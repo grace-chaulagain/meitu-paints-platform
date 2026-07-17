@@ -485,6 +485,7 @@ export async function getDealerStockHistory({
   type = "ALL",
   from = null,
   to = null,
+  sort = "desc",
   page = 1,
   limit = 50,
 } = {}) {
@@ -523,7 +524,7 @@ export async function getDealerStockHistory({
 
   const [items, total] = await Promise.all([
     InventoryMovement.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: sort === "asc" ? 1 : -1 })
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "productId", select: "name sku code pack images category" })

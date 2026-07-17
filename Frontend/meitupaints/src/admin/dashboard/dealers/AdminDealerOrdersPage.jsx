@@ -5,7 +5,7 @@ import {
   useGetAdminScopedOrdersQuery,
   useLazyGetAdminScopedOrderQuery,
 } from "../../../redux/api/meituApi.js";
-import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.js";
+import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
   DashboardUIStyles,

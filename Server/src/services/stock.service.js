@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 import Product from "../models/Product.model.js";
-import {
+import Order, {
   STOCK_CHECK_STATUS,
   STOCK_RESERVATION_STATUS,
 } from "../models/Order.model.js";
@@ -983,11 +983,43 @@ export async function listStock({
   };
 }
 
+// Product.stock.reservedQuantity is only ever kept as an aggregate counter
+// (incremented/decremented atomically as orders reserve/release) - it has
+// no memory of which orders make it up. This reconstructs that list on
+// demand from the orders themselves, purely for display (the "who's
+// holding this" question a factory user asks before adjusting stock),
+// rather than adding order-tracking bookkeeping to every reservation write.
+async function listReservingOrders(productId) {
+  const orders = await Order.find({
+    "stockReservation.status": STOCK_RESERVATION_STATUS.RESERVED,
+    "stockReservation.items.productId": productId,
+  })
+    .select("orderNumber status dealerSnapshot.companyName stockReservation.items")
+    .lean();
+
+  return orders
+    .map((order) => {
+      const item = (order.stockReservation?.items || []).find(
+        (entry) => String(entry.productId) === String(productId),
+      );
+      return {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        dealerName: order.dealerSnapshot?.companyName || "",
+        reservedQuantity: Number(item?.quantity || 0),
+      };
+    })
+    .filter((entry) => entry.reservedQuantity > 0)
+    .sort((a, b) => b.reservedQuantity - a.reservedQuantity);
+}
+
 export async function getStockDetail({ productId }) {
   ensureObjectId(productId, "productId");
   const product = await Product.findById(productId).lean();
   if (!product) throw new ApiError(404, "Product not found");
-  return stockItem(product);
+  const reservations = await listReservingOrders(productId);
+  return { ...stockItem(product), reservations };
 }
 
 export async function getStockHistory({ productId, page = 1, limit = 50, onlyMovements = "" }) {
@@ -1024,6 +1056,7 @@ export async function listStockHistory({
   dateFrom = "",
   dateTo = "",
   onlyMovements = "",
+  sort = "desc",
   page = 1,
   limit = 80,
 } = {}) {
@@ -1077,7 +1110,7 @@ export async function listStockHistory({
 
   const [items, total] = await Promise.all([
     StockAdjustmentLog.find(query)
-      .sort({ changedAt: -1 })
+      .sort({ changedAt: sort === "asc" ? 1 : -1 })
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "changedBy", select: "username email role" })

@@ -388,6 +388,7 @@ export default function DealerCartPage() {
                   value={paymentMethod}
                   options={PAYMENT_METHODS}
                   placeholder="Select payment method"
+                  critical={paymentRequired}
                   onChange={(value) => {
                     setPaymentMethod(value);
                     setPaymentPrompted(false);

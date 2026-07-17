@@ -1,8 +1,68 @@
+import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "../components/dashboard/DashboardIcons.jsx";
 import { Surface } from "../components/dashboard/DashboardUI.jsx";
 
 const MODAL_EASE_OUT = [0.23, 1, 0.32, 1];
+
+// Collapsed-by-default section for secondary detail (audit trails, reserved
+// orders, full item lists) that would otherwise compete with the primary
+// content for attention every time a modal opens. `trailing` renders outside
+// the collapse (e.g. a status Pill) so at-a-glance context survives even
+// while closed - only the drill-down detail itself is hidden.
+export function Disclosure({ label, trailing = null, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          aria-expanded={open}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            border: "none",
+            background: "transparent",
+            padding: "2px 0",
+            color: hovered ? "var(--color-ink, #1d1d1f)" : "var(--color-graphite, #707070)",
+            fontSize: 12,
+            fontWeight: 650,
+            cursor: "pointer",
+            transition: "color .14s ease",
+          }}
+        >
+          <DashboardIcon
+            name="chevron"
+            size={12}
+            strokeWidth={2.4}
+            style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .18s var(--ease-out, ease)" }}
+          />
+          {label}
+        </button>
+        {trailing}
+      </div>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: MODAL_EASE_OUT }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={{ paddingTop: 12 }}>{children}</div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function CloseButton({ onClick }) {
   return (

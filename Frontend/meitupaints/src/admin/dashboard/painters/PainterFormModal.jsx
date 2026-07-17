@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GhostButton, PrimaryButton, SectionHeader, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import { GhostButton, PrimaryButton, SectionHeader, Spinner, Surface } from "../../../components/dashboard/DashboardUI.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 
 function fieldInputStyle() {
@@ -168,7 +168,7 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
             onClick={() => onSave({ name: form.name.trim(), phones: cleanedPhones, address: form.address.trim(), notes: form.notes.trim() })}
             disabled={!canSave}
           >
-            {saving ? "Saving…" : "Save Painter"}
+            {saving ? <Spinner size={13} /> : null} {saving ? "Saving…" : "Save Painter"}
           </PrimaryButton>
         </div>
       </Surface>
