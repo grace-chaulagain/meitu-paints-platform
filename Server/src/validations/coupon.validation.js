@@ -52,25 +52,22 @@ export const couponBatchListQuerySchema = z
   })
   .strict();
 
-// painterId is required for TTP redemptions; for RTP it's either a
-// resolved existing/newly-created painter, or omitted entirely for a
-// cash-only redemption with no linked profile. painterType itself is
+// painterId is always optional, for both TTP and RTP - a dealer can
+// complete a cash-only redemption without linking a painter profile
+// regardless of type (see resolvePainterForRedemption in
+// coupon.service.js, the sole place that decides whether a given
+// combination skips points accrual). painterType itself is
 // nullable/omittable too - the dealer-facing flow sends neither when the
-// coupon is already expired (always cash-only regardless, see
-// coupon.service.js:redeemCoupon), so this schema only needs to validate
-// the shape when a painter selection IS present; whether one is actually
-// required for a given coupon is a service-layer decision this schema
-// can't make (it hasn't looked the coupon up yet).
+// coupon is already expired (always cash-only regardless), so this schema
+// only needs to validate the shape, not whether a painter selection is
+// "required" - that's a service-layer decision this schema can't make (it
+// hasn't looked the coupon up yet).
 export const redeemCouponBodySchema = z
   .object({
     painterType: z.enum(["TTP", "RTP"]).nullable().optional(),
     painterId: objectIdSchema.nullable().optional(),
   })
-  .strict()
-  .refine((value) => !value.painterType || value.painterType === "RTP" || Boolean(value.painterId), {
-    message: "painterId is required for TTP redemptions",
-    path: ["painterId"],
-  });
+  .strict();
 
 export const couponAttemptQuerySchema = z
   .object({

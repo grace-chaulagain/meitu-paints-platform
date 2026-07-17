@@ -141,7 +141,14 @@ function assertPainterEligible(painter) {
 // its errors surface immediately.
 async function resolvePainterForRedemption({ painterType, painterId, couponType }) {
   if (painterType === "TTP") {
-    if (!painterId) throw new ApiError(400, "painterId is required for TTP redemptions");
+    if (!painterId) {
+      // Dealer knows the painter is TTP but doesn't have (or doesn't want
+      // to look up) their Painter ID - cash-only, the same escape hatch
+      // already offered on the RTP side. painterType is still recorded
+      // (a separable fact from "is there a linked profile"), only
+      // painterId and points accumulation are skipped.
+      return { painterId: null, painterType: "TTP", skipPoints: true, skipReason: POINTS_SKIP_REASON.TTP_NO_ID_CASH_ONLY };
+    }
     const painter = await Painter.findById(painterId);
     if (!painter) throw new ApiError(404, "Painter not found", { code: "PAINTER_NOT_FOUND" });
     if (painter.type && painter.type !== "TTP") {

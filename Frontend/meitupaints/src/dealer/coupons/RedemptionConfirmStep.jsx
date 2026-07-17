@@ -6,11 +6,13 @@ function formatMoney(value) {
 }
 
 export default function RedemptionConfirmStep({ coupon, selection, onConfirm, onBack, submitting, error }) {
-  // No painterType at all (not even "RTP") means the painter-selection
-  // wizard was skipped entirely - the new streamlined path for an expired
-  // coupon, which is always cash-only regardless of who's selected, so
-  // there's nothing meaningful to show in a "Painter" row at all here.
-  const hasPainterInfo = Boolean(selection.painterId) || selection.painterType === "RTP";
+  // No painterType at all means the painter-selection wizard was skipped
+  // entirely - the streamlined path for an expired coupon, which is always
+  // cash-only regardless of who's selected, so there's nothing meaningful
+  // to show in a "Painter" row at all here. Any explicit type (TTP or RTP)
+  // is worth showing even without a linked painterId - the dealer still
+  // told us which kind of painter this cash-only redemption is for.
+  const hasPainterInfo = Boolean(selection.painterId) || Boolean(selection.painterType);
   const painterLine = selection.painterId
     ? `${selection.painterName} (${selection.painterType})`
     : "Cash only — no painter profile recorded";

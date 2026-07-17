@@ -13,6 +13,7 @@ import {
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
 import PainterTypeStep from "./PainterTypeStep.jsx";
+import TtpChoiceStep from "./TtpChoiceStep.jsx";
 import TtpPainterSearchStep from "./TtpPainterSearchStep.jsx";
 import RtpChoiceStep from "./RtpChoiceStep.jsx";
 import RtpPainterSearchStep from "./RtpPainterSearchStep.jsx";
@@ -151,7 +152,7 @@ export default function CouponRedeemPage() {
   if (alreadyRedeemedNow) {
     const painterLine = selection.painterId
       ? `Painter: ${selection.painterName}`
-      : selection.painterType === "RTP"
+      : selection.painterType
         ? "Cash-only redemption — no painter profile recorded"
         : "";
     return (
@@ -287,7 +288,16 @@ export default function CouponRedeemPage() {
                 return;
               }
               setSelection({ ...EMPTY_SELECTION, painterType });
-              pushStep(painterType === "TTP" ? "ttpSearch" : "rtpChoice");
+              pushStep(painterType === "TTP" ? "ttpChoice" : "rtpChoice");
+            }}
+          />
+        ) : step === "ttpChoice" ? (
+          <TtpChoiceStep
+            onBack={popStep}
+            onChooseLookup={() => pushStep("ttpSearch")}
+            onChooseCashOnly={() => {
+              setSelection({ painterType: "TTP", painterId: null, painterName: null });
+              pushStep("confirm");
             }}
           />
         ) : step === "ttpSearch" ? (

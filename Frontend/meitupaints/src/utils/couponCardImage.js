@@ -11,8 +11,15 @@ import greenBackSvg from "../assets/coupons/green-back.svg?raw";
 // Backs carry no per-coupon data (verified against the source templates -
 // no placeholder rect), so they're exported once per batch, not per coupon.
 
-const CARD_WIDTH = 660;
-const CARD_HEIGHT = 1060;
+// Exported so other card consumers (e.g. couponPrintPdf.jsx) size their
+// output from the same numbers instead of re-deriving/hardcoding a
+// possibly-drifting copy.
+export const CARD_WIDTH = 660;
+export const CARD_HEIGHT = 1060;
+// The 660x1060px card is deliberately bleed-accurate to 56.496x90.736mm
+// (see comment above) - this is the implied DPI that relationship pins
+// down, used to convert the pixel card size to PDF points elsewhere.
+export const CARD_DPI = CARD_WIDTH / (56.496 / 25.4);
 
 // Coordinates read directly off the front templates (identical between
 // Gold and Green - only the gradient/title paths differ) and confirmed via

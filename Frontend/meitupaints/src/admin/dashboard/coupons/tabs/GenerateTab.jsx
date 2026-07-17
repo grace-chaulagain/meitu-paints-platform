@@ -15,7 +15,16 @@ import {
 } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { downloadCouponPrintAssets } from "../../../../utils/downloadCouponPrintAssets.js";
-import { couponTypeLabel, exportProgressLabel, exportProgressPercent, formatDateTime, formatMoney } from "../couponFormatting.js";
+import { downloadCouponPrintPdf } from "../../../../utils/couponPrintPdf.jsx";
+import {
+  couponTypeLabel,
+  exportProgressLabel,
+  exportProgressPercent,
+  formatDateTime,
+  formatMoney,
+  pdfExportProgressLabel,
+  pdfExportProgressPercent,
+} from "../couponFormatting.js";
 
 // This tab is a deliberate visual island - a "print bureau" for minting
 // coupon batches, built entirely from scratch (no Surface/Pill/AppleDropdown/
@@ -207,7 +216,10 @@ export default function GenerateTab({ onToast }) {
   const [formError, setFormError] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmError, setConfirmError] = useState("");
-  const [exporting, setExporting] = useState(false);
+  // null when idle, otherwise which export is running - distinguishes the
+  // loose SVG/PNG ZIP from the single print-ready PDF so the progress bar
+  // below can pick the matching percent/label function for each.
+  const [exportKind, setExportKind] = useState(null);
   const [exportProgress, setExportProgress] = useState(null);
   const [rateOpen, setRateOpen] = useState(false);
 
@@ -288,7 +300,7 @@ export default function GenerateTab({ onToast }) {
   }
 
   async function handleExport() {
-    setExporting(true);
+    setExportKind("zip");
     setExportProgress({ phase: "render", done: 0, total: batch.coupons.length });
     try {
       await downloadCouponPrintAssets({
@@ -297,7 +309,22 @@ export default function GenerateTab({ onToast }) {
         onProgress: setExportProgress,
       });
     } finally {
-      setExporting(false);
+      setExportKind(null);
+      setExportProgress(null);
+    }
+  }
+
+  async function handleExportPdf() {
+    setExportKind("pdf");
+    setExportProgress({ phase: "render", done: 0, total: batch.coupons.length });
+    try {
+      await downloadCouponPrintPdf({
+        coupons: batch.coupons,
+        batchId: batch.batchId,
+        onProgress: setExportProgress,
+      });
+    } finally {
+      setExportKind(null);
       setExportProgress(null);
     }
   }
@@ -702,23 +729,36 @@ export default function GenerateTab({ onToast }) {
             <Glyph name="check" size={26} />
           </motion.div>
           <div className="composer-success-title">{batch.coupons.length} coupon{batch.coupons.length === 1 ? "" : "s"} printed</div>
-          <div className="composer-success-subtitle">SVG + PNG per coupon, plus a manifest.csv — ready for the print vendor.</div>
+          <div className="composer-success-subtitle">
+            One print-ready PDF, or loose SVG + PNG per coupon — both come with a manifest.csv for the print vendor.
+          </div>
 
-          {exporting ? (
+          {exportKind ? (
             <div className="composer-export-progress">
               <div className="composer-export-track">
-                <div className="composer-export-fill" style={{ width: `${exportProgressPercent(exportProgress)}%` }} />
+                <div
+                  className="composer-export-fill"
+                  style={{
+                    width: `${exportKind === "pdf" ? pdfExportProgressPercent(exportProgress) : exportProgressPercent(exportProgress)}%`,
+                  }}
+                />
               </div>
-              <div className="composer-export-label">{exportProgressLabel(exportProgress)}</div>
+              <div className="composer-export-label">
+                {exportKind === "pdf" ? pdfExportProgressLabel(exportProgress) : exportProgressLabel(exportProgress)}
+              </div>
             </div>
           ) : (
             <div className="composer-success-actions">
               <button type="button" className="composer-ghost-btn" onClick={handlePrintAnother}>
                 Print another
               </button>
-              <button type="button" className="composer-primary-btn" onClick={handleExport}>
+              <button type="button" className="composer-ghost-btn" onClick={handleExport}>
                 <Glyph name="download" size={15} />
                 Download ZIP
+              </button>
+              <button type="button" className="composer-primary-btn" onClick={handleExportPdf}>
+                <Glyph name="download" size={15} />
+                Download PDF
               </button>
             </div>
           )}
@@ -1248,7 +1288,7 @@ export default function GenerateTab({ onToast }) {
         }
         .composer-success-title{ margin-top:16px; font-size:19px; font-weight:800; }
         .composer-success-subtitle{ margin-top:4px; font-size:13px; color:var(--composer-muted, #92909e); }
-        .composer-success-actions{ margin-top:22px; display:flex; gap:10px; justify-content:center; }
+        .composer-success-actions{ margin-top:22px; display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
 
         .composer-export-progress{ margin-top:22px; width:min(320px, 100%); margin-inline:auto; }
         .composer-export-track{

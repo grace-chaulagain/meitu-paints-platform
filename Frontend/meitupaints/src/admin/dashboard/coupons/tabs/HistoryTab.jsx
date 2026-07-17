@@ -16,6 +16,7 @@ import {
   redeemedDealerName,
   redeemedPainterName,
   resolveCouponDateRange,
+  skipReasonPillLabel,
 } from "../couponFormatting.js";
 
 export default function HistoryTab() {
@@ -125,12 +126,12 @@ export default function HistoryTab() {
         align: "right",
         cellClassName: () => "dash-table-tabular",
         render: (row) =>
-          row.pointsAwarded === false && row.skipReason === "EXPIRED" ? (
+          row.pointsAwarded === false ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
               <span style={{ color: "var(--color-graphite,#707070)", textDecoration: "line-through" }}>
                 {Number(row.points || 0).toLocaleString()}
               </span>
-              <Pill tone="caution" size="small">Expired — no points</Pill>
+              <Pill tone="caution" size="small">{skipReasonPillLabel(row.skipReason)}</Pill>
             </span>
           ) : (
             <span style={{ fontWeight: 700 }}>{Number(row.points || 0).toLocaleString()}</span>

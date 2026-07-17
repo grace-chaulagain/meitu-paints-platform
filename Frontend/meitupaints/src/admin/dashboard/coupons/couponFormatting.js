@@ -186,6 +186,20 @@ export function redeemedDealerName(row) {
   return row?.dealerId?.companyName || row?.dealerId?.contactName || "Unknown dealer";
 }
 
+// Human label for a redemption that withheld painter points - covers every
+// POINTS_SKIP_REASON value (Server/src/constants/coupon.js), not just
+// expiry, so any new skip path added there stays auditable here too.
+const SKIP_REASON_LABELS = {
+  EXPIRED: "Expired — no points",
+  RTP_GOLDEN_CASH_ONLY: "Golden cash-only — no points",
+  RTP_UNREGISTERED_CASH_ONLY: "No profile — no points",
+  TTP_NO_ID_CASH_ONLY: "No ID — no points",
+};
+
+export function skipReasonPillLabel(skipReason) {
+  return SKIP_REASON_LABELS[skipReason] || "No points";
+}
+
 // Rendering (SVG+PNG per coupon) is the bulk of the work for a large batch,
 // so it fills the first 90% of the bar; JSZip's own compression pass (the
 // "zip" phase) fills the last 10% - keeps the bar moving smoothly through
@@ -202,6 +216,29 @@ export function exportProgressPercent(progress) {
 export function exportProgressLabel(progress) {
   if (!progress) return "Preparing…";
   if (progress.phase === "zip") return `Compressing ZIP · ${progress.percent || 0}%`;
+  if (progress.phase === "render") return `Rendering ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} coupons`;
+  return "Preparing…";
+}
+
+// Same progress shape as exportProgressPercent/Label above, but for
+// downloadCouponPrintPdf (couponPrintPdf.jsx), which has an extra "pdf"
+// assembly phase between rendering fronts and compressing the final zip -
+// kept as separate functions so its phase weights don't disturb the
+// already-tuned percentages of the plain SVG/PNG ZIP export.
+export function pdfExportProgressPercent(progress) {
+  if (!progress) return 0;
+  if (progress.phase === "zip") return 90 + Math.round(Math.min(100, Math.max(0, progress.percent || 0)) * 0.1);
+  if (progress.phase === "pdf") return 88;
+  if (progress.phase === "render" && progress.total) {
+    return Math.round((progress.done / progress.total) * 85);
+  }
+  return 0;
+}
+
+export function pdfExportProgressLabel(progress) {
+  if (!progress) return "Preparing…";
+  if (progress.phase === "zip") return `Compressing ZIP · ${progress.percent || 0}%`;
+  if (progress.phase === "pdf") return "Assembling PDF…";
   if (progress.phase === "render") return `Rendering ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} coupons`;
   return "Preparing…";
 }
