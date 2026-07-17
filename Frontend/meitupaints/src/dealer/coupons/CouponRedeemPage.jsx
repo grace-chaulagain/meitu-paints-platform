@@ -205,7 +205,7 @@ export default function CouponRedeemPage() {
                 textAlign: "center",
               }}
             >
-              This coupon had expired — no points were added to the painter's account.
+              This coupon had expired — it was redeemed for cash only, with no painter selected.
             </div>
           ) : null}
           <div style={{ marginTop: 22 }}>
@@ -255,13 +255,16 @@ export default function CouponRedeemPage() {
                   lineHeight: 1.5,
                 }}
               >
-                This coupon expired on {formatDate(coupon.expiresAt)}. It can still be redeemed for cash, but no points will be added to the painter's account.
+                This coupon expired on {formatDate(coupon.expiresAt)}. Redeeming it now pays out cash only, with no points added — you won't need to select a painter.
               </div>
             ) : null}
 
             <div style={{ marginTop: 22, display: "grid", gap: 8 }}>
-              <PrimaryButton onClick={() => pushStep("painterType")} style={{ width: "100%", justifyContent: "center", height: 48, fontSize: 15 }}>
-                Continue
+              <PrimaryButton
+                onClick={() => pushStep(coupon.isExpired ? "confirm" : "painterType")}
+                style={{ width: "100%", justifyContent: "center", height: 48, fontSize: 15 }}
+              >
+                {coupon.isExpired ? "Redeem for cash" : "Continue"}
               </PrimaryButton>
               <Link to="/dealer/catalog" style={{ textDecoration: "none" }}>
                 <GhostButton style={{ width: "100%", justifyContent: "center" }}>Cancel</GhostButton>

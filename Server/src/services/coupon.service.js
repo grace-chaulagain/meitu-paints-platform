@@ -348,11 +348,16 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
   // back after the status flip below, so this can't be recomputed later.
   const expiredAtRedemption = isExpired(precheck);
 
-  const resolved = await resolvePainterForRedemption({ painterType, painterId, couponType: precheck.type });
-  if (expiredAtRedemption && !resolved.skipPoints) {
-    resolved.skipPoints = true;
-    resolved.skipReason = POINTS_SKIP_REASON.EXPIRED;
-  }
+  // An expired coupon is always cash-only, so the dealer-facing flow no
+  // longer asks for a painter at all in this case - skip resolution
+  // entirely rather than requiring (or trusting) a client-supplied
+  // painterType/painterId that has no bearing on the outcome. This is
+  // deliberate server-side enforcement, not just a frontend convenience:
+  // even a stale client or a direct API call can't force painter accrual
+  // on an expired coupon by supplying one anyway.
+  const resolved = expiredAtRedemption
+    ? { painterId: null, painterType: null, skipPoints: true, skipReason: POINTS_SKIP_REASON.EXPIRED }
+    : await resolvePainterForRedemption({ painterType, painterId, couponType: precheck.type });
 
   const session = await mongoose.startSession();
   let result;
