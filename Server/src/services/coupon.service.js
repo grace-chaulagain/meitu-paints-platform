@@ -17,6 +17,7 @@ import {
   COUPON_STATUS,
   COUPON_REDEMPTION_OUTCOME,
   COUPON_CODE_PREFIX,
+  POINTS_SKIP_REASON,
 } from "../constants/coupon.js";
 
 function actorId(actorUser) {
@@ -150,7 +151,7 @@ async function resolvePainterForRedemption({ painterType, painterId, couponType 
       throw new ApiError(400, "Selected painter has no TTP license on file", { code: "PAINTER_NOT_TTP_LICENSED" });
     }
     assertPainterEligible(painter);
-    return { painterId: painter._id, painterType: "TTP", skipPoints: false };
+    return { painterId: painter._id, painterType: "TTP", skipPoints: false, skipReason: null };
   }
 
   if (painterType === "RTP") {
@@ -160,14 +161,14 @@ async function resolvePainterForRedemption({ painterType, painterId, couponType 
     // to any Painter record, even if a painterId was supplied (a stale
     // client, or a direct API call, must not be able to bypass this).
     if (couponType === "GOLDEN") {
-      return { painterId: null, painterType: "RTP", skipPoints: true };
+      return { painterId: null, painterType: "RTP", skipPoints: true, skipReason: POINTS_SKIP_REASON.RTP_GOLDEN_CASH_ONLY };
     }
 
     if (!painterId) {
       // Unregistered RTP, cash-only - painterType is still recorded (it's a
       // separable fact from "is there a linked profile"), only painterId
       // and points accumulation are skipped.
-      return { painterId: null, painterType: "RTP", skipPoints: true };
+      return { painterId: null, painterType: "RTP", skipPoints: true, skipReason: POINTS_SKIP_REASON.RTP_UNREGISTERED_CASH_ONLY };
     }
     const painter = await Painter.findById(painterId);
     if (!painter) throw new ApiError(404, "Painter not found", { code: "PAINTER_NOT_FOUND" });
@@ -183,7 +184,7 @@ async function resolvePainterForRedemption({ painterType, painterId, couponType 
       painter.type = "RTP";
       await painter.save();
     }
-    return { painterId: painter._id, painterType: "RTP", skipPoints: false };
+    return { painterId: painter._id, painterType: "RTP", skipPoints: false, skipReason: null };
   }
 
   throw new ApiError(400, "painterType must be TTP or RTP");
@@ -294,11 +295,10 @@ export async function getCouponPreview({ rawToken, dealerId, userId, ipAddress }
     });
   }
 
-  if (isExpired(coupon)) {
-    await logAttempt({ tokenHash, couponId: coupon._id, outcome: COUPON_REDEMPTION_OUTCOME.EXPIRED, dealerId, userId, ipAddress });
-    throw new ApiError(410, "This coupon has expired.", { code: "COUPON_EXPIRED" });
-  }
-
+  // Expiry is deliberately not a rejection here - company policy: an
+  // expired coupon is still previewable and redeemable (for cash only, see
+  // redeemCoupon). couponPreviewShape already computes `isExpired` so the
+  // dealer-facing UI can show a warning before they commit to redeeming.
   return couponPreviewShape(coupon);
 }
 
@@ -331,15 +331,28 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
 
   // Read-only fast-path check - fails on the common cases before ever
   // resolving a painter or opening a session. The atomic findOneAndUpdate
-  // inside the transaction below remains the real race-safe guard.
+  // inside the transaction below remains the real race-safe guard. Expiry
+  // is deliberately NOT a rejection here (company policy: an expired coupon
+  // is still redeemable for cash, it just doesn't credit the painter - see
+  // the skipPoints override below) - only "not found" and "already
+  // redeemed" are hard stops.
   const precheck = await Coupon.findOne({ tokenHash });
-  if (!precheck || precheck.status !== COUPON_STATUS.UNUSED || isExpired(precheck)) {
+  if (!precheck || precheck.status !== COUPON_STATUS.UNUSED) {
     const { outcome, error } = classifyCouponFailure(precheck);
     await logAttempt({ tokenHash, couponId: precheck?._id, outcome, dealerId, userId, ipAddress });
     throw error;
   }
 
+  // Captured now, against the coupon's still-UNUSED precheck document -
+  // isExpired()'s own UNUSED gate would make this always false once read
+  // back after the status flip below, so this can't be recomputed later.
+  const expiredAtRedemption = isExpired(precheck);
+
   const resolved = await resolvePainterForRedemption({ painterType, painterId, couponType: precheck.type });
+  if (expiredAtRedemption && !resolved.skipPoints) {
+    resolved.skipPoints = true;
+    resolved.skipReason = POINTS_SKIP_REASON.EXPIRED;
+  }
 
   const session = await mongoose.startSession();
   let result;
@@ -347,7 +360,7 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
   try {
     await session.withTransaction(async () => {
       const updated = await Coupon.findOneAndUpdate(
-        { tokenHash, status: COUPON_STATUS.UNUSED, expiresAt: { $gt: now } },
+        { tokenHash, status: COUPON_STATUS.UNUSED },
         {
           $set: {
             status: COUPON_STATUS.REDEEMED,
@@ -384,6 +397,8 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
             ipAddress,
             painterId: resolved.painterId,
             painterType: resolved.painterType,
+            pointsAwarded: !resolved.skipPoints,
+            skipReason: resolved.skipReason,
           },
         ],
         { session },
@@ -412,7 +427,21 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
       }
 
       redeemedCouponId = updated._id;
-      result = { ...couponPreviewShape(updated), painterId: resolved.painterId, painterType: resolved.painterType };
+      result = {
+        ...couponPreviewShape(updated),
+        painterId: resolved.painterId,
+        painterType: resolved.painterType,
+        // couponPreviewShape's own `isExpired` is now stale/wrong for this
+        // response - it's computed from `updated`, whose status just
+        // flipped to REDEEMED, and isExpired()'s own UNUSED gate makes that
+        // always false post-redemption. pointsAwarded/skipReason are the
+        // signals the frontend success screen needs - skipReason
+        // distinguishes "expired" from the pre-existing cash-only-RTP
+        // reasons, which already have their own distinct UI copy and must
+        // not also show the expiry message.
+        pointsAwarded: !resolved.skipPoints,
+        skipReason: resolved.skipReason,
+      };
     });
   } finally {
     session.endSession();
@@ -462,7 +491,21 @@ export async function listCoupons({ status = "ALL", type = "ALL", batchId = "", 
   ]);
 
   return {
-    items: items.map((item) => ({ ...item, isExpired: isExpired(item) })),
+    items: items.map((item) => ({
+      ...item,
+      isExpired: isExpired(item),
+      // Coupon has no pointsAwarded/skipReason field of its own (those live
+      // on CouponRedemptionHistory, the permanent audit record) - but "was
+      // this expired at the moment it was redeemed" is fully derivable from
+      // the two timestamps Coupon already stores, without a join or a
+      // redundant field. Only meaningful once REDEEMED - a still-UNUSED,
+      // already-past-expiry coupon is covered by `isExpired` above instead.
+      redeemedAfterExpiry: Boolean(
+        item.status === COUPON_STATUS.REDEEMED &&
+          item.redeemedAt &&
+          new Date(item.redeemedAt).getTime() > new Date(item.expiresAt).getTime(),
+      ),
+    })),
     pagination: {
       page: pageNumber,
       limit: limitNumber,

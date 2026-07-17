@@ -124,7 +124,17 @@ export default function HistoryTab() {
         header: "Points",
         align: "right",
         cellClassName: () => "dash-table-tabular",
-        render: (row) => <span style={{ fontWeight: 700 }}>{Number(row.points || 0).toLocaleString()}</span>,
+        render: (row) =>
+          row.pointsAwarded === false && row.skipReason === "EXPIRED" ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+              <span style={{ color: "var(--color-graphite,#707070)", textDecoration: "line-through" }}>
+                {Number(row.points || 0).toLocaleString()}
+              </span>
+              <Pill tone="caution" size="small">Expired — no points</Pill>
+            </span>
+          ) : (
+            <span style={{ fontWeight: 700 }}>{Number(row.points || 0).toLocaleString()}</span>
+          ),
       },
       {
         key: "cashAmount",

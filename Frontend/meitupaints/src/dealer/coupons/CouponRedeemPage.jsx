@@ -192,6 +192,22 @@ export default function CouponRedeemPage() {
               {painterLine}
             </div>
           ) : null}
+          {coupon.pointsAwarded === false && coupon.skipReason === "EXPIRED" ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "8px 12px",
+                borderRadius: 10,
+                background: "rgba(180,90,0,.08)",
+                color: "#8a5300",
+                fontSize: 12,
+                fontWeight: 600,
+                textAlign: "center",
+              }}
+            >
+              This coupon had expired — no points were added to the painter's account.
+            </div>
+          ) : null}
           <div style={{ marginTop: 22 }}>
             <Link to="/dealer/catalog" style={{ textDecoration: "none" }}>
               <PrimaryButton style={{ width: "100%", justifyContent: "center" }}>Done</PrimaryButton>
@@ -224,6 +240,24 @@ export default function CouponRedeemPage() {
             <div style={{ marginTop: 4, textAlign: "center", fontSize: 13, color: "var(--color-graphite, #707070)" }}>
               {coupon.points.toLocaleString()} points &middot; expires {formatDate(coupon.expiresAt)}
             </div>
+
+            {coupon.isExpired ? (
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "rgba(180,90,0,.08)",
+                  color: "#8a5300",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  textAlign: "center",
+                  lineHeight: 1.5,
+                }}
+              >
+                This coupon expired on {formatDate(coupon.expiresAt)}. It can still be redeemed for cash, but no points will be added to the painter's account.
+              </div>
+            ) : null}
 
             <div style={{ marginTop: 22, display: "grid", gap: 8 }}>
               <PrimaryButton onClick={() => pushStep("painterType")} style={{ width: "100%", justifyContent: "center", height: 48, fontSize: 15 }}>

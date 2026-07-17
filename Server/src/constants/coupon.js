@@ -23,6 +23,18 @@ export const COUPON_REDEMPTION_OUTCOME = Object.freeze({
   DEALER_NOT_APPROVED: "DEALER_NOT_APPROVED",
 });
 
+// Why a successful redemption's points/cash accrual to a Painter was
+// skipped - independent of COUPON_REDEMPTION_OUTCOME, which only covers
+// whether the redemption itself succeeded. A redemption can succeed (cash
+// still paid to the dealer) while points are withheld for one of these
+// reasons; stored on CouponRedemptionHistory so it survives the source
+// Coupon being hard-deleted later.
+export const POINTS_SKIP_REASON = Object.freeze({
+  EXPIRED: "EXPIRED",
+  RTP_GOLDEN_CASH_ONLY: "RTP_GOLDEN_CASH_ONLY",
+  RTP_UNREGISTERED_CASH_ONLY: "RTP_UNREGISTERED_CASH_ONLY",
+});
+
 export const COUPON_CODE_PREFIX = Object.freeze({
   [COUPON_TYPE.GOLDEN]: "GLD",
   [COUPON_TYPE.GREEN]: "GRN",

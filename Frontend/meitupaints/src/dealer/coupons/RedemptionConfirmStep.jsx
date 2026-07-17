@@ -35,6 +35,12 @@ export default function RedemptionConfirmStep({ coupon, selection, onConfirm, on
         </div>
       </div>
 
+      {coupon.isExpired ? (
+        <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, background: "rgba(180,90,0,.08)", color: "#8a5300", fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.5 }}>
+          This coupon has expired — it will still be redeemed for cash, but no points will be added to the painter's account.
+        </div>
+      ) : null}
+
       <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 10, background: "rgba(180,90,0,.08)", color: "#8a5300", fontSize: 12, fontWeight: 600, textAlign: "center" }}>
         This action is final. The coupon cannot be redeemed again once confirmed.
       </div>

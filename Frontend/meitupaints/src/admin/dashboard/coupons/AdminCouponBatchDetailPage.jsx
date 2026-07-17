@@ -105,7 +105,21 @@ export default function AdminCouponBatchDetailPage() {
         return <Pill tone={couponStatusTone(displayStatus)} size="small">{displayStatus}</Pill>;
       },
     },
-    { key: "points", header: "Points", align: "right", cellClassName: () => "dash-table-tabular", render: (coupon) => coupon.points },
+    {
+      key: "points",
+      header: "Points",
+      align: "right",
+      cellClassName: () => "dash-table-tabular",
+      render: (coupon) =>
+        coupon.redeemedAfterExpiry ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+            <span style={{ color: "var(--color-graphite, #707070)", textDecoration: "line-through" }}>{coupon.points}</span>
+            <Pill tone="caution" size="small">Expired — no points</Pill>
+          </span>
+        ) : (
+          coupon.points
+        ),
+    },
     {
       key: "cash",
       header: "Cash",

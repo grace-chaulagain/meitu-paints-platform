@@ -15,7 +15,7 @@ import {
 } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { downloadCouponPrintAssets } from "../../../../utils/downloadCouponPrintAssets.js";
-import { couponTypeLabel, exportProgressLabel, exportProgressPercent, formatDateOnly, formatMoney } from "../couponFormatting.js";
+import { couponTypeLabel, exportProgressLabel, exportProgressPercent, formatDateTime, formatMoney } from "../couponFormatting.js";
 
 // This tab is a deliberate visual island - a "print bureau" for minting
 // coupon batches, built entirely from scratch (no Surface/Pill/AppleDropdown/
@@ -51,6 +51,23 @@ const EXPIRY_PRESETS = [
   { key: "6m", label: "6 months", months: 6 },
   { key: "1y", label: "1 year", months: 12 },
   { key: "2y", label: "2 years", months: 24 },
+];
+
+// Deliberately local, not UTC: constructing a Date from a date+time string
+// with no "Z"/offset suffix (unlike the old bare `new Date("2026-12-31")`,
+// which the spec parses as UTC midnight) is interpreted in the browser's
+// own timezone - i.e. the admin's. For this internal, Nepal-operated
+// dashboard that's exactly the right authority for what "11:59 PM" means,
+// and it's why picking a time here also incidentally fixes the old
+// UTC-midnight-vs-Kathmandu-evening surprise rather than adding a new one.
+function combinedExpiryIso(dateStr, timeStr) {
+  return new Date(`${dateStr}T${timeStr}:00`).toISOString();
+}
+
+const TIME_PRESETS = [
+  { key: "start", label: "Start of day", value: "00:00" },
+  { key: "midday", label: "Midday", value: "12:00" },
+  { key: "end", label: "End of day", value: "23:59" },
 ];
 
 const QUANTITY_PRESETS = [10, 50, 100, 500, 1000, 5000];
@@ -151,7 +168,7 @@ function ConfirmSheet({ open, summary, weightFactor, saving, error, onClose, onC
               </div>
               <div className="composer-sheet-row">
                 <span>Expires</span>
-                <strong>{formatDateOnly(summary.expiresAt)}</strong>
+                <strong>{formatDateTime(summary.expiresAt)}</strong>
               </div>
               <div className="composer-sheet-row composer-sheet-total">
                 <span>Total cash liability</span>
@@ -184,6 +201,8 @@ export default function GenerateTab({ onToast }) {
   const [size, setSize] = useState("");
   const [expiresAt, setExpiresAt] = useState(() => addMonthsIso(12));
   const [customExpiryOpen, setCustomExpiryOpen] = useState(false);
+  const [expiryTime, setExpiryTime] = useState("23:59");
+  const [customTimeOpen, setCustomTimeOpen] = useState(false);
   const [quantity, setQuantity] = useState("10");
   const [formError, setFormError] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -239,6 +258,9 @@ export default function GenerateTab({ onToast }) {
 
   const activeExpiryPreset = EXPIRY_PRESETS.find((preset) => addMonthsIso(preset.months) === expiresAt)?.key || null;
   const isCustomExpiry = !activeExpiryPreset;
+  const activeTimePreset = TIME_PRESETS.find((preset) => preset.value === expiryTime)?.key || null;
+  const isCustomTime = !activeTimePreset;
+  const combinedExpiresAtIso = expiresAt && expiryTime ? combinedExpiryIso(expiresAt, expiryTime) : "";
 
   function pickCategory(next) {
     setCategory(next === category ? "" : next);
@@ -254,6 +276,11 @@ export default function GenerateTab({ onToast }) {
   function pickExpiryPreset(preset) {
     setCustomExpiryOpen(false);
     setExpiresAt(addMonthsIso(preset.months));
+  }
+
+  function pickTimePreset(preset) {
+    setCustomTimeOpen(false);
+    setExpiryTime(preset.value);
   }
 
   function nudgeQuantity(delta) {
@@ -301,8 +328,12 @@ export default function GenerateTab({ onToast }) {
       setFormError("Quantity must be between 1 and 5000.");
       return;
     }
-    if (!expiresAt) {
-      setFormError("Choose an expiry.");
+    if (!expiresAt || !expiryTime) {
+      setFormError("Choose an expiry date and time.");
+      return;
+    }
+    if (!combinedExpiresAtIso || Number.isNaN(new Date(combinedExpiresAtIso).getTime())) {
+      setFormError("That expiry time isn't valid - pick a preset or re-enter it.");
       return;
     }
 
@@ -316,7 +347,7 @@ export default function GenerateTab({ onToast }) {
       const result = await generateCoupons({
         schemeProductId,
         size: selectedProduct.pricingMode === "SIZES" ? size : undefined,
-        expiresAt: new Date(expiresAt).toISOString(),
+        expiresAt: combinedExpiresAtIso,
         quantity: quantityValue,
       }).unwrap();
       dispatch(setLastGeneratedBatch(result));
@@ -500,7 +531,7 @@ export default function GenerateTab({ onToast }) {
                       </div>
                       <div className="composer-ticket-metric">
                         <span>Valid until</span>
-                        <strong>{formatDateOnly(expiresAt)}</strong>
+                        <strong>{formatDateTime(combinedExpiresAtIso)}</strong>
                       </div>
                     </motion.div>
                   ) : (
@@ -605,6 +636,46 @@ export default function GenerateTab({ onToast }) {
                 ) : null}
               </AnimatePresence>
 
+              <div className="composer-section-label" style={{ marginTop: 16 }}>Expiry time</div>
+              <div className="composer-chip-rail is-wrap">
+                {TIME_PRESETS.map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    className={`composer-chip is-compact${activeTimePreset === preset.key && !customTimeOpen ? " is-active" : ""}`}
+                    onClick={() => pickTimePreset(preset)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`composer-chip is-compact${customTimeOpen || isCustomTime ? " is-active" : ""}`}
+                  onClick={() => setCustomTimeOpen((v) => !v)}
+                >
+                  Custom
+                </button>
+              </div>
+              <AnimatePresence initial={false}>
+                {customTimeOpen || isCustomTime ? (
+                  <motion.div
+                    initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: shouldReduceMotion ? 0.001 : 0.22, ease: EASE_OUT }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <input
+                      type="time"
+                      value={expiryTime}
+                      onChange={(event) => setExpiryTime(event.target.value)}
+                      className="composer-date-input"
+                      style={{ marginTop: 10 }}
+                    />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+
               {catalogError ? <div className="composer-alert">{catalogError}</div> : null}
               {formError ? <div className="composer-alert">{formError}</div> : null}
 
@@ -662,7 +733,7 @@ export default function GenerateTab({ onToast }) {
           type: resolvedType,
           points: resolvedPoints,
           quantity,
-          expiresAt,
+          expiresAt: combinedExpiresAtIso,
         }}
         weightFactor={weightFactor}
         saving={generateState.isLoading}

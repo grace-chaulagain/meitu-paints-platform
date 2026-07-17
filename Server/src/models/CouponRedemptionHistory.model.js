@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { COUPON_TYPE } from "../constants/coupon.js";
+import { COUPON_TYPE, POINTS_SKIP_REASON } from "../constants/coupon.js";
 
 // Append-only ledger written once per successful redemption - mirrors
 // InventoryMovement's role as the audit trail for dealer stock. This
@@ -22,6 +22,19 @@ const CouponRedemptionHistorySchema = new mongoose.Schema(
     // Phase 2 hook, same nullable-now pattern as Coupon.model.js.
     painterId: { type: mongoose.Schema.Types.ObjectId, ref: "Painter", default: null },
     painterType: { type: String, enum: ["TTP", "RTP", null], default: null },
+
+    // Whether this redemption actually credited a painter's point balance -
+    // independent of `type`/`cashAmount` above, which the dealer is paid
+    // regardless. False for cash-only RTP redemptions (pre-existing) and for
+    // a coupon that had already expired at redemption time (see
+    // coupon.service.js:redeemCoupon). Captured here rather than derived
+    // later from the source Coupon, since Coupons can be hard-deleted and
+    // this table is the permanent audit trail. Defaulting true is correct
+    // for every historical row before this field existed - the one
+    // pre-existing exception (cash-only RTP) is already independently
+    // visible via `painterId === null` on those older rows.
+    pointsAwarded: { type: Boolean, required: true, default: true },
+    skipReason: { type: String, enum: [...Object.values(POINTS_SKIP_REASON), null], default: null },
   },
   { timestamps: true, versionKey: false },
 );
