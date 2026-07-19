@@ -15,6 +15,8 @@ import {
 } from "./pricing.js";
 import { loadDraft, saveDraft, sanitizeDraft, clearDraft } from "./draftStorage.js";
 import { DashboardIcon } from "../components/dashboard/DashboardIcons.jsx";
+import { useIsMobileDealer } from "./mobile/useIsMobileDealer.js";
+import { DealerCartMobileView } from "./mobile/DealerCartMobileView.jsx";
 import {
   Dropdown,
   EmptyState,
@@ -131,6 +133,11 @@ function CartLine({ item, onQtyChange, onRemove }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{item.name}</div>
           <div style={{ marginTop: 3, fontSize: 12, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{formatPack(item.pack)}</div>
           <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Product Code: {item.sku}</div>
+          {item.components?.length ? (
+            <div style={{ marginTop: 4, fontSize: 11.5, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
+              Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -265,6 +272,7 @@ export default function DealerCartPage() {
           unitPrice: Number(item.unitPrice || 0),
           lineTotal: Number(item.lineTotal || 0),
           notes: "",
+          components: item.components || [],
         })),
         totals: { subtotal, discount: 0, taxableAmount: subtotal, tax: 0, total: subtotal, currency: cart[0]?.currency || "NPR" },
         payment: { method: paymentMethod, reference: paymentReference.trim(), note: paymentNote.trim() },
@@ -295,6 +303,11 @@ export default function DealerCartPage() {
   }
 
   const disabled = cart.length === 0 || submitting;
+
+  const isMobile = useIsMobileDealer();
+  if (isMobile) {
+    return <DealerCartMobileView />;
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>

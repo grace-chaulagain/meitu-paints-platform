@@ -139,6 +139,7 @@ export default function AdminCouponBatchDetailPage() {
       header: "",
       align: "right",
       width: 56,
+      mobileSlot: "actions",
       render: (coupon) =>
         coupon.status === "REDEEMED" ? (
           <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>—</span>

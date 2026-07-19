@@ -268,9 +268,14 @@ const PROFORMA_TAX_BUCKET_META = {
   TOOLS_ACCESSORIES: { label: "Tools and Accessories", exciseMultiplier: 1 },
 };
 
-function proformaBucketKey(category) {
-  if (category === "WALL_PUTTY") return "WALL_PUTTY";
-  if (category === "TOOLS_ACCESSORIES" || category === "COLORANT") return "TOOLS_ACCESSORIES";
+// Wall Putty no longer has a category of its own (folded into Specialty
+// alongside Terracotta/Damp-Proof/etc. under the FY2083.84 category
+// simplification), so it's matched by its stable `code` prefix instead -
+// category alone can no longer distinguish it from its Specialty siblings,
+// which need the "OTHER" 1.07x rate, not Wall Putty's 1.05x.
+function proformaBucketKey(item) {
+  if (item?.code?.startsWith("WALLPUTTY-")) return "WALL_PUTTY";
+  if (item?.category === "TOOLS_AND_ACCESSORIES" || item?.category === "COLORANTS") return "TOOLS_ACCESSORIES";
   return "OTHER";
 }
 
@@ -283,7 +288,7 @@ function proformaBucketKey(category) {
 export function computeProformaLineAmounts(item) {
   const rate = Number(item?.unitPrice || 0);
   const quantity = Number(item?.quantity || 0);
-  const bucketKey = proformaBucketKey(item?.category);
+  const bucketKey = proformaBucketKey(item);
   const exciseMultiplier = PROFORMA_TAX_BUCKET_META[bucketKey].exciseMultiplier;
   const netUnitPrice = rate / (1 + PROFORMA_VAT_RATE) / exciseMultiplier;
   const netAmount = netUnitPrice * quantity;

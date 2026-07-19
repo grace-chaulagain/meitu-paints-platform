@@ -166,6 +166,7 @@ export default function BatchesTab({ onToast }) {
               header: "",
               align: "right",
               width: 56,
+              mobileSlot: "actions",
               render: (batch) => (
                 <button
                   type="button"

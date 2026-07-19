@@ -197,32 +197,34 @@ function DispatcherListRow({ dispatcher, selectionMode, selected, onSelectChange
         </div>
       </div>
 
-      <div style={{ flex: "0 0 90px" }}>
-        <Pill tone={isVerified ? "positive" : isRejected ? "critical" : "neutral"} size="small">
-          {dispatcher.status || "Pending"}
-        </Pill>
-      </div>
-
-      <div style={{ flex: "0 0 90px" }}>
-        {isVerified ? (
-          <Pill tone={dispatcher.isActive ? "positive" : "critical"} size="small">
-            {dispatcher.isActive ? "Active" : "Inactive"}
+      <div className="dash-list-row-trailing" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ flex: "0 0 90px" }}>
+          <Pill tone={isVerified ? "positive" : isRejected ? "critical" : "neutral"} size="small">
+            {dispatcher.status || "Pending"}
           </Pill>
-        ) : null}
-      </div>
-
-      <div style={{ flex: "0 0 120px" }}>
-        <Pill tone={accessTone(dispatcher)} size="small">
-          {dispatcher.accessState?.passwordSet ? "Access Ready" : "Setup Pending"}
-        </Pill>
-      </div>
-
-      <div style={{ flex: "0 0 150px", textAlign: "right" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
-          {summary.assignedDealerCount || 0} dealer{summary.assignedDealerCount === 1 ? "" : "s"}
         </div>
-        <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
-          {summary.handledOrders || 0} orders handled
+
+        <div style={{ flex: "0 0 90px" }}>
+          {isVerified ? (
+            <Pill tone={dispatcher.isActive ? "positive" : "critical"} size="small">
+              {dispatcher.isActive ? "Active" : "Inactive"}
+            </Pill>
+          ) : null}
+        </div>
+
+        <div style={{ flex: "0 0 120px" }}>
+          <Pill tone={accessTone(dispatcher)} size="small">
+            {dispatcher.accessState?.passwordSet ? "Access Ready" : "Setup Pending"}
+          </Pill>
+        </div>
+
+        <div style={{ flex: "0 0 150px", textAlign: "right" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
+            {summary.assignedDealerCount || 0} dealer{summary.assignedDealerCount === 1 ? "" : "s"}
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
+            {summary.handledOrders || 0} orders handled
+          </div>
         </div>
       </div>
     </ListRow>

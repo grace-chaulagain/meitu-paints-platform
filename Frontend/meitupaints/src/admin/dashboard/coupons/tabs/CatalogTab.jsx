@@ -383,6 +383,7 @@ export default function CatalogTab({ onToast }) {
         header: "",
         align: "right",
         width: 90,
+        mobileSlot: "actions",
         render: (product) => (
           <span style={{ display: "inline-flex", gap: 6 }} onClick={(event) => event.stopPropagation()}>
             <button type="button" className="coupon-catalog-icon-btn" onClick={() => openEditForm(product)} aria-label={`Edit ${product.name}`}>

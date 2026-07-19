@@ -30,6 +30,11 @@ export default function AttemptsTab() {
       {
         key: "outcome",
         header: "Outcome",
+        // Default mobile-card title picks columns[0] ("Time"), a bad
+        // identity field for a row that's fundamentally "what happened" -
+        // this is the one table in Coupons where the default guess is
+        // wrong, so it needs an explicit override.
+        isTitle: true,
         render: (row) => <Pill tone={outcomeTone(row.outcome)} size="small">{row.outcome.replaceAll("_", " ")}</Pill>,
       },
       { key: "coupon", header: "Coupon", cellClassName: () => "dash-table-mono", render: (row) => row.couponId?.couponCode || "—" },

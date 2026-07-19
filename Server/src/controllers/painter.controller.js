@@ -16,8 +16,8 @@ export const getPainterController = asyncHandler(async (req, res) => {
 });
 
 export const createPainterController = asyncHandler(async (req, res) => {
-  const { name, phones, address, notes } = req.body || {};
-  const out = await painterService.createPainter({ name, phones, address, notes });
+  const { name, phones, address, notes, type, citizenshipNumber } = req.body || {};
+  const out = await painterService.createPainter({ name, phones, address, notes, type, citizenshipNumber });
   res.status(201).json({ ok: true, ...out });
 });
 

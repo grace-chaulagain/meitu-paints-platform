@@ -328,7 +328,14 @@ export function buildOrderSummaryPdfBuffer(order) {
     items.forEach((item, index) => {
       const nameLines = wrapText(item?.name, col.itemWidth, 10);
       const codeLines = item?.sku || item?.code ? wrapText(item?.sku || item?.code, col.itemWidth, 9) : [];
-      const rowHeight = Math.max(30, nameLines.length * 13 + codeLines.length * 10 + (codeLines.length ? 5 : 0));
+      const componentsText = item?.components?.length
+        ? `Includes: ${item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}`
+        : "";
+      const componentsLines = componentsText ? wrapText(componentsText, col.itemWidth, 8.5) : [];
+      const rowHeight = Math.max(
+        30,
+        nameLines.length * 13 + codeLines.length * 10 + (codeLines.length ? 5 : 0) + componentsLines.length * 10 + (componentsLines.length ? 5 : 0),
+      );
 
       ensureSpace(rowHeight + 22);
       if (y + rowHeight > USABLE_BOTTOM) {
@@ -351,6 +358,13 @@ export function buildOrderSummaryPdfBuffer(order) {
       codeLines.forEach((lineText, lineIndex) => {
         text(lineText, col.item, rowTop + nameLines.length * 13 + 5 + lineIndex * 10, {
           size: 9,
+          color: COLOR.muted,
+        });
+      });
+
+      componentsLines.forEach((lineText, lineIndex) => {
+        text(lineText, col.item, rowTop + nameLines.length * 13 + codeLines.length * 10 + (codeLines.length ? 5 : 0) + 5 + lineIndex * 10, {
+          size: 8.5,
           color: COLOR.muted,
         });
       });

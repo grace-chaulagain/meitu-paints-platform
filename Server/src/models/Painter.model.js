@@ -22,10 +22,16 @@ const PainterSchema = new mongoose.Schema(
     address: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
 
-    // null = not yet classified (legacy contact). Auto-promoted to "RTP"
-    // the first time it's selected in a redemption; promoted to "TTP" only
-    // via the explicit admin promote action (requires a licenseId).
-    type: { type: String, enum: ["TTP", "RTP", null], default: null, index: true },
+    // Meitu only has two painter classifications - every painter is TTP or
+    // RTP from the moment it's created (admin picks one in the create
+    // form; painter.service.js:createPainter refuses to save without it).
+    // No more "unclassified"/null state for new documents. A handful of
+    // legacy contacts from before this field existed may still be null in
+    // the DB - required:true only blocks writes that touch this path
+    // without a value, it doesn't retroactively invalidate stored data, and
+    // updatePainter never includes `type` in its update set, so editing an
+    // old legacy record still works untouched.
+    type: { type: String, enum: ["TTP", "RTP"], required: true, index: true },
     status: {
       type: String,
       enum: ["ACTIVE", "SUSPENDED", "INACTIVE", "BLACKLISTED"],

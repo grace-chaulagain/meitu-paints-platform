@@ -714,6 +714,11 @@ export function OrderItemsTable({ items = [] }) {
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
+                {item.components?.length ? (
+                  <div style={{ marginTop: 3, fontSize: 12, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
+                    Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
+                  </div>
+                ) : null}
               </td>
               <td style={{ padding: "12px 0", textAlign: "right", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                 {Number(item.quantity || 0).toLocaleString()}

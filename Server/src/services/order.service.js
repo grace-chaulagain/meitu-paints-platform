@@ -365,6 +365,15 @@ function sanitizeOrderItems(items = []) {
       unitPrice,
       lineTotal,
       notes: normalizeText(item?.notes),
+      components: Array.isArray(item?.components)
+        ? item.components
+            .map((component) => ({
+              name: normalizeText(component?.name),
+              packLabel: normalizeText(component?.packLabel),
+              quantity: Number(component?.quantity) || 1,
+            }))
+            .filter((component) => component.name)
+        : [],
     };
   });
 }

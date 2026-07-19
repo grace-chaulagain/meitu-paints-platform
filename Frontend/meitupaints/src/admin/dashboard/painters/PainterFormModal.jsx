@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { GhostButton, PrimaryButton, SectionHeader, Spinner, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import { GhostButton, Pill, PrimaryButton, SectionHeader, SegmentedControl, Spinner, Surface } from "../../../components/dashboard/DashboardUI.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+
+const TYPE_OPTIONS = [
+  { key: "TTP", label: "TTP" },
+  { key: "RTP", label: "RTP" },
+];
 
 function fieldInputStyle() {
   return {
@@ -23,6 +28,11 @@ function getPainterForm(painter) {
     phones: painter?.phones?.length ? [...painter.phones] : [""],
     address: painter?.address || "",
     notes: painter?.notes || "",
+    citizenshipNumber: painter?.citizenshipNumber || "",
+    // New painters default to RTP, the baseline classification - the admin
+    // still has to actively confirm/change it via TYPE_OPTIONS below, this
+    // just picks the more common starting point.
+    type: painter?.type || "RTP",
   };
 }
 
@@ -34,8 +44,16 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
 
   if (!open) return null;
 
+  // Meitu only has two painter classifications (TTP/RTP) - type is required
+  // on every new painter, so this form is the only place it's chosen.
+  // Editing an EXISTING painter shows it read-only instead: type is set
+  // once at creation and thereafter only ever changes via the dedicated
+  // promote action (painter.service.js:promotePainterToTtp), never through
+  // this generic edit form.
+  const isCreate = !painter?._id;
   const cleanedPhones = form.phones.map((p) => p.trim()).filter(Boolean);
-  const canSave = form.name.trim() && cleanedPhones.length > 0 && !saving;
+  const canSave =
+    form.name.trim() && cleanedPhones.length > 0 && (!isCreate || form.citizenshipNumber.trim()) && !saving;
 
   function updatePhone(index, value) {
     setForm((prev) => ({ ...prev, phones: prev.phones.map((p, i) => (i === index ? value : p)) }));
@@ -77,6 +95,19 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
         />
 
         <div style={{ marginTop: 18, display: "grid", gap: 14 }}>
+          <div style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite,#707070)" }}>
+              Type
+            </span>
+            {isCreate ? (
+              <SegmentedControl options={TYPE_OPTIONS} value={form.type} onChange={(next) => setForm((prev) => ({ ...prev, type: next }))} />
+            ) : (
+              <div>
+                <Pill tone={form.type === "TTP" ? "caution" : "positive"}>{form.type === "TTP" ? "TTP" : "RTP"}</Pill>
+              </div>
+            )}
+          </div>
+
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite,#707070)" }}>
               Name
@@ -85,6 +116,18 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="Painter name"
+              style={fieldInputStyle()}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite,#707070)" }}>
+              Citizenship Number{isCreate ? "" : " (optional)"}
+            </span>
+            <input
+              value={form.citizenshipNumber}
+              onChange={(e) => setForm((prev) => ({ ...prev, citizenshipNumber: e.target.value }))}
+              placeholder="Citizenship certificate number"
               style={fieldInputStyle()}
             />
           </label>
@@ -165,7 +208,19 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
             Cancel
           </GhostButton>
           <PrimaryButton
-            onClick={() => onSave({ name: form.name.trim(), phones: cleanedPhones, address: form.address.trim(), notes: form.notes.trim() })}
+            onClick={() =>
+              onSave({
+                name: form.name.trim(),
+                phones: cleanedPhones,
+                address: form.address.trim(),
+                notes: form.notes.trim(),
+                citizenshipNumber: form.citizenshipNumber.trim(),
+                // type is only ever sent on create - it's read-only once a
+                // painter exists, so an edit save must never attempt to
+                // change it (the update schema doesn't even accept it).
+                ...(isCreate ? { type: form.type } : {}),
+              })
+            }
             disabled={!canSave}
           >
             {saving ? <Spinner size={13} /> : null} {saving ? "Saving…" : "Save Painter"}

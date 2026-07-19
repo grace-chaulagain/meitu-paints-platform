@@ -20,6 +20,8 @@ import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { getPrimaryImage } from "../inventory/inventoryHelpers.js";
 import { Toast } from "../../components/dashboard/Toast.jsx";
 import NewSaleModal from "./NewSaleModal.jsx";
+import { useIsMobileDealer } from "../mobile/useIsMobileDealer.js";
+import { DealerSalesMobileView } from "../mobile/DealerSalesMobileView.jsx";
 
 const STATUS_OPTIONS = [
   { key: "ALL", label: "All sales" },
@@ -611,6 +613,7 @@ function SaleDetailModal({ sale, onClose }) {
 }
 
 export default function DealerSalesPage() {
+  const isMobile = useIsMobileDealer();
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -628,15 +631,18 @@ export default function DealerSalesPage() {
 
   const { from, to } = useMemo(() => getRangeBounds(rangePreset, customFrom, customTo), [rangePreset, customFrom, customTo]);
 
-  const salesQuery = useGetDealerSalesQuery({
-    q: query,
-    status,
-    dateFrom: from ? from.toISOString() : undefined,
-    dateTo: to ? to.toISOString() : undefined,
-    limit: 200,
-  });
+  const salesQuery = useGetDealerSalesQuery(
+    {
+      q: query,
+      status,
+      dateFrom: from ? from.toISOString() : undefined,
+      dateTo: to ? to.toISOString() : undefined,
+      limit: 200,
+    },
+    { skip: isMobile },
+  );
 
-  const inventoryQuery = useGetDealerInventoryQuery({ limit: 200 });
+  const inventoryQuery = useGetDealerInventoryQuery({ limit: 200 }, { skip: isMobile });
   const imageMap = useMemo(() => {
     const map = new Map();
     for (const item of inventoryQuery.data?.items || []) {
@@ -686,6 +692,10 @@ export default function DealerSalesPage() {
   function toggleExpandAll() {
     setAllExpanded((value) => !value);
     setExpandedDays(new Set());
+  }
+
+  if (isMobile) {
+    return <DealerSalesMobileView />;
   }
 
   return (

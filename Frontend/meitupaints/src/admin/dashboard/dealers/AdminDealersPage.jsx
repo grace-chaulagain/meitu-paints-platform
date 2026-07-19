@@ -326,30 +326,32 @@ function DealerListRow({ dealer, selectionMode, selected, onSelectChange, onOpen
         </div>
       </div>
 
-      <div style={{ flex: "0 0 90px" }}>
-        <Pill tone={isVerified ? "positive" : "critical"} size="small">
-          {isVerified ? "Active" : dealer.status}
-        </Pill>
-      </div>
-
-      <div style={{ flex: "0 0 110px" }}>
-        <Pill tone={isDispatcherRouted ? "accent" : "neutral"} size="small">
-          {isDispatcherRouted ? "Dispatcher" : "Factory"}
-        </Pill>
-      </div>
-
-      <div style={{ flex: "0 0 120px" }}>
-        <Pill tone={activityTone(activityStatus)} size="small">
-          {activityStatus.replace(/_/g, " ")}
-        </Pill>
-      </div>
-
-      <div style={{ flex: "0 0 120px", textAlign: "right" }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
-          {money(summary.totalApprovedSales)}
+      <div className="dash-list-row-trailing" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ flex: "0 0 90px" }}>
+          <Pill tone={isVerified ? "positive" : "critical"} size="small">
+            {isVerified ? "Active" : dealer.status}
+          </Pill>
         </div>
-        <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
-          {summary.totalApprovedOrders || 0} orders
+
+        <div style={{ flex: "0 0 110px" }}>
+          <Pill tone={isDispatcherRouted ? "accent" : "neutral"} size="small">
+            {isDispatcherRouted ? "Dispatcher" : "Factory"}
+          </Pill>
+        </div>
+
+        <div style={{ flex: "0 0 120px" }}>
+          <Pill tone={activityTone(activityStatus)} size="small">
+            {activityStatus.replace(/_/g, " ")}
+          </Pill>
+        </div>
+
+        <div style={{ flex: "0 0 120px", textAlign: "right" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>
+            {money(summary.totalApprovedSales)}
+          </div>
+          <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
+            {summary.totalApprovedOrders || 0} orders
+          </div>
         </div>
       </div>
     </ListRow>

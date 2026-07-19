@@ -120,6 +120,21 @@ const OrderItemSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+
+    // Snapshot of a set/bundle product's contents at order time (e.g. the
+    // Granite Epoxy Floor Paint kit's 7 pieces) - display only, no price
+    // per component. Empty for every ordinary line item.
+    components: {
+      type: [
+        {
+          name: { type: String, default: "", trim: true },
+          packLabel: { type: String, default: "", trim: true },
+          quantity: { type: Number, default: 1 },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
   },
   {
     _id: false,

@@ -57,6 +57,24 @@ const PRODUCT_MENU_ITEMS = [
   },
 ];
 
+// Hamburger menu content - site navigation only (Home + the same product/
+// utility pages the desktop nav-center and search quicklinks fallback both
+// link to). Role/auth actions (Login, Dashboard, Order, Logout, etc.) live
+// exclusively in the account/bag panel now - this list is deliberately just
+// "where the site's pages are," matching the fact that it renders with the
+// exact same quicklink-row treatment as the search panel's own quicklinks.
+const MOBILE_NAV_ITEMS = [
+  { label: "Home", description: "Return to the homepage", href: "/" },
+  { label: "Buckets", description: "Browse paint product systems", href: "/products" },
+  { label: "Colors", description: "Explore the Meitu color library", href: "/colors" },
+  { label: "Textures", description: "Review texture and finish options", href: "/textures" },
+  { label: "Rate Calculator", description: "Estimate paint requirements", href: "/ratecalculator" },
+  { label: "Horoscope", description: "Explore zodiac-inspired palettes", href: "/horoscope" },
+  { label: "Dealership", description: "Apply or learn about partnership", href: "/dealership" },
+  { label: "About Us", description: "Learn about Meitu Paints Nepal", href: "/about" },
+  { label: "Support", description: "Get product guidance", href: "/support" },
+];
+
 function NavAccountIcon({ name, size = 18 }) {
   if (name === "bag") {
     return (
@@ -203,7 +221,6 @@ function NavBar() {
   const dispatcherDashboardHref = "/dispatcher/dashboard";
   const factoryDashboardHref = "/factory/dashboard";
   const adminCatalogHref = "/admin/products";
-  const dealerCatalogHref = "/dealer/catalog";
   const dealerOrdersHref = "/dealer/orders";
   const notificationsHref = "/notifications";
   const unreadBadge = formatBadgeCount(notifications?.totalUnread || 0);
@@ -221,6 +238,7 @@ function NavBar() {
   const desktopWidthRef = useRef(0);
   const profileWrapRef = useRef(null);
   const accountPanelRef = useRef(null);
+  const mobileNavPanelRef = useRef(null);
 
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -410,6 +428,10 @@ function NavBar() {
 
   const closeAccountPanel = () => {
     setProfileMenuOpen(false);
+  };
+
+  const closeMobileNav = () => {
+    setMobileOpen(false);
   };
 
   const closeMobilePanel = () => {
@@ -1007,119 +1029,61 @@ function NavBar() {
         ) : null}
       </AnimatePresence>
 
-      <div className={`mobile-nav ${mobileOpen ? "show" : ""}`}>
-        <Link to="/" onClick={() => setMobileOpen(false)}>
-          Home
-        </Link>
-        <div className="mobile-nav-group">
-          <div className="mobile-nav-heading">Products</div>
-          {PRODUCT_MENU_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              onClick={() => setMobileOpen(false)}
+      <AnimatePresence>
+        {mobileOpen ? (
+          <motion.button
+            key="mobile-nav-scrim"
+            type="button"
+            className="mobile-nav-scrim"
+            aria-label="Close navigation menu"
+            onClick={closeMobileNav}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_ENTER }}
+            exit={{ opacity: 0, transition: shouldReduceMotion ? { duration: 0 } : SCRIM_EXIT }}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {mobileOpen ? (
+          <motion.section
+            key="mobile-nav-panel"
+            className="mobile-nav-extension"
+            ref={mobileNavPanelRef}
+            aria-label="Site navigation"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ clipPath: "inset(0 0 100% 0)" }}
+            animate={{ clipPath: "inset(0 0 0% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_ENTER }}
+            exit={{ clipPath: "inset(0 0 100% 0)", transition: shouldReduceMotion ? { duration: 0 } : PANEL_EXIT }}
+          >
+            <motion.div
+              className="mobile-nav-extension-inner"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_ENTER }}
+              exit={{ opacity: 0, y: -6, transition: shouldReduceMotion ? { duration: 0 } : PANEL_CONTENT_EXIT }}
             >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-        <Link to="/ratecalculator" onClick={() => setMobileOpen(false)}>
-          Rate Calculator
-        </Link>
-        <Link to="/dealership" onClick={() => setMobileOpen(false)}>
-          Dealership
-        </Link>
-        <Link to="/horoscope" onClick={() => setMobileOpen(false)}>
-          Horoscope
-        </Link>
-        <Link to="/about" onClick={() => setMobileOpen(false)}>
-          About Us
-        </Link>
-        <Link to="/support" onClick={() => setMobileOpen(false)}>
-          Support
-        </Link>
-        {!user ? (
-          <Link to="/login" onClick={() => setMobileOpen(false)}>
-            Login
-          </Link>
-        ) : (
-          <>
-            <Link to={profileHref} onClick={() => setMobileOpen(false)}>
-              Profile
-            </Link>
-
-            {account.role === "ADMIN" ? (
-              <>
-                <Link to={dashboardHref} onClick={() => setMobileOpen(false)}>
-                  Dashboard{unreadBadge ? ` (${unreadBadge})` : ""}
-                </Link>
-                <Link
-                  to={adminCatalogHref}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Catalog
-                </Link>
-              </>
-            ) : null}
-
-            {account.role === "DEALER" ? (
-              <>
-                <Link
-                  to={dealerCatalogHref}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Order
-                </Link>
-                <Link
-                  to={dealerOrdersHref}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  History
-                </Link>
-              </>
-            ) : null}
-
-            {account.role === "DISPATCHER" ? (
-              <Link
-                to={dispatcherDashboardHref}
-                onClick={() => setMobileOpen(false)}
-              >
-                Dashboard{unreadBadge ? ` (${unreadBadge})` : ""}
-              </Link>
-            ) : null}
-
-            {account.role === "FACTORY" ? (
-              <Link
-                to={factoryDashboardHref}
-                onClick={() => setMobileOpen(false)}
-              >
-                Factory Dashboard
-              </Link>
-            ) : null}
-
-            {notifications?.enabled ? (
-              <Link
-                to={notificationsHref}
-                onClick={() => setMobileOpen(false)}
-              >
-                Notifications{unreadBadge ? ` (${unreadBadge})` : ""}
-              </Link>
-            ) : null}
-
-            <button
-              type="button"
-              className="mobile-logout"
-              onClick={async () => {
-                setMobileOpen(false);
-                await logout();
-                navigate("/login");
-              }}
-            >
-              Logout
-            </button>
-          </>
-        )}
-      </div>
+              <div className="nav-search-quicklinks">
+                {MOBILE_NAV_ITEMS.map((item) => (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className="nav-search-quicklink"
+                    onClick={closeMobileNav}
+                  >
+                    <span className="nav-search-quicklink-copy">
+                      <span>{item.label}</span>
+                      <small>{item.description}</small>
+                    </span>
+                    <span className="nav-search-quicklink-arrow">
+                      <NavRightArrowIcon size={15} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          </motion.section>
+        ) : null}
+      </AnimatePresence>
 
       <style>{`
         /* ─── Apple-Inspired NavBar Design System ─── */
@@ -2323,70 +2287,41 @@ function NavBar() {
           transform:rotate(-45deg);
         }
 
-        /* ─── Mobile Nav Panel ─── */
+        /* ─── Mobile Nav Panel ───
+           Same "extension" treatment as the search/account panels (scrim +
+           clip-path reveal), not the old full-screen white sheet - and the
+           link rows reuse .nav-search-quicklink directly rather than a
+           second copy of that recipe, so this can never visually drift
+           from the search panel's own quicklinks. */
 
-        .mobile-nav{
+        .mobile-nav-scrim{
           position:fixed;
-          top:var(--nav-height, 44px);
+          inset:44px 0 0;
+          z-index:9990;
+          border:0;
+          background:rgba(245,245,247,.5);
+          backdrop-filter:blur(20px);
+          -webkit-backdrop-filter:blur(20px);
+          cursor:default;
+        }
+
+        .mobile-nav-extension{
+          position:fixed;
+          top:44px;
           left:0;
           right:0;
-          bottom:0;
-          background:var(--surface-card, #ffffff);
-          display:flex;
-          flex-direction:column;
-          padding:36px 28px;
-          gap:28px;
-          transform:translateY(0);
-          transform-origin:top center;
-          clip-path:inset(0 0 100% 0);
-          opacity:0;
-          pointer-events:none;
-          transition:
-            clip-path var(--duration-primary, 0.344s) cubic-bezier(.22,.61,.36,1),
-            opacity var(--duration-primary, 0.344s) var(--ease-smooth, ease);
           z-index:9995;
+          background:var(--color-fog, #f5f5f7);
+          border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
+          overflow:hidden;
+          max-height:640px;
+          transform-origin:top center;
         }
 
-        .mobile-nav.show{
-          transform:translateY(0);
-          clip-path:inset(0 0 0 0);
-          opacity:1;
-          pointer-events:auto;
-        }
-
-        .mobile-nav a{
-          font-size:22px;
-          font-weight:600;
-          color:var(--color-ink, #1d1d1f);
-          text-decoration:none;
-        }
-
-        .mobile-nav-group{
-          display:grid;
-          gap:14px;
-        }
-
-        .mobile-nav-group a{
-          padding-left:16px;
-          font-size:20px;
-          color:var(--color-graphite, #707070);
-        }
-
-        .mobile-nav-heading{
-          font-size:22px;
-          font-weight:700;
-          color:var(--color-ink, #1d1d1f);
-        }
-
-        .mobile-logout{
-          font-size:22px;
-          font-weight:600;
-          color:var(--color-ink, #1d1d1f);
-          background:transparent;
-          border:none;
-          padding:0;
-          text-align:left;
-          cursor:pointer;
+        .mobile-nav-extension-inner{
+          width:min(620px, calc(100vw - 40px));
+          margin:0 auto;
+          padding:56px 0 64px;
         }
 
         /* ─── Responsive ─── */
@@ -2494,12 +2429,14 @@ function NavBar() {
           }
 
           .search-page-scrim,
-          .account-page-scrim{
+          .account-page-scrim,
+          .mobile-nav-scrim{
             inset:var(--nav-height, 44px) 0 0;
           }
 
           .nav-search-extension,
-          .account-nav-extension{
+          .account-nav-extension,
+          .mobile-nav-extension{
             top:var(--nav-height, 44px);
             bottom:0;
             z-index:9995;
@@ -2510,7 +2447,8 @@ function NavBar() {
           }
 
           .nav-search-extension-inner,
-          .account-nav-extension-inner{
+          .account-nav-extension-inner,
+          .mobile-nav-extension-inner{
             width:min(680px, calc(100vw - 32px));
             padding:44px 0 56px;
           }
@@ -2546,6 +2484,10 @@ function NavBar() {
             padding:36px 0 44px;
           }
           .account-nav-extension-inner{
+            width:calc(100vw - 28px);
+            padding:36px 0 44px;
+          }
+          .mobile-nav-extension-inner{
             width:calc(100vw - 28px);
             padding:36px 0 44px;
           }

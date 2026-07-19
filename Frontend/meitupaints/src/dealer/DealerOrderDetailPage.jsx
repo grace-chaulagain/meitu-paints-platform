@@ -26,6 +26,8 @@ import {
   normalizeStatus,
   orderDisplayBucket,
 } from "./orderDetailLogic.js";
+import { useIsMobileDealer } from "./mobile/useIsMobileDealer.js";
+import { DealerOrderDetailMobileView } from "./mobile/DealerOrderDetailMobileView.jsx";
 
 export default function DealerOrderDetailPage() {
   const { orderId } = useParams();
@@ -53,6 +55,20 @@ export default function DealerOrderDetailPage() {
 
   function goBack() {
     navigate("/dealer/orders");
+  }
+
+  const isMobile = useIsMobileDealer();
+  if (isMobile) {
+    return (
+      <DealerOrderDetailMobileView
+        order={order}
+        loading={orderQuery.isLoading}
+        loadError={orderQuery.error ? getQueryErrorMessage(orderQuery.error, "Failed to load this order.") : !order ? "This order could not be found." : ""}
+        onBack={goBack}
+        productsMap={productsMap}
+        familyMap={familyMap}
+      />
+    );
   }
 
   if (orderQuery.isLoading) {

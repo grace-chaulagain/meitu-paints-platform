@@ -182,3 +182,17 @@ export function resolveOrderItemImage(item, productsMap, familyMap) {
     null
   );
 }
+
+// V3 §5.6: shared by DealerOrderDetailMobileView.jsx's own "Reorder"
+// button and the Orders list's swipe-to-reorder action - wholesale-replace
+// semantics (the returned object IS the next full draft, passed straight
+// to useOrderDraft()'s setDraft), not additive to whatever's already in
+// the cart. Matches the original single-order-detail reorder behavior
+// exactly.
+export function buildReorderDraft(items = []) {
+  const nextDraft = {};
+  (items || []).forEach((item) => {
+    if (item.sku) nextDraft[item.sku] = Number(item.quantity || 0);
+  });
+  return nextDraft;
+}

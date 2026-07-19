@@ -242,7 +242,7 @@ function getStartingPrice(product) {
 
 function getTierSummary(product) {
   const tiers = product?.pricing?.tiers || [];
-  if (!tiers.length) return "Flat";
+  if (!tiers.length) return "No price";
   if (tiers.length === 1) return tiers[0]?.label || "Flat";
   return `${tiers.length} tiers`;
 }
@@ -960,6 +960,7 @@ function LoadingGrid() {
 function CompactVariantRow({ variant, onEditProduct, onUploadVariantImage, uploadingVariantId }) {
   const startingPrice = getStartingPrice(variant);
   const inactive = variant?.isActive === false;
+  const isPriceless = startingPrice === null;
   const isUploading = uploadingVariantId === variant._id;
   const variantImage = getPrimaryImage(variant?.images || []);
 
@@ -979,14 +980,17 @@ function CompactVariantRow({ variant, onEditProduct, onUploadVariantImage, uploa
         </span>
         <span>
           <strong>{variant?.pack?.label || "—"}</strong>
-          <span style={{ display: "block", marginTop: 2 }}>
+          <span style={{ display: "flex", gap: 4, marginTop: 2 }}>
             <Pill tone={inactive ? "neutral" : "positive"} size="small">{inactive ? "Inactive" : "Live"}</Pill>
+            {isPriceless ? <Pill tone="critical" size="small">No price</Pill> : null}
           </span>
         </span>
       </div>
 
       <div className="catalog-variant-sku">{variant?.sku || "SKU unavailable"}</div>
-      <div className="catalog-variant-price">{getTierSummary(variant)} · {formatMoney(startingPrice, variant?.currency || "NPR")}</div>
+      <div className="catalog-variant-price">
+        {isPriceless ? "No price" : `${getTierSummary(variant)} · ${formatMoney(startingPrice, variant?.currency || "NPR")}`}
+      </div>
 
       <div className="catalog-variant-row-actions">
         <GhostButton icon="download" onClick={() => onUploadVariantImage(variant)} disabled={isUploading}>
@@ -1003,6 +1007,7 @@ function MinimalCatalogCard({ entry, divisions, onOpen, onViewImage }) {
   const familyPrimaryImage = getPrimaryImage(entry.familyImages || []);
   const productPrimaryImage = getPrimaryImage(entry.variants?.[0]?.images || []);
   const heroImage = familyPrimaryImage || productPrimaryImage;
+  const isPriceless = getLowestPrice(entry.variants || []) === null;
 
   return (
     <Surface padding={14} className="catalog-card-shell dash-fade-up">
@@ -1032,6 +1037,7 @@ function MinimalCatalogCard({ entry, divisions, onOpen, onViewImage }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <Pill tone="neutral" size="small">{meta.division.shortLabel}</Pill>
           {entry.isFallback ? <Pill tone="critical" size="small">Missing family</Pill> : null}
+          {isPriceless ? <Pill tone="critical" size="small">No price</Pill> : null}
         </div>
 
         <button type="button" onClick={() => onOpen(entry)} className="catalog-card-title-btn">
@@ -1079,6 +1085,7 @@ function ProductListRow({ entry, divisions, onOpen, onViewImage }) {
   const familyPrimaryImage = getPrimaryImage(entry.familyImages || []);
   const productPrimaryImage = getPrimaryImage(entry.variants?.[0]?.images || []);
   const heroImage = familyPrimaryImage || productPrimaryImage;
+  const isPriceless = getLowestPrice(entry.variants || []) === null;
   const latestUpdate = Math.max(
     ...[entry, ...(entry.variants || [])].map((item) => new Date(item?.updatedAt || item?.createdAt || 0).getTime() || 0),
     0,
@@ -1108,6 +1115,7 @@ function ProductListRow({ entry, divisions, onOpen, onViewImage }) {
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
             {entry.isFallback ? <Pill tone="critical" size="small">Missing family</Pill> : null}
+            {isPriceless ? <Pill tone="critical" size="small">No price</Pill> : null}
           </div>
           <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {entry.code} · {categoryLabel(entry.category)}

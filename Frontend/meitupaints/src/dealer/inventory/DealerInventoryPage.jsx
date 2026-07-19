@@ -16,6 +16,8 @@ import {
 } from "../../components/dashboard/DashboardUI.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { AppleDateField, AppleDropdown } from "../../components/dashboard/ApplePickers.jsx";
+import { useIsMobileDealer } from "../mobile/useIsMobileDealer.js";
+import { DealerInventoryMobileView } from "../mobile/DealerInventoryMobileView.jsx";
 import {
   categoryLabel,
   formatDayHeading,
@@ -111,11 +113,14 @@ function InventoryProductCard({ item, onSelect }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
           <div style={{ marginTop: 2, fontSize: 12, color: "var(--color-graphite, #707070)" }}>{item.pack?.label || categoryLabel(item.category) || "Product"}</div>
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,.06)" }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{item.currentQuantity} Units</span>
+            {/* Status (dot + word) leads, quantity trails as secondary detail -
+                mobile spec: "surface stock as a colored dot + word, never a
+                bare number first." */}
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: statusTone(item.status) === "critical" ? "#b42318" : statusTone(item.status) === "caution" ? "var(--color-caution, #b64400)" : "#15803d" }}>
               <span style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor" }} />
               {statusLabel(item.status)}
             </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{item.currentQuantity} Units</span>
           </div>
         </div>
       </button>
@@ -368,6 +373,7 @@ function InventoryHistoryTable({ query, page, totalPages, onPageChange }) {
 }
 
 export default function DealerInventoryPage() {
+  const isMobile = useIsMobileDealer();
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -387,12 +393,15 @@ export default function DealerInventoryPage() {
   const [historySort, setHistorySort] = useState("desc");
   const [historyPage, setHistoryPage] = useState(1);
 
-  const inventoryQuery = useGetDealerInventoryQuery({
-    q: query,
-    status,
-    sort,
-    limit: 200,
-  });
+  const inventoryQuery = useGetDealerInventoryQuery(
+    {
+      q: query,
+      status,
+      sort,
+      limit: 200,
+    },
+    { skip: isMobile },
+  );
 
   const historyQuery = useGetDealerInventoryHistoryQuery(
     {
@@ -404,7 +413,7 @@ export default function DealerInventoryPage() {
       page: historyPage,
       limit: HISTORY_PAGE_SIZE,
     },
-    { skip: section !== "history" },
+    { skip: isMobile || section !== "history" },
   );
   const historyTotalPages = Math.max(1, Number(historyQuery.data?.pagination?.pages || 1));
 
@@ -466,6 +475,10 @@ export default function DealerInventoryPage() {
 
   function openProduct(item) {
     navigate(`/dealer/inventory/${item.productId}`);
+  }
+
+  if (isMobile) {
+    return <DealerInventoryMobileView />;
   }
 
   return (

@@ -7,21 +7,35 @@ export const painterIdParamsSchema = z
   })
   .strict();
 
+// type + citizenshipNumber are both required: Meitu only has two painter
+// classifications (no "unclassified" state for new painters), and
+// citizenshipNumber is the same dedup key the dealer-facing RTP
+// registration path already requires (registerRtpPainterBodySchema below),
+// extended to this admin path too.
 export const createPainterBodySchema = z
   .object({
     name: trimmedString(160),
     phones: z.array(phoneSchema).min(1, "At least one phone number is required").max(5),
     address: optionalTrimmedString(300),
     notes: optionalTrimmedString(1000),
+    type: z.enum(["TTP", "RTP"]),
+    citizenshipNumber: trimmedString(60),
   })
   .strict();
 
+// citizenshipNumber can be edited later (a typo fix, or backfilling a
+// legacy painter created before this field existed) but stays optional
+// here - unlike creation, an edit must not be blocked just because an
+// older record doesn't have one yet. `type` is deliberately not editable
+// through this schema at all: it's set once at creation, and an RTP -> TTP
+// change only ever happens through the dedicated promote action.
 export const updatePainterBodySchema = z
   .object({
     name: trimmedString(160).optional(),
     phones: z.array(phoneSchema).min(1, "At least one phone number is required").max(5).optional(),
     address: optionalTrimmedString(300),
     notes: optionalTrimmedString(1000),
+    citizenshipNumber: optionalTrimmedString(60),
   })
   .strict();
 
@@ -29,7 +43,7 @@ export const painterListQuerySchema = z
   .object({
     q: optionalTrimmedString(120),
     sort: z.enum(["name-asc", "name-desc", "recent"]).optional(),
-    type: z.enum(["ALL", "TTP", "RTP", "UNCLASSIFIED"]).optional(),
+    type: z.enum(["ALL", "TTP", "RTP"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(1000).optional(),
   })

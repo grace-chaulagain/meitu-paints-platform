@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useGetProductCategoriesQuery,
+  useGetProductFamiliesQuery,
   useGetProductsQuery,
 } from "../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../redux/api/selectors.js";
@@ -28,6 +29,8 @@ import {
   ViewToggle,
 } from "../components/dashboard/DashboardUI.jsx";
 import { scrollResultsToTop } from "../utils/scrollResultsToTop.js";
+import { useIsMobileDealer } from "./mobile/useIsMobileDealer.js";
+import { DealerCatalogMobileView } from "./mobile/DealerCatalogMobileView.jsx";
 
 const CATEGORIES_PER_PAGE = 4;
 
@@ -127,16 +130,17 @@ function resolveFamilyDisplayImage(family) {
   };
 }
 
-function QtyStepper({ value, onChange, selected = false }) {
+function QtyStepper({ value, onChange, selected = false, disabled = false }) {
   const qty = Number(value || 0);
 
   return (
-    <div className={`dealer-qty-stepper ${selected ? "selected" : ""}`}>
+    <div className={`dealer-qty-stepper ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}>
       <button
         type="button"
         onClick={() => onChange(Math.max(0, qty - 1))}
         aria-label="Decrease quantity"
         className="dealer-qty-btn"
+        disabled={disabled}
       >
         <DashboardIcon name="minus" size={12} strokeWidth={2.4} />
       </button>
@@ -149,12 +153,14 @@ function QtyStepper({ value, onChange, selected = false }) {
           onChange(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))
         }
         className="dealer-qty-input"
+        disabled={disabled}
       />
       <button
         type="button"
         onClick={() => onChange(qty + 1)}
         aria-label="Increase quantity"
         className="dealer-qty-btn"
+        disabled={disabled}
       >
         <DashboardIcon name="plus" size={12} strokeWidth={2.4} />
       </button>
@@ -217,6 +223,7 @@ function SizePickerDropdown({ value, options, onChange }) {
 function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onSizeChange }) {
   const qty = Number(quantity || 0);
   const selected = qty > 0;
+  const isPriceless = !(product?.pricing?.tiers || []).length;
   const tier = cartLine?.tier || null;
   const unitPrice = Number(cartLine?.unitPrice || 0);
   const subtotal = Number(cartLine?.lineTotal || 0);
@@ -230,7 +237,7 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onS
   const showTier = Boolean(tier) && tierLabel && tierLabel !== "Flat" && !sizeOptions;
 
   return (
-    <div className={`dealer-variant-row ${selected ? "selected" : ""}`} title={product.sku}>
+    <div className={`dealer-variant-row ${selected ? "selected" : ""} ${isPriceless ? "priceless" : ""}`} title={product.sku}>
       <span className="dealer-variant-icon">
         <DashboardIcon name="package" size={14} strokeWidth={1.8} />
       </span>
@@ -245,12 +252,18 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onS
           {showTier ? <span className="dealer-variant-tier">{tierLabel}</span> : null}
         </div>
         <div className="dealer-variant-price">
-          {formatMoney(unitPrice, product.currency)}
-          {selected ? <strong> · {formatMoney(subtotal, product.currency)}</strong> : null}
+          {isPriceless ? (
+            "Pricing pending"
+          ) : (
+            <>
+              {formatMoney(unitPrice, product.currency)}
+              {selected ? <strong> · {formatMoney(subtotal, product.currency)}</strong> : null}
+            </>
+          )}
         </div>
       </div>
 
-      <QtyStepper value={quantity} selected={selected} onChange={(next) => onQtyChange(product.sku, next)} />
+      <QtyStepper value={quantity} selected={selected} disabled={isPriceless} onChange={(next) => onQtyChange(product.sku, next)} />
     </div>
   );
 }
@@ -545,11 +558,28 @@ export default function DealerCatalogPage() {
 
   const productsQuery = useGetProductsQuery();
   const categoriesQuery = useGetProductCategoriesQuery();
+  const familiesQuery = useGetProductFamiliesQuery();
 
   const products = useMemo(
     () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
     [productsQuery.data],
   );
+
+  // groupProductsByCode (pricing.js) builds each "family" purely from
+  // Product documents (per-size items), which have no family-level image
+  // concept - it never touches the real ProductFamily collection, so the
+  // grouped families it returns have no `images` field at all. This maps
+  // ProductFamily.images (the single shared photo, independent of which
+  // size a dealer picks) onto each grouped family by code, so the catalog
+  // card can show one consistent picture per product instead of whichever
+  // size happened to be items[0].
+  const familyImageMap = useMemo(() => {
+    const map = {};
+    for (const family of familiesQuery.data || []) {
+      if (family?.code) map[family.code] = family.images || [];
+    }
+    return map;
+  }, [familiesQuery.data]);
 
   const categoryOptions = useMemo(
     () => buildCategoryOptions(categoriesQuery.data || [], products),
@@ -631,8 +661,10 @@ export default function DealerCatalogPage() {
 
   const families = useMemo(() => {
     const grouped = groupProductsByCode(filteredProducts);
-    return grouped.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  }, [filteredProducts]);
+    return grouped
+      .map((family) => ({ ...family, images: familyImageMap[family.code] || [] }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [filteredProducts, familyImageMap]);
 
   // Paginated by whole category, CATEGORIES_PER_PAGE per page — a category's
   // products always stay together (never split across a page boundary),
@@ -690,6 +722,7 @@ export default function DealerCatalogPage() {
   function changeCategory(nextCategory) {
     setCategory(nextCategory);
     setPage(1);
+    scrollResultsToTop();
     if (nextCategory !== "ALL" && search) {
       setSearch("");
       setSearchParams((prev) => {
@@ -714,6 +747,23 @@ export default function DealerCatalogPage() {
       { replace: true },
     );
     setCategory("ALL");
+  }
+
+  const isMobile = useIsMobileDealer();
+  if (isMobile) {
+    return (
+      <DealerCatalogMobileView
+        loading={loading}
+        loadError={loadError}
+        onRetry={() => productsQuery.refetch()}
+        families={families}
+        search={search}
+        onSearchChange={updateSearch}
+        categoryOptions={categoryOptions}
+        activeCategory={activeCategory}
+        onCategoryChange={changeCategory}
+      />
+    );
   }
 
   return (
@@ -1205,6 +1255,13 @@ export default function DealerCatalogPage() {
           background:rgba(0,113,227,.08);
         }
 
+        .dealer-variant-row.priceless{
+          background:rgba(193,18,31,.06);
+        }
+        .dealer-variant-row.priceless .dealer-variant-price{
+          color:var(--color-meitu-red, #c1121f);
+        }
+
         .dealer-variant-icon{
           width:22px;
           height:22px;
@@ -1323,6 +1380,16 @@ export default function DealerCatalogPage() {
 
         .dealer-qty-stepper.selected{
           border-color:rgba(0,113,227,.22);
+        }
+
+        .dealer-qty-stepper.disabled{
+          opacity:.45;
+        }
+        .dealer-qty-btn:disabled{
+          cursor:not-allowed;
+        }
+        .dealer-qty-input:disabled{
+          cursor:not-allowed;
         }
 
         .dealer-qty-btn{

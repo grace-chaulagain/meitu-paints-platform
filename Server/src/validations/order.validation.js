@@ -9,6 +9,16 @@ const optionalObjectIdSchema = z
   .optional()
   .transform((value) => (value ? value : null));
 
+// Set/bundle contents (e.g. the Granite Epoxy Floor Paint kit) - display
+// only, no price of its own. Empty/omitted for every ordinary line item.
+const orderItemComponentSchema = z
+  .object({
+    name: optionalTrimmedString(240),
+    packLabel: optionalTrimmedString(160),
+    quantity: z.coerce.number().min(0).max(1000000).optional(),
+  })
+  .strict();
+
 export const orderItemSchema = z
   .object({
     productId: optionalObjectIdSchema,
@@ -26,6 +36,7 @@ export const orderItemSchema = z
     lineTotal: moneySchema.optional(),
     amount: moneySchema.optional(),
     notes: optionalTrimmedString(300),
+    components: z.array(orderItemComponentSchema).max(50).optional(),
   })
   .strict();
 

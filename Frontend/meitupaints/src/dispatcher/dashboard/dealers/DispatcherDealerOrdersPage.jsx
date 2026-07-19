@@ -127,6 +127,11 @@ function OrderItemsTable({ items = [] }) {
                 <td style={{ padding: "10px 14px", verticalAlign: "top" }}>
                   <div style={{ fontWeight: 600, color: "var(--color-ink, #1d1d1f)", fontSize: 13 }}>{item.name || item.nameSnapshot || "—"}</div>
                   <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>{item.sku || item.skuSnapshot || item.code || ""}</div>
+                  {item.components?.length ? (
+                    <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
+                      Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
+                    </div>
+                  ) : null}
                 </td>
                 <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                   {item.packLabel || item.variantLabel || item.unit || item.uom || "—"}

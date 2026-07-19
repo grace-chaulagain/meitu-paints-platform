@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigationType } from "react-router-dom";
 import NavBar from "../NavBar.jsx";
 import DashboardIcon from "./DashboardIcons.jsx";
+import DashboardMobileNavDrawer from "./DashboardMobileNavDrawer.jsx";
 
 function badgeText(value) {
   return value === null || value === undefined ? "" : String(value);
@@ -42,6 +43,11 @@ function DashboardNavItem({ item, active, onNavigate, compact = false }) {
   );
 }
 
+function numericBadge(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export default function DashboardShell({
   title,
   eyebrow = "Workspace",
@@ -49,9 +55,22 @@ export default function DashboardShell({
   navGroups = [],
   activeKey = "",
   onNavigate,
+  // Opt-in: hides the mobile chevron trigger + this shell's own nav drawer.
+  // Only the dealer mobile redesign passes this (it renders its own bottom
+  // tab bar + "More" drawer instead) - every other role leaves this
+  // unset and keeps today's exact behavior.
+  hideMobileTopbar = false,
+  // Opt-in: adds a "dealer-mobile-bleed" class to the shell root, letting
+  // DealerMobileStyles.jsx zero out .dashboard-main-shell's own horizontal
+  // padding so dealer-mobile pages can own a single gutter (their own
+  // padding-inline) instead of stacking on top of the shell's. Every other
+  // role leaves this unset and keeps today's padding exactly as-is.
+  mobileBleed = false,
   children,
 }) {
-  const allItems = navGroups.flatMap((group) => group.items || []);
+  const allNavItems = navGroups.flatMap((group) => group.items || []);
+  const totalNavBadge = allNavItems.reduce((sum, item) => sum + numericBadge(item.badge), 0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
   const navigationType = useNavigationType();
   const mainRef = useRef(null);
@@ -96,7 +115,7 @@ export default function DashboardShell({
       <NavBar />
 
       <div
-        className={`dashboard-shell ${railCollapsed ? "rail-collapsed" : ""}`}
+        className={`dashboard-shell ${railCollapsed ? "rail-collapsed" : ""} ${mobileBleed ? "dealer-mobile-bleed" : ""}`}
         style={{ "--dashboard-rail-width": `${railWidth}px` }}
       >
         <aside className="dashboard-rail" aria-label={`${title} navigation`} aria-hidden={railCollapsed}>
@@ -160,31 +179,37 @@ export default function DashboardShell({
         </button>
 
         <section className="dashboard-main-shell" ref={mainRef} onScroll={handleMainScroll}>
-          <div className="dashboard-mobile-head">
-            <div>
-              <div className="dashboard-eyebrow">{eyebrow}</div>
-              <div className="dashboard-mobile-title">{title}</div>
-              {accountLabel ? (
-                <div className="dashboard-account">{accountLabel}</div>
-              ) : null}
+          {hideMobileTopbar ? null : (
+            <div className="dashboard-mobile-topbar">
+              <button
+                type="button"
+                className="dashboard-mobile-menu-btn"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open dashboard menu"
+              >
+                <DashboardIcon name="chevron" size={15} strokeWidth={2.2} />
+                {totalNavBadge ? <span className="dashboard-mobile-menu-badge">{totalNavBadge}</span> : null}
+              </button>
             </div>
-          </div>
-
-          <div className="dashboard-mobile-nav" aria-label="Dashboard sections">
-            {allItems.map((item) => (
-              <DashboardNavItem
-                key={item.key}
-                item={item}
-                compact
-                active={activeKey === item.key}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
+          )}
 
           <main className="dashboard-content">{children}</main>
         </section>
       </div>
+
+      <DashboardMobileNavDrawer
+        open={!hideMobileTopbar && drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={title}
+        eyebrow={eyebrow}
+        accountLabel={accountLabel}
+        groups={navGroups}
+        activeKey={activeKey}
+        onNavigate={(item) => {
+          onNavigate?.(item);
+          setDrawerOpen(false);
+        }}
+      />
 
       <style>{`
         .dashboard-shell{
@@ -336,15 +361,6 @@ export default function DashboardShell({
           overflow:hidden;
           text-overflow:ellipsis;
           white-space:nowrap;
-        }
-
-        .dashboard-mobile-title{
-          margin-top:8px;
-          font-size:24px;
-          line-height:1.1;
-          font-weight:800;
-          letter-spacing:-.03em;
-          color:var(--color-ink,#1d1d1f);
         }
 
         .dashboard-account{
@@ -540,8 +556,12 @@ export default function DashboardShell({
           max-width:100%;
         }
 
-        .dashboard-mobile-head,
-        .dashboard-mobile-nav{
+        .dashboard-shell button,
+        .dashboard-shell a{
+          -webkit-tap-highlight-color:transparent;
+        }
+
+        .dashboard-mobile-topbar{
           display:none;
         }
 
@@ -567,60 +587,64 @@ export default function DashboardShell({
             padding:18px 18px 42px;
           }
 
-          .dashboard-mobile-head{
-            display:flex;
-            justify-content:space-between;
-            align-items:flex-end;
-            gap:16px;
-            padding:4px 0 14px;
-            border-bottom:1px solid rgba(29,29,31,.08);
-          }
-
-          .dashboard-mobile-nav{
+          .dashboard-mobile-topbar{
             position:sticky;
-            top:0;
+            top:10px;
             z-index:30;
-            margin:0 -18px 18px;
-            padding:10px 18px;
             display:flex;
-            gap:8px;
-            overflow-x:auto;
-            border-bottom:1px solid rgba(29,29,31,.08);
-            background:rgba(255,255,255,.82);
-            backdrop-filter:blur(22px);
-            -webkit-backdrop-filter:blur(22px);
+            align-items:center;
+            width:max-content;
+            margin-bottom:8px;
           }
 
-          .dashboard-nav-item.compact{
-            width:auto;
-            min-width:max-content;
-            min-height:38px;
-            grid-template-columns:minmax(0,1fr) auto;
-            border-left:0;
+          .dashboard-mobile-menu-btn{
+            position:relative;
+            width:36px;
+            height:36px;
+            flex-shrink:0;
             border-radius:999px;
-            padding:8px 12px;
             border:1px solid rgba(29,29,31,.08);
             background:rgba(255,255,255,.9);
+            backdrop-filter:blur(16px);
+            -webkit-backdrop-filter:blur(16px);
+            box-shadow:0 6px 18px rgba(15,23,42,.1);
+            display:grid;
+            place-items:center;
+            color:var(--color-ink,#1d1d1f);
+            cursor:pointer;
+            transition:background .16s ease, transform .1s ease-out;
           }
 
-          .dashboard-nav-item.compact.has-icon{
-            grid-template-columns:18px minmax(0,1fr) auto;
-            padding-left:10px;
+          .dashboard-mobile-menu-btn:active{
+            transform:scale(.94);
           }
 
-          .dashboard-nav-item.compact .dashboard-nav-icon{
-            width:18px;
-            height:18px;
+          .dashboard-mobile-menu-badge{
+            position:absolute;
+            top:-3px;
+            right:-3px;
+            min-width:16px;
+            height:16px;
+            padding:0 4px;
             border-radius:999px;
+            background:var(--color-azure,#0071e3);
+            color:#fff;
+            font-size:9.5px;
+            font-weight:800;
+            display:grid;
+            place-items:center;
+            border:2px solid #fff;
           }
 
-          .dashboard-nav-item.compact.active{
-            border-color:rgba(0,113,227,.22);
-            background:rgba(0,113,227,.08);
-          }
-
-          .dashboard-nav-item.compact .dashboard-nav-title{
-            font-size:13px;
+          /* iOS Safari auto-zooms on focus for inputs under 16px, on iPad as
+             well as iPhone - DESIGN.md's compact 13-13.5px scale is
+             intentional on desktop, so this rides the same <=1100px
+             breakpoint that already switches the whole shell into its
+             mobile-nav presentation, rather than a separate/global bump. */
+          .dashboard-content input,
+          .dashboard-content select,
+          .dashboard-content textarea{
+            font-size:16px;
           }
 
           .dashboard-content{
@@ -635,17 +659,6 @@ export default function DashboardShell({
 
           .dashboard-main-shell{
             padding:14px 14px 36px;
-          }
-
-          .dashboard-mobile-nav{
-            margin-left:-14px;
-            margin-right:-14px;
-            padding-left:14px;
-            padding-right:14px;
-          }
-
-          .dashboard-mobile-title{
-            font-size:20px;
           }
 
           .dashboard-content [style*="repeat("],

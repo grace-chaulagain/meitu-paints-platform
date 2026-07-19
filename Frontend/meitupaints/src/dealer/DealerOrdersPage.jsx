@@ -29,6 +29,8 @@ import {
   resolveOrderItemImage,
   statusLabel,
 } from "./orderDetailLogic.js";
+import { useIsMobileDealer } from "./mobile/useIsMobileDealer.js";
+import { DealerOrdersMobileView } from "./mobile/DealerOrdersMobileView.jsx";
 
 const PAGE_SIZE = 10;
 
@@ -648,6 +650,11 @@ export default function DealerOrdersPage() {
 
   const filterOptions = ORDER_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
   const groupedOrders = useMemo(() => groupOrdersByDay(pagedOrders), [pagedOrders]);
+
+  const isMobile = useIsMobileDealer();
+  if (isMobile) {
+    return <DealerOrdersMobileView />;
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>

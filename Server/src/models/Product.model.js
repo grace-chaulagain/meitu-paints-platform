@@ -26,6 +26,17 @@ const PriceTierSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// One item inside a set/bundle product (e.g. one of the 7 pieces in the
+// Granite Epoxy Floor Paint kit) - display only, no price of its own.
+const ProductComponentSchema = new mongoose.Schema(
+  {
+    name: { type: String, default: "", trim: true },
+    packLabel: { type: String, default: "", trim: true },
+    quantity: { type: Number, default: 1 },
+  },
+  { _id: false },
+);
+
 PriceTierSchema.pre("validate", function () {
   const hasAnyPrice =
     this.pricePerPack !== null && this.pricePerPack !== undefined
@@ -133,6 +144,11 @@ const ProductSchema = new mongoose.Schema(
 
     // Pricing rules + tiers for this SKU
     pricing: { type: PricingSchema, default: () => ({}) },
+
+    // Set/bundle contents for display only (e.g. the Granite Epoxy Floor
+    // Paint kit) - no per-component price, just what's inside. Empty for
+    // every ordinary single-item product.
+    components: { type: [ProductComponentSchema], default: [] },
 
     currency: { type: String, default: "NPR" },
 

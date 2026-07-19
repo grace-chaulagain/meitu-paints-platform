@@ -33,9 +33,7 @@ export async function listPainters({ q = "", sort = "name-asc", type = "ALL", pa
     const regex = { $regex: trimmedQ.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
     filter.$or = [{ name: regex }, { address: regex }, { notes: regex }, { phones: regex }];
   }
-  if (type === "UNCLASSIFIED") {
-    filter.type = null;
-  } else if (type === "TTP" || type === "RTP") {
+  if (type === "TTP" || type === "RTP") {
     filter.type = type;
   }
 
@@ -68,8 +66,33 @@ export async function getPainterById(painterId) {
   return { item: painter };
 }
 
-export async function createPainter({ name, phones, address = "", notes = "" } = {}) {
-  const painter = await Painter.create({ name, phones, address, notes });
+// Admin creation: type (TTP/RTP) and citizenshipNumber are both required -
+// Meitu only has two painter classifications, so there's no "unclassified"
+// state to leave a new painter in, and citizenshipNumber is the same dedup
+// key registerPainterAsDealer (the dealer-facing RTP registration path)
+// already requires, extended to this admin path too. Picking "TTP" here
+// runs the exact same license-assignment (assignTtpLicense) that the
+// dedicated promote action uses - the painter is never left in a
+// type=TTP-but-no-licenseId state, regardless of which path created it.
+export async function createPainter({ name, phones, address = "", notes = "", type, citizenshipNumber } = {}) {
+  if (type !== "TTP" && type !== "RTP") {
+    throw new ApiError(400, "type must be TTP or RTP");
+  }
+
+  const trimmedCitizenship = String(citizenshipNumber || "").trim();
+  const existing = await Painter.findOne({ citizenshipNumber: trimmedCitizenship }).lean();
+  if (existing) {
+    throw new ApiError(409, "A painter with this citizenship number is already registered.", {
+      code: "PAINTER_ALREADY_EXISTS",
+      painter: painterSearchShape(existing),
+    });
+  }
+
+  const painter = new Painter({ name, phones, address, notes, citizenshipNumber: trimmedCitizenship, type: "RTP" });
+  await painter.save();
+  if (type === "TTP") {
+    await assignTtpLicense(painter);
+  }
   return { item: painter.toObject() };
 }
 
@@ -79,6 +102,28 @@ export async function updatePainter(painterId, payload = {}) {
   if (payload.phones !== undefined) updates.phones = payload.phones;
   if (payload.address !== undefined) updates.address = payload.address;
   if (payload.notes !== undefined) updates.notes = payload.notes;
+
+  // Only ever set citizenshipNumber when a real value is given - an empty
+  // string is still a "present" value as far as the sparse unique index on
+  // this field is concerned (sparse only excludes ABSENT fields, not
+  // present-but-empty ones), so writing "" here on an unrelated edit (e.g.
+  // a legacy painter with no citizenship number yet, saving a phone number
+  // change) would collide with every other such painter's identical ""
+  // value the next time this ran. Silently ignoring a blank submission
+  // means this field can only ever be added or corrected, never cleared.
+  if (payload.citizenshipNumber !== undefined) {
+    const trimmedCitizenship = String(payload.citizenshipNumber || "").trim();
+    if (trimmedCitizenship) {
+      const existing = await Painter.findOne({ citizenshipNumber: trimmedCitizenship, _id: { $ne: painterId } }).lean();
+      if (existing) {
+        throw new ApiError(409, "A painter with this citizenship number is already registered.", {
+          code: "PAINTER_ALREADY_EXISTS",
+          painter: painterSearchShape(existing),
+        });
+      }
+      updates.citizenshipNumber = trimmedCitizenship;
+    }
+  }
 
   const painter = await Painter.findByIdAndUpdate(painterId, { $set: updates }, { new: true, runValidators: true }).lean();
   if (!painter) throw new ApiError(404, "Painter not found");
@@ -295,6 +340,24 @@ export async function regeneratePainterIdCardWithPhoto(painterId, photoFile) {
   });
 }
 
+// Shared by promotePainterToTtp (RTP/legacy -> TTP promotion) and
+// createPainter (admin picks TTP directly at creation) - assigns the
+// permanent, system-generated Painter ID + license metadata, then attempts
+// the blank ID card generation. Mutates and saves the given (already
+// persisted) painter document in place. Two separate saves, matching the
+// original promotion flow: the licenseId commit must survive even if the
+// PDF/Cloudinary step that follows fails.
+async function assignTtpLicense(painter, { licenseIssuedAt, licenseStatus } = {}) {
+  painter.type = "TTP";
+  painter.licenseId = await generatePainterId();
+  painter.licenseIssuedAt = licenseIssuedAt ? new Date(licenseIssuedAt) : new Date();
+  painter.licenseStatus = licenseStatus || "VALID";
+  await painter.save();
+
+  painter.idCardGeneratedAt = (await generatePainterIdCard(painter)) ? new Date() : null;
+  await painter.save();
+}
+
 // Admin: formally classifies a painter as TTP by assigning a permanent,
 // system-generated Painter ID (stored on the existing licenseId field).
 // Deliberately a separate action from the generic edit form. The id is
@@ -311,15 +374,7 @@ export async function promotePainterToTtp(painterId, { licenseIssuedAt, licenseS
     });
   }
 
-  painter.type = "TTP";
-  painter.licenseId = await generatePainterId();
-  painter.licenseIssuedAt = licenseIssuedAt ? new Date(licenseIssuedAt) : new Date();
-  painter.licenseStatus = licenseStatus || "VALID";
-  await painter.save();
-
-  painter.idCardGeneratedAt = (await generatePainterIdCard(painter)) ? new Date() : null;
-  await painter.save();
-
+  await assignTtpLicense(painter, { licenseIssuedAt, licenseStatus });
   return { item: painter.toObject() };
 }
 

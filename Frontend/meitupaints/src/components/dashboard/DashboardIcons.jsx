@@ -304,6 +304,37 @@ const paths = {
       <circle cx="12" cy="13.2" r="3.4" />
     </>
   ),
+  home: (
+    <>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" />
+      <path d="M10 20v-5.5h4V20" />
+    </>
+  ),
+  // Filled variants for the dealer mobile tab bar's selected-tab state
+  // (spec: SF Symbols behavior, outline when idle / .fill when selected).
+  // Per-shape fill="currentColor" stroke="none" overrides the shared
+  // <svg> wrapper's fill:none/stroke:currentColor, same pattern already
+  // used by moreHorizontal above.
+  homeFill: (
+    <>
+      <path d="M4 11.5 12 4l8 7.5v8a1 1 0 0 1-1 1h-4v-6h-4v6H5a1 1 0 0 1-1-1v-8Z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  overviewFill: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor" stroke="none" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor" stroke="none" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" fill="currentColor" stroke="none" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" fill="currentColor" stroke="none" />
+    </>
+  ),
+  ordersFill: (
+    <>
+      <path d="M4 5h16v10l-3 4H7l-3-4V5Z" fill="currentColor" stroke="none" />
+      <path d="M4 15h5l1.5 2h3L15 15h5v1.2l-2.6 3.5a1 1 0 0 1-.8.4H8.4a1 1 0 0 1-.8-.4L5 16.2V15Z" fill="var(--color-snow,#fff)" stroke="none" opacity="0.001" />
+    </>
+  ),
 };
 
 export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = "", style }) {

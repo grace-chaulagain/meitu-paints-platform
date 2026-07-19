@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "./DashboardIcons.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
+import { useMediaQuery } from "../../hooks/useMediaQuery.js";
 
 export function Surface({ children, padding = 20, style = {}, ...rest }) {
   return (
@@ -932,6 +933,137 @@ export function Pagination({ page, totalPages, totalCount, itemLabel = "items", 
 // on the same row with no extra wrapper logic. `renderGroupHeader(row)` can
 // return a full-width divider (e.g. day grouping) rendered just above that
 // row; `footerCells` renders a real <tfoot> totals row.
+// Mobile card renderer for DataTable - one row becomes one stacked, dense
+// "card" (no per-row Surface/shadow, DESIGN.md forbids nested card clutter;
+// this lives inside the same outer Surface the desktop table uses) instead
+// of horizontally-scrolling a <table>. Reuses columns' own render()/
+// cellClassName() as-is - callers only need to opt a column into `isTitle`
+// (defaults to columns[0]) or `mobileSlot:"actions"` when the default
+// first-column-as-title guess is wrong (see AttemptsTab, whose first column
+// is a timestamp, not an identity field).
+function DataTableMobileList({
+  columns,
+  rows,
+  getRowKey,
+  onRowClick,
+  selection,
+  loading,
+  skeletonRowCount,
+  renderGroupHeader,
+  footerCells,
+}) {
+  const hasSelection = Boolean(selection);
+  const selectedSet = hasSelection ? new Set(selection.selectedIds) : null;
+
+  const titleColumn = columns.find((column) => column.isTitle) || columns[0];
+  const actionColumns = columns.filter((column) => column.mobileSlot === "actions");
+  const bodyColumns = columns.filter(
+    (column) => column !== titleColumn && column.mobileSlot !== "actions" && !column.hideOnMobile,
+  );
+
+  if (loading) {
+    return (
+      <Surface padding={0} className="dash-table-surface">
+        <div className="dash-mobile-list">
+          {Array.from({ length: skeletonRowCount }).map((_, index) => (
+            <div className="dash-mobile-row" key={`skeleton-${index}`}>
+              <div className="dash-mobile-row-head">
+                <span className="dash-table-skeleton-bar" style={{ width: `${40 + (index * 13) % 30}%`, height: 15 }} />
+              </div>
+              <div className="dash-mobile-fields">
+                <span className="dash-table-skeleton-bar" style={{ width: "60%" }} />
+                <span className="dash-table-skeleton-bar" style={{ width: "40%" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Surface>
+    );
+  }
+
+  return (
+    <Surface padding={0} className="dash-table-surface">
+      <div className="dash-mobile-list">
+        {rows.map((row) => {
+          const rowKey = getRowKey(row);
+          const group = renderGroupHeader ? renderGroupHeader(row) : null;
+          const selected = hasSelection && selectedSet.has(rowKey);
+          return (
+            <Fragment key={rowKey}>
+              {group ? <div className="dash-mobile-group">{group}</div> : null}
+              <div
+                className={`dash-mobile-row ${onRowClick ? "is-clickable" : ""} ${selected ? "is-selected" : ""}`}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                role={onRowClick ? "button" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row);
+                        }
+                      }
+                    : undefined
+                }
+              >
+                <div className="dash-mobile-row-head">
+                  {hasSelection ? (
+                    <RowCheckbox checked={selected} onChange={() => selection.onToggleSelect(rowKey)} />
+                  ) : null}
+                  <div className={`dash-mobile-title ${titleColumn.cellClassName ? titleColumn.cellClassName(row) : ""}`}>
+                    {titleColumn.render(row)}
+                  </div>
+                  {actionColumns.length ? (
+                    <div className="dash-mobile-actions" onClick={(event) => event.stopPropagation()}>
+                      {actionColumns.map((column) => (
+                        <span key={column.key}>{column.render(row)}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {bodyColumns.length ? (
+                  <div className="dash-mobile-fields">
+                    {bodyColumns.map((column) => (
+                      <Fragment key={column.key}>
+                        <span className="dash-mobile-field-label">{column.header}</span>
+                        <span className={`dash-mobile-field-value ${column.cellClassName ? column.cellClassName(row) : ""}`}>
+                          {column.render(row)}
+                        </span>
+                      </Fragment>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </Fragment>
+          );
+        })}
+      </div>
+      {footerCells ? (
+        <div className="dash-mobile-row dash-mobile-footer-row">
+          <div className="dash-mobile-row-head">
+            <div className="dash-mobile-title">
+              {footerCells.find((cell) => cell.key === titleColumn.key)?.content ?? footerCells[0]?.content}
+            </div>
+          </div>
+          <div className="dash-mobile-fields">
+            {bodyColumns.map((column) => {
+              const cell = footerCells.find((footerCell) => footerCell.key === column.key);
+              if (!cell) return null;
+              return (
+                <Fragment key={column.key}>
+                  <span className="dash-mobile-field-label">{column.header}</span>
+                  <span className="dash-mobile-field-value">{cell.content}</span>
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </Surface>
+  );
+}
+
 export function DataTable({
   columns,
   rows,
@@ -945,6 +1077,7 @@ export function DataTable({
   footerCells = null,
   minWidth = 640,
 }) {
+  const isMobile = useMediaQuery("(max-width: 640px)");
   const hasSelection = Boolean(selection);
   const selectedSet = hasSelection ? new Set(selection.selectedIds) : null;
   const totalCols = columns.length + (hasSelection ? 1 : 0);
@@ -955,6 +1088,22 @@ export function DataTable({
 
   const allOnPageSelected = hasSelection && rows.length > 0 && rows.every((row) => selectedSet.has(getRowKey(row)));
   const someOnPageSelected = hasSelection && !allOnPageSelected && rows.some((row) => selectedSet.has(getRowKey(row)));
+
+  if (isMobile) {
+    return (
+      <DataTableMobileList
+        columns={columns}
+        rows={rows}
+        getRowKey={getRowKey}
+        onRowClick={onRowClick}
+        selection={selection}
+        loading={loading}
+        skeletonRowCount={skeletonRowCount}
+        renderGroupHeader={renderGroupHeader}
+        footerCells={footerCells}
+      />
+    );
+  }
 
   return (
     <Surface padding={0} className="dash-table-surface">
@@ -1153,6 +1302,26 @@ export function DashboardUIStyles() {
       .dash-list-row:first-child{ border-top: none; }
       div[role="button"].dash-list-row:hover{ background: rgba(29,29,31,.035); }
 
+      /* Dealers/Dispatchers/Painters *ListRow wrappers group their trailing
+         pills/stat block in a .dash-list-row-trailing container (see
+         AdminDealersPage.jsx etc). On desktop those children keep their own
+         fixed-pixel flex-basis inline styles unchanged; below 640px this
+         drops the whole trailing group onto its own full-width wrapped row
+         instead of overflowing/crushing next to the name. The !important
+         overrides of the per-pill inline flex-basis mirror the same
+         precedent DashboardShell.jsx already uses for its own inline-style
+         grid overrides - not a new pattern. */
+      @media (max-width:640px){
+        .dash-list-row{ flex-wrap:wrap; row-gap:10px; }
+        .dash-list-row-trailing{
+          flex:1 1 100% !important;
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+        }
+        .dash-list-row-trailing > *{ flex:0 0 auto !important; width:auto !important; }
+      }
+
       .dash-segment-btn:hover:not(:disabled){ color: var(--color-ink, #1d1d1f); }
 
       .dash-tab-bar{
@@ -1326,6 +1495,34 @@ export function DashboardUIStyles() {
       .dash-table-group-row strong{ color:var(--color-ink, #1d1d1f); font-weight:800; }
       .dash-table tfoot tr{ border-top:2px solid rgba(29,29,31,.12); background:rgba(0,113,227,.04); }
       .dash-table tfoot td{ padding:12px 16px; font-size:13px; font-weight:800; color:var(--color-ink, #1d1d1f); }
+
+      /* DataTable mobile card fallback (<=640px, see useMediaQuery in DataTable) */
+      .dash-mobile-list{ display:flex; flex-direction:column; }
+      .dash-mobile-row{ padding:13px 16px; border-top:1px solid rgba(29,29,31,.06); }
+      .dash-mobile-list > .dash-mobile-row:first-child,
+      .dash-mobile-list > .dash-mobile-group:first-child{ border-top:none; }
+      .dash-mobile-row.is-clickable{ cursor:pointer; transition:background .12s ease; }
+      .dash-mobile-row.is-clickable:active{ background:rgba(0,113,227,.06); }
+      .dash-mobile-row.is-clickable:focus-visible{ outline:2px solid var(--color-azure, #0071e3); outline-offset:-2px; }
+      .dash-mobile-row.is-selected{ background:rgba(0,113,227,.06); }
+      .dash-mobile-row-head{ display:flex; align-items:center; gap:10px; min-height:22px; }
+      .dash-mobile-title{ flex:1; min-width:0; font-size:14px; font-weight:700; color:var(--color-ink, #1d1d1f); overflow-wrap:break-word; }
+      .dash-mobile-actions{ display:flex; align-items:center; gap:2px; flex:0 0 auto; }
+      .dash-mobile-group{ padding:14px 16px 4px; font-size:12px; font-weight:800; color:var(--color-graphite, #707070); }
+      .dash-mobile-fields{
+        display:grid;
+        grid-template-columns:auto 1fr;
+        column-gap:10px;
+        row-gap:6px;
+        margin-top:9px;
+        padding-top:9px;
+        border-top:1px solid rgba(29,29,31,.06);
+      }
+      .dash-mobile-field-label{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); white-space:nowrap; align-self:start; }
+      .dash-mobile-field-value{ font-size:13px; font-weight:600; color:var(--color-ink, #1d1d1f); text-align:right; min-width:0; overflow-wrap:break-word; }
+      .dash-mobile-footer-row{ background:rgba(0,113,227,.04); border-top:2px solid rgba(29,29,31,.12); }
+      .dash-mobile-footer-row .dash-mobile-title,
+      .dash-mobile-footer-row .dash-mobile-field-value{ font-weight:800; }
       .dash-table-skeleton-bar{
         display:block;
         height:14px;
@@ -1344,6 +1541,7 @@ export function DashboardUIStyles() {
         .dash-toggle-thumb,
         .dash-pagination-btn,
         .dash-table tbody tr,
+        .dash-mobile-row,
         .factory-ui-close-btn{ transition:none !important; }
         .admin-ui-primary-btn:active:not(:disabled),
         .admin-ui-ghost-btn:active:not(:disabled),

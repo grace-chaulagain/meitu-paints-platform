@@ -24,17 +24,33 @@ import { exportToCsv } from "../../../utils/exportToCsv.js";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
 
-const SORT_OPTIONS = [
-  { key: "name-desc", label: "Name Z–A" },
-  { key: "recent", label: "Recently added" },
-];
-
 const TYPE_FILTER_OPTIONS = [
   { key: "ALL", label: "All types" },
   { key: "TTP", label: "TTP only" },
   { key: "RTP", label: "RTP only" },
-  { key: "UNCLASSIFIED", label: "Unclassified" },
 ];
+
+// ID card readiness, not just TTP-vs-not: every TTP painter gets a blank
+// ID card the moment they're promoted (painter.service.js:promotePainterToTtp),
+// so "has a licenseId" alone can't distinguish a card that's actually usable
+// from one still waiting on a headshot. idCardPhotoAddedAt is the real
+// signal (same one painterIdCardStatus/IdCardStatusPill below already use
+// for the per-row badge) - this filter just lets that same three-way split
+// be searched on directly. RTP painters have no ID card concept at all
+// ("No ID"), matching painterIdCardStatus returning null for them.
+// Client-side (painters are already fully loaded via limit:1000), composed
+// on top of whatever the server-side search/type filters already returned.
+const ID_STATUS_FILTER_OPTIONS = [
+  { key: "ALL", label: "All ID statuses" },
+  { key: "ID_READY", label: "ID Ready" },
+  { key: "PHOTO_NEEDED", label: "Photo Needed" },
+  { key: "NO_ID", label: "No ID" },
+];
+
+function painterIdStatusKey(painter) {
+  if (painter.type !== "TTP") return "NO_ID";
+  return painter.idCardPhotoAddedAt ? "ID_READY" : "PHOTO_NEEDED";
+}
 
 function painterTypeTone(type) {
   if (type === "TTP") return "caution";
@@ -101,10 +117,12 @@ function formatPhones(phones) {
 // see painter.service.js:promotePainterToTtp). idCardPhotoAddedAt is the one
 // signal for a real, downloadable card (see PainterIdCardModal.jsx), so that
 // alone decides "Ready" vs "Photo Needed" - RTP/Unclassified painters have no
-// ID card concept at all, hence no badge.
+// ID card concept at all, hence no badge. Built on painterIdStatusKey (above)
+// so this per-row badge and the ID-status filter can never disagree.
 function painterIdCardStatus(painter) {
-  if (painter.type !== "TTP") return null;
-  return painter.idCardPhotoAddedAt
+  const key = painterIdStatusKey(painter);
+  if (key === "NO_ID") return null;
+  return key === "ID_READY"
     ? { tone: "positive", icon: "checkmark", label: "ID Ready" }
     : { tone: "caution", icon: "camera", label: "Photo Needed" };
 }
@@ -140,7 +158,10 @@ function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
         </div>
       </div>
 
-      <div style={{ flex: "1 1 200px", fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
+      <div
+        className="painter-row-address"
+        style={{ flex: "1 1 200px", fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}
+      >
         {painter.address || "No address on file"}
       </div>
 
@@ -242,8 +263,8 @@ function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
 export default function AdminPaintersPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("recent");
   const [type, setType] = useState("ALL");
+  const [idStatus, setIdStatus] = useState("ALL");
   const [view, setView] = useState(getInitialView);
   const [formPainter, setFormPainter] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -259,12 +280,16 @@ export default function AdminPaintersPage() {
     }
   }
 
-  const paintersQuery = useGetAdminPaintersQuery({ q: search, sort, type, limit: 1000 });
+  const paintersQuery = useGetAdminPaintersQuery({ q: search, type, limit: 1000 });
   const [createPainter, { isLoading: creating }] = useCreatePainterMutation();
   const [updatePainter, { isLoading: updating }] = useUpdatePainterMutation();
   const [deletePainter, { isLoading: deleting }] = useDeletePainterMutation();
 
   const painters = useMemo(() => paintersQuery.data?.items || [], [paintersQuery.data]);
+  const visiblePainters = useMemo(() => {
+    if (idStatus === "ALL") return painters;
+    return painters.filter((p) => painterIdStatusKey(p) === idStatus);
+  }, [painters, idStatus]);
   const loading = paintersQuery.isLoading && painters.length === 0;
   const isRefreshing = !loading && paintersQuery.isFetching;
   const error = actionError || (paintersQuery.error ? getQueryErrorMessage(paintersQuery.error, "Failed to load painters.") : "");
@@ -318,7 +343,7 @@ export default function AdminPaintersPage() {
         { key: "address", label: "Address" },
         { key: "notes", label: "Notes" },
       ],
-      painters,
+      visiblePainters,
     );
   }
 
@@ -365,12 +390,12 @@ export default function AdminPaintersPage() {
 
         <div className="painter-nav-filters">
           <div className="painter-nav-filters-left">
-            <AppleDropdown value={sort} options={SORT_OPTIONS} onChange={setSort} style={{ width: 176 }} />
             <AppleDropdown value={type} options={TYPE_FILTER_OPTIONS} onChange={setType} style={{ width: 160 }} />
+            <AppleDropdown value={idStatus} options={ID_STATUS_FILTER_OPTIONS} onChange={setIdStatus} style={{ width: 170 }} />
           </div>
           <div className="painter-nav-filters-right">
             <span className="painter-nav-count">
-              {painters.length.toLocaleString()} Painter{painters.length === 1 ? "" : "s"}
+              {visiblePainters.length.toLocaleString()} Painter{visiblePainters.length === 1 ? "" : "s"}
             </span>
           </div>
         </div>
@@ -394,11 +419,11 @@ export default function AdminPaintersPage() {
             ))}
           </div>
         </Surface>
-      ) : painters.length === 0 ? (
+      ) : visiblePainters.length === 0 ? (
         <EmptyState icon="user" title="No painters found" subtitle="Try adjusting the search, or add a new painter to the directory." />
       ) : view === "list" ? (
         <Surface padding={0} className="dash-fade-up">
-          {painters.map((painter) => (
+          {visiblePainters.map((painter) => (
             <PainterListRow key={painter._id} painter={painter} onOpen={openProfile} onEdit={openEditForm} onDelete={setDeleteTarget} />
           ))}
         </Surface>
@@ -412,7 +437,7 @@ export default function AdminPaintersPage() {
           }}
           className="dash-fade-up"
         >
-          {painters.map((painter) => (
+          {visiblePainters.map((painter) => (
             <PaintersGridCard key={painter._id} painter={painter} onOpen={openProfile} onEdit={openEditForm} onDelete={setDeleteTarget} />
           ))}
         </div>
@@ -761,6 +786,19 @@ export default function AdminPaintersPage() {
           }
           .painter-nav-filters{
             padding:12px 18px;
+          }
+        }
+        @media (max-width:640px){
+          /* Address is secondary metadata already visible on the full
+             profile a tap away - dropping it here (rather than wrapping it
+             onto its own row) keeps the row to name+type+phone+actions,
+             which comfortably fits without crushing anything. */
+          .painter-row-address{
+            display:none;
+          }
+          .painter-row-action-btn{
+            width:44px;
+            height:44px;
           }
         }
       `}</style>

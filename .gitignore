@@ -16,3 +16,8 @@ dist-packages/
 Server/.env
 Frontend/meitupaints/.env
 
+# Real PII / operational data - never committed (see .claude session notes)
+Frontend/meitupaints/public/Painter Pictures/
+Server/src/scripts/painters-seed-export.json
+Server/src/scripts/_suspend-all-dealer*.json
+

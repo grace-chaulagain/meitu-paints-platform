@@ -17,6 +17,8 @@ import {
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
+import { useIsMobileDealer } from "../mobile/useIsMobileDealer.js";
+import { DealerInventoryDetailMobileView } from "../mobile/DealerInventoryDetailMobileView.jsx";
 import {
   categoryLabel,
   formatMoney,
@@ -288,6 +290,7 @@ function MovementsTable({ query, page, totalPages, onPageChange, emptySubtitle }
 export default function DealerInventoryDetailPage() {
   const { productId } = useParams();
   const navigate = useNavigate();
+  const isMobile = useIsMobileDealer();
   const [tab, setTab] = useState("overview");
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -295,19 +298,25 @@ export default function DealerInventoryDetailPage() {
   const [historyRange, setHistoryRange] = useState("ALL");
   const [historyPage, setHistoryPage] = useState(1);
 
-  const itemQuery = useGetDealerInventoryItemQuery(productId);
+  // Skipped on mobile - DealerInventoryDetailMobileView owns its own
+  // independent queries below, and this desktop-only filter state
+  // (historyType/historyRange) would otherwise fetch a redundant page.
+  const itemQuery = useGetDealerInventoryItemQuery(productId, { skip: isMobile });
   const item = itemQuery.data;
 
   const { from, to } = useMemo(() => rangeToDates(historyRange), [historyRange]);
 
-  const historyQuery = useGetDealerInventoryMovementsQuery({
-    productId,
-    type: historyType,
-    from: from || undefined,
-    to: to || undefined,
-    page: historyPage,
-    limit: PAGE_SIZE,
-  });
+  const historyQuery = useGetDealerInventoryMovementsQuery(
+    {
+      productId,
+      type: historyType,
+      from: from || undefined,
+      to: to || undefined,
+      page: historyPage,
+      limit: PAGE_SIZE,
+    },
+    { skip: isMobile },
+  );
   const historyTotalPages = Math.max(1, Number(historyQuery.data?.pagination?.pages || 1));
 
   function changeHistoryType(next) {
@@ -321,6 +330,10 @@ export default function DealerInventoryDetailPage() {
   }
 
   const activeTabLabel = TABS.find((option) => option.key === tab)?.label || "Overview";
+
+  if (isMobile) {
+    return <DealerInventoryDetailMobileView />;
+  }
 
   if (itemQuery.isLoading && !item) {
     return (

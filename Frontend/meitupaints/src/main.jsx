@@ -57,6 +57,7 @@ import {
 import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
 
 import DealerDashboardPage from "./dealer/DealerDashboardPage.jsx";
+import DealerHomePage from "./dealer/DealerHomePage.jsx";
 import DealerCatalogPage from "./dealer/DealerCatalogPage.jsx";
 import DealerCartPage from "./dealer/DealerCartPage.jsx";
 import DealerOrdersPage from "./dealer/DealerOrdersPage.jsx";
@@ -281,6 +282,16 @@ const router = createBrowserRouter([
       { path: "/texture", element: withFooter(<MeituTextures />) },
       { path: "/textures", element: withFooter(<MeituTextures />) },
       { path: "/mask-test", element: withFooter(<RoomMaskTest />) },
+      {
+        path: "/dealer",
+        element: (
+          <RequireDealer>
+            <DealerDashboardPage>
+              <DealerHomePage />
+            </DealerDashboardPage>
+          </RequireDealer>
+        ),
+      },
       {
         path: "/dealer/catalog",
         element: (
