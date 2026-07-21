@@ -26,7 +26,7 @@ function categoryMeta(category) {
   return CATEGORY_META[category] || { label: category || "Notification", icon: "bell" };
 }
 
-// Admin-only opt-in for native OS notifications (see NotificationProvider's
+// Admin/factory opt-in for native OS notifications (see NotificationProvider's
 // desktopActive/requestDesktopPermission) - renders nothing for any other
 // role or if the browser lacks the Notification API entirely.
 function DesktopAlertControl({ notifications }) {

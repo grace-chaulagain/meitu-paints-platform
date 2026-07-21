@@ -14,7 +14,7 @@ const router = Router();
 // push subscription, but it doesn't need to be an admin to read it.
 router.get("/vapid-public-key", getVapidPublicKeyController);
 
-router.use(auth, requireRole("ADMIN"));
+router.use(auth, requireRole("ADMIN", "FACTORY"));
 
 router.post("/subscribe", subscribePushController);
 router.post("/unsubscribe", unsubscribePushController);

@@ -229,7 +229,7 @@ export async function createFactoryNotification({
 } = {}) {
   const normalizedCategory = assertCategoryForRole(category, ROLES.FACTORY);
 
-  return Notification.create({
+  const created = await Notification.create({
     recipientRole: ROLES.FACTORY,
     recipientUserId: null,
     category: normalizedCategory,
@@ -240,6 +240,18 @@ export async function createFactoryNotification({
     orderId: toObjectId(orderId),
     metadata,
   });
+
+  // Best-effort desktop push - mirrors createAdminNotification's hook.
+  sendPushToRole(ROLES.FACTORY, {
+    title: created.title,
+    body: created.description,
+    url: created.targetUrl,
+    tag: String(created._id),
+  }).catch((error) => {
+    console.warn("[web-push] factory notification push failed:", error.message);
+  });
+
+  return created;
 }
 
 export async function createDealerRegistrationNotification(application) {

@@ -33,16 +33,17 @@ function canUseNotifications(user) {
   return role === "ADMIN" || role === "DISPATCHER" || role === "FACTORY";
 }
 
-// Desktop (native OS) notifications - admin-only for now (see
-// canUseDesktopNotifications). Deliberately a separate, opt-in layer on
-// top of the existing in-app bell/summary: the browser Notification API
-// requires explicit permission, and even once granted we don't want to
-// replay an admin's entire unread backlog the moment they flip it on -
-// so the first poll after permission is granted is treated as a
-// baseline (nothing fires), and only notifications strictly newer than
-// the last-seen createdAt (persisted in localStorage, so a page reload
-// doesn't replay history either) trigger a native notification.
-const DESKTOP_NOTIF_LAST_SEEN_KEY = "meitu_admin_desktop_notif_last_seen_at";
+// Desktop (native OS) notifications - admin and factory only for now
+// (see canUseDesktopNotifications). Deliberately a separate, opt-in
+// layer on top of the existing in-app bell/summary: the browser
+// Notification API requires explicit permission, and even once granted
+// we don't want to replay an entire unread backlog the moment it's
+// flipped on - so the first poll after permission is granted is
+// treated as a baseline (nothing fires), and only notifications
+// strictly newer than the last-seen createdAt (persisted in
+// localStorage, so a page reload doesn't replay history either)
+// trigger a native notification.
+const DESKTOP_NOTIF_LAST_SEEN_KEY_PREFIX = "meitu_desktop_notif_last_seen_at_";
 // Worst-case delivery latency is bounded by this interval (a notification
 // created 1ms after a poll fires won't be picked up until the next one) -
 // 7s keeps that comfortably under the 10s target with headroom for actual
@@ -50,15 +51,16 @@ const DESKTOP_NOTIF_LAST_SEEN_KEY = "meitu_admin_desktop_notif_last_seen_at";
 const DESKTOP_NOTIF_POLL_MS = 7000;
 
 function canUseDesktopNotifications(user) {
-  return String(user?.role || "").toUpperCase() === "ADMIN";
+  const role = String(user?.role || "").toUpperCase();
+  return role === "ADMIN" || role === "FACTORY";
 }
 
 function getNotificationApiSupport() {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
-// A prominent, hard-to-miss prompt shown right after an admin logs in
-// (mounted at the app root, so it floats above whichever page they land
+// A prominent, hard-to-miss prompt shown right after an admin or factory
+// user logs in (mounted at the app root, so it floats above whichever page they land
 // on rather than waiting for them to find a toggle buried in the
 // Notification Center). "Allow" is a direct synchronous click handler -
 // deliberately not auto-triggered on mount - because Safari (and, on a
@@ -203,6 +205,9 @@ export function NotificationProvider({ children }) {
   const enabled = canUseNotifications(user);
   const desktopCapable = canUseDesktopNotifications(user);
   const desktopSupported = getNotificationApiSupport();
+  // Role-scoped so a shared browser used by both an admin and a factory
+  // account (or a role switch) doesn't cross-contaminate baselines.
+  const desktopNotifLastSeenKey = `${DESKTOP_NOTIF_LAST_SEEN_KEY_PREFIX}${String(user?.role || "").toUpperCase()}`;
 
   const { data, isLoading, isFetching, refetch } = useGetNotificationSummaryQuery(
     undefined,
@@ -308,10 +313,10 @@ export function NotificationProvider({ children }) {
       return;
     }
     if (!lastSeenInitialized.current) {
-      lastSeenAtRef.current = localStorage.getItem(DESKTOP_NOTIF_LAST_SEEN_KEY) || null;
+      lastSeenAtRef.current = localStorage.getItem(desktopNotifLastSeenKey) || null;
       lastSeenInitialized.current = true;
     }
-  }, [desktopActive]);
+  }, [desktopActive, desktopNotifLastSeenKey]);
 
   useEffect(() => {
     if (!desktopActive || !Array.isArray(recentItems) || recentItems.length === 0) return;
@@ -325,7 +330,7 @@ export function NotificationProvider({ children }) {
       // First poll since the feature became active - establish the
       // baseline without firing anything for the existing backlog.
       lastSeenAtRef.current = newestCreatedAt;
-      localStorage.setItem(DESKTOP_NOTIF_LAST_SEEN_KEY, newestCreatedAt);
+      localStorage.setItem(desktopNotifLastSeenKey, newestCreatedAt);
       return;
     }
 
@@ -357,8 +362,8 @@ export function NotificationProvider({ children }) {
     }
 
     lastSeenAtRef.current = newestCreatedAt;
-    localStorage.setItem(DESKTOP_NOTIF_LAST_SEEN_KEY, newestCreatedAt);
-  }, [desktopActive, recentItems]);
+    localStorage.setItem(desktopNotifLastSeenKey, newestCreatedAt);
+  }, [desktopActive, recentItems, desktopNotifLastSeenKey]);
 
   const summary = enabled ? data || emptySummary() : emptySummary();
 
