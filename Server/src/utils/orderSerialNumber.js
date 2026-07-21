@@ -1,13 +1,12 @@
 import Counter from "../models/Counter.model.js";
 
-// One global, never-reset sequence assigned at the moment an order is
-// VERIFIED (not when it's created) - both order.service.js's verifyOrder()
-// (admin) and dispatcher.service.js's verifyAssignedOrder() (dispatcher)
-// call this at their SUBMITTED->VERIFIED transition, so the sequence
-// reflects the actual order in which orders were reviewed/approved. The
-// Order Summary PDF and Proforma Invoice PDF generated for the same order
-// always show the same "SN{n}" since both just read order.serialNumber -
-// which stays unset until the order clears verification.
+// One global, never-reset sequence. Assigned lazily by
+// order.service.js's ensureProformaSerialNumber() the first time a
+// Proforma Invoice is actually generated for an order (not at creation
+// or verification), so the sequence reflects the real order PIs were
+// produced in. Idempotent - re-generating/re-downloading the same PI
+// always shows the same number. The Order Summary PDF reads the same
+// order.serialNumber, which stays unset until a PI has been generated.
 export async function getNextOrderSerialNumber({ session } = {}) {
   const counter = await Counter.findOneAndUpdate(
     { _id: "orderSerialNumber" },
