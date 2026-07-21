@@ -70,7 +70,10 @@ export async function listDispatcherPricing({ dispatcherId } = {}) {
 export async function listMyReplenishmentCatalog({ dispatcherId, q } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
 
-  const filter = { isActive: { $ne: false } };
+  // sellable:{$ne:false} keeps a kit's own component products out of the
+  // dispatcher's own replenishment catalog - see product.service.js's
+  // listActiveProducts for the same gate on the dealer/public catalog.
+  const filter = { isActive: { $ne: false }, sellable: { $ne: false } };
 
   if (q && q.trim()) {
     const query = q.trim();

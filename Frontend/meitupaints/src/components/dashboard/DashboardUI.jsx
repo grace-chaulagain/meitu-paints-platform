@@ -342,12 +342,21 @@ export function Pill({ children, tone = "neutral", size = "default", style = {} 
   );
 }
 
-export function PrimaryButton({ children, onClick, disabled = false, type = "button", style = {}, icon = "" }) {
+export function PrimaryButton({
+  children,
+  onClick,
+  disabled = false,
+  type = "button",
+  style = {},
+  icon = "",
+  loading = false,
+}) {
+  const isDisabled = disabled || loading;
   return (
     <button
       type={type}
       onClick={onClick}
-      disabled={disabled}
+      disabled={isDisabled}
       className="admin-ui-primary-btn"
       style={{
         display: "inline-flex",
@@ -357,16 +366,16 @@ export function PrimaryButton({ children, onClick, disabled = false, type = "but
         padding: "0 17px",
         borderRadius: 999,
         border: "none",
-        background: disabled ? "rgba(0,113,227,.35)" : "var(--color-azure, #0071e3)",
+        background: isDisabled ? "rgba(0,113,227,.35)" : "var(--color-azure, #0071e3)",
         color: "#fff",
         fontSize: 13.5,
         fontWeight: 700,
-        cursor: disabled ? "not-allowed" : "pointer",
+        cursor: isDisabled ? "not-allowed" : "pointer",
         transition: "transform .14s var(--ease-out, ease), background .16s ease",
         ...style,
       }}
     >
-      {icon ? <DashboardIcon name={icon} size={15} /> : null}
+      {loading ? <Spinner size={14} color="#fff" /> : icon ? <DashboardIcon name={icon} size={15} /> : null}
       {children}
     </button>
   );

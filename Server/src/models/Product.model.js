@@ -27,12 +27,27 @@ const PriceTierSchema = new mongoose.Schema(
 );
 
 // One item inside a set/bundle product (e.g. one of the 7 pieces in the
-// Granite Epoxy Floor Paint kit) - display only, no price of its own.
+// Granite Epoxy Floor Paint kit) - no price of its own. `productId` is
+// optional: when every component in the array has one set, the parent
+// product is treated as a fully-linked kit whose real stock is derived
+// from these components' own stock (see stock.service.js's
+// resolveOrderStockLines/getStock) instead of being tracked independently.
+// A components array with no productId links (or only some) behaves as
+// pure display metadata, same as before this field existed.
 const ProductComponentSchema = new mongoose.Schema(
   {
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
     name: { type: String, default: "", trim: true },
     packLabel: { type: String, default: "", trim: true },
-    quantity: { type: Number, default: 1 },
+    quantity: {
+      type: Number,
+      default: 1,
+      min: [1, "Component quantity must be at least 1"],
+      validate: {
+        validator: Number.isInteger,
+        message: "Component quantity must be a whole number",
+      },
+    },
   },
   { _id: false },
 );
@@ -168,6 +183,12 @@ const ProductSchema = new mongoose.Schema(
     },
 
     isActive: { type: Boolean, default: true },
+
+    // Narrower than isActive: can a dealer/dispatcher order this directly?
+    // Defaults true (no-op for every existing product). Set false for a
+    // kit's own component products so factory/admin can still see and
+    // stock-manage them while they stay invisible to customer catalogs.
+    sellable: { type: Boolean, default: true },
 
     meta: {
       source: { type: String, default: "" },

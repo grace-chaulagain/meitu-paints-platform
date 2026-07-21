@@ -73,7 +73,7 @@ async function main() {
       summary.grandTotal += Number(order.totals?.total || 0);
 
       try {
-        const pdfBuffer = buildOrderSummaryPdfBuffer(order);
+        const pdfBuffer = await buildOrderSummaryPdfBuffer(order);
         const pdfPath = path.join(dealerDir, `${order.orderNumber || order._id}.pdf`);
         fs.writeFileSync(pdfPath, pdfBuffer);
         pdfCount += 1;

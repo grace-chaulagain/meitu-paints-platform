@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 
 import ApiError from "../utils/apiError.js";
+import { getNextOrderSerialNumber } from "../utils/orderSerialNumber.js";
 import Order, {
   ORDER_REVIEWED_BY,
   ORDER_STATUS,
@@ -22,6 +23,7 @@ import {
 } from "./notification.service.js";
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { buildOrderSummaryPdfAttachment } from "./orderPdf.service.js";
+import { sendDealerStatusEmail } from "./factory.service.js";
 import {
   checkOrderStock,
   releaseReservationForOrder,
@@ -70,6 +72,9 @@ function getSmtpTransport() {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
 
   return _smtpTransport;
@@ -132,6 +137,19 @@ function getUserId(user) {
 function buildOrderNumber() {
   const rand = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `ORD-${rand}`;
+}
+
+// Shared by every order-creation flow (dealer orders here, dispatcher
+// replenishment orders in dispatcher.service.js) so every order in the
+// system gets the same short ORD-XXXXXX shape - not just dealer orders.
+export async function generateUniqueOrderNumber() {
+  let orderNumber = buildOrderNumber();
+  for (let i = 0; i < 5; i += 1) {
+    const exists = await Order.exists({ orderNumber });
+    if (!exists) break;
+    orderNumber = buildOrderNumber();
+  }
+  return orderNumber;
 }
 
 function parsePositiveNumber(value, label) {
@@ -368,6 +386,7 @@ function sanitizeOrderItems(items = []) {
       components: Array.isArray(item?.components)
         ? item.components
             .map((component) => ({
+              productId: component?.productId || null,
               name: normalizeText(component?.name),
               packLabel: normalizeText(component?.packLabel),
               quantity: Number(component?.quantity) || 1,
@@ -567,12 +586,7 @@ export async function createOrder({
     throw new ApiError(400, "Payment method is required before placing order");
   }
 
-  let orderNumber = buildOrderNumber();
-  for (let i = 0; i < 5; i += 1) {
-    const exists = await Order.exists({ orderNumber });
-    if (!exists) break;
-    orderNumber = buildOrderNumber();
-  }
+  const orderNumber = await generateUniqueOrderNumber();
 
   const dispatcher = dealer.dispatcherId || null;
 
@@ -1000,7 +1014,22 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
 
   // Email is a best-effort side effect, not part of the transaction above -
   // a transaction should never stay open across a slow external network
-  // call, and a DB rollback can't "unsend" an email anyway.
+  // call, and a DB rollback can't "unsend" an email anyway. Sent after the
+  // retry loop (not inside it) so a retried attempt can never double-email.
+  try {
+    const dealerEmailSentAt = await sendDealerStatusEmail({
+      order: verifiedOrder,
+      status: ORDER_STATUS.VERIFIED,
+    });
+    if (dealerEmailSentAt) {
+      const lastHistoryEntry = verifiedOrder.statusHistory[verifiedOrder.statusHistory.length - 1];
+      if (lastHistoryEntry) lastHistoryEntry.dealerEmailSentAt = dealerEmailSentAt;
+      await verifiedOrder.save();
+    }
+  } catch (error) {
+    console.warn("[dealer-email] verified status email failed:", error?.message);
+  }
+
   if (isFactoryOrder) {
     if (!smtpConfigured()) {
       console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
@@ -1008,7 +1037,7 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
       try {
         const recipients = await buildFactoryRecipients();
         const mail = buildFactoryOrderEmail(verifiedOrder);
-        const pdfAttachment = buildOrderSummaryPdfAttachment(verifiedOrder);
+        const pdfAttachment = await buildOrderSummaryPdfAttachment(verifiedOrder);
 
         await sendMail({
           to: recipients,
@@ -1060,6 +1089,49 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
   });
 
   return finalOrder;
+}
+
+// Assigns serialNumber (the SN{n} watermark printed on the Proforma
+// Invoice - and only the Proforma Invoice, not the Order Summary) the
+// first time a PI is actually generated for this order, not at
+// verification or creation. Idempotent: an order that already has one
+// keeps it - re-generating/re-downloading the same PI always shows the
+// same number instead of consuming a new one each time. Called by both
+// Admin (order review) and Factory (pre-dispatch) right before they build
+// the PDF client-side.
+export async function ensureProformaSerialNumber({ orderId, actorUser }) {
+  assertUser(actorUser);
+  const role = normalizeUpper(actorUser?.role);
+  if (role !== ROLES.ADMIN && role !== ROLES.FACTORY) {
+    throw new ApiError(403, "Only Admin or Factory can generate a Proforma Invoice");
+  }
+
+  const existing = await Order.findById(orderId).select("serialNumber").lean();
+  if (!existing) {
+    throw new ApiError(404, "Order not found");
+  }
+  if (existing.serialNumber) {
+    return existing.serialNumber;
+  }
+
+  const serialNumber = await getNextOrderSerialNumber();
+  const updated = await Order.findOneAndUpdate(
+    { _id: orderId, serialNumber: null },
+    { $set: { serialNumber } },
+    { new: true },
+  )
+    .select("serialNumber")
+    .lean();
+
+  // Lost a concurrent race to assign the first number for this order - the
+  // winner's number is what every PI for this order should show, so return
+  // that instead of the number we drew (which is simply never used again).
+  if (!updated) {
+    const refetched = await Order.findById(orderId).select("serialNumber").lean();
+    return refetched?.serialNumber;
+  }
+
+  return updated.serialNumber;
 }
 
 export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {

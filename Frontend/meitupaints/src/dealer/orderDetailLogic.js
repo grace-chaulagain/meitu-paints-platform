@@ -30,8 +30,13 @@ export function statusLabel(status) {
   return orderStatusMeta(status).label;
 }
 
+// Verification is a one-way gate, not a transient state - once an order
+// has passed it, the invoice stays available through every stage after
+// (DISPATCHED, COMPLETED), not just the moment it's exactly VERIFIED.
+const PDF_DOWNLOADABLE_STATUSES = new Set(["VERIFIED", "DISPATCHED", "COMPLETED"]);
+
 export function canDownloadOrderPdf(order) {
-  return normalizeStatus(order?.status) === "VERIFIED";
+  return PDF_DOWNLOADABLE_STATUSES.has(normalizeStatus(order?.status));
 }
 
 export function formatDate(value) {
@@ -118,10 +123,16 @@ export const ORDER_MILESTONES = [
   { key: "COMPLETED", label: "Completed", description: "Your order has been delivered successfully.", icon: "package" },
 ];
 
+// Value = how many milestones are already "done" once the order reaches
+// that status - e.g. status VERIFIED means the order has cleared both
+// Order Placed and Verified, so those two read "done" and Dispatched
+// (the next one) reads "current". Previously these matched the milestone's
+// own index, which made a just-reached status show as still "in progress"
+// on its own step instead of moving the spinner to the next one.
 const MILESTONE_STATUS_RANK = {
-  SUBMITTED: 0,
-  VERIFIED: 1,
-  DISPATCHED: 2,
+  SUBMITTED: 1,
+  VERIFIED: 2,
+  DISPATCHED: 3,
 };
 
 function milestoneRank(status) {

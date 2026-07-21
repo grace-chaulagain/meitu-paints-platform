@@ -7,10 +7,19 @@ function resolveBaseURL() {
     return configured.replace(/\/+$/, "");
   }
 
-  if (import.meta.env.DEV && typeof window !== "undefined") {
+  if (typeof window !== "undefined") {
     const protocol = window.location?.protocol || "http:";
     const hostname = window.location?.hostname || "localhost";
-    return `${protocol}//${hostname}:5002`;
+    const port = window.location?.port || "";
+
+    // `vite dev` (import.meta.env.DEV) and `vite preview` (a built,
+    // DEV=false bundle served on the same 5173 port for LAN testing) both
+    // run the SPA on its own port, separate from the Express API on 5002.
+    // Only true production (SERVE_CLIENT=true, API + SPA on one origin, no
+    // separate SPA port) should fall through to a same-origin "".
+    if (import.meta.env.DEV || port === "5173") {
+      return `${protocol}//${hostname}:5002`;
+    }
   }
 
   return import.meta.env.DEV ? "http://localhost:5002" : "";

@@ -9,10 +9,16 @@ const optionalObjectIdSchema = z
   .optional()
   .transform((value) => (value ? value : null));
 
-// Set/bundle contents (e.g. the Granite Epoxy Floor Paint kit) - display
-// only, no price of its own. Empty/omitted for every ordinary line item.
+// Set/bundle contents (e.g. the Granite Epoxy Floor Paint kit) - no price
+// of its own. Empty/omitted for every ordinary line item. productId is
+// optional (a components entry can still be pure display metadata with no
+// real product link - see Product.model.js's ProductComponentSchema) but
+// must be allowed through: the dealer/dispatcher cart forwards whatever
+// Product.components it read verbatim (dealer/pricing.js), so once a kit's
+// components are linked to real products this field is always present.
 const orderItemComponentSchema = z
   .object({
+    productId: optionalObjectIdSchema,
     name: optionalTrimmedString(240),
     packLabel: optionalTrimmedString(160),
     quantity: z.coerce.number().min(0).max(1000000).optional(),

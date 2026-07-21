@@ -26,6 +26,7 @@ import {
   SectionHeader,
   Surface,
 } from "../components/dashboard/DashboardUI.jsx";
+import { Toast } from "../components/dashboard/Toast.jsx";
 
 const PAYMENT_METHODS = [
   { key: "CASH", label: "Cash" },
@@ -133,11 +134,6 @@ function CartLine({ item, onQtyChange, onRemove }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{item.name}</div>
           <div style={{ marginTop: 3, fontSize: 12, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{formatPack(item.pack)}</div>
           <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Product Code: {item.sku}</div>
-          {item.components?.length ? (
-            <div style={{ marginTop: 4, fontSize: 11.5, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
-              Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -206,7 +202,7 @@ export default function DealerCartPage() {
   const [paymentPrompted, setPaymentPrompted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [toast, setToast] = useState(null);
 
   const visibleError = error || catalogError;
 
@@ -255,7 +251,6 @@ export default function DealerCartPage() {
     try {
       setSubmitting(true);
       setError("");
-      setSuccess("");
 
       const subtotal = Number(totalsData.subtotal || 0);
       const payload = {
@@ -281,7 +276,11 @@ export default function DealerCartPage() {
       };
 
       const res = await createDealerOrder(payload).unwrap();
-      setSuccess(res?.message || "Order submitted successfully.");
+      setToast({
+        tone: "success",
+        title: "Order placed",
+        description: res?.message || "Your order was submitted successfully.",
+      });
       setQuantities({});
       clearDraft();
       setDealerNote("");
@@ -335,9 +334,9 @@ export default function DealerCartPage() {
         </div>
       </div>
 
-      {visibleError || success ? (
-        <div style={{ padding: "12px 14px", borderRadius: 12, fontWeight: 600, fontSize: 13, background: visibleError ? "rgba(180,35,24,.08)" : "rgba(22,163,74,.08)", color: visibleError ? "#b42318" : "#15803d" }}>
-          {visibleError || success}
+      {visibleError ? (
+        <div style={{ padding: "12px 14px", borderRadius: 12, fontWeight: 600, fontSize: 13, background: "rgba(180,35,24,.08)", color: "#b42318" }}>
+          {visibleError}
         </div>
       ) : null}
 
@@ -471,7 +470,13 @@ export default function DealerCartPage() {
                 <div style={{ marginTop: 4, textAlign: "right", fontSize: 11, color: "var(--color-graphite, #707070)" }}>{dealerNote.length} / 250</div>
               </div>
 
-              <PrimaryButton icon="lock" onClick={handleSubmit} disabled={disabled} style={{ width: "100%", height: 46 }}>
+              <PrimaryButton
+                icon="lock"
+                onClick={handleSubmit}
+                disabled={disabled}
+                loading={submitting}
+                style={{ width: "100%", height: 46 }}
+              >
                 {submitting ? "Placing Order…" : "Place Order"}
               </PrimaryButton>
 
@@ -501,6 +506,8 @@ export default function DealerCartPage() {
           }
         }
       `}</style>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

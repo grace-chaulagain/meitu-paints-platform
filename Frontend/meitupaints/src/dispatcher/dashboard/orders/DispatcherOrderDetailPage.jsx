@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
 import {
-  useAmendDispatcherOrderMutation,
+  useAmendAdminOrderMutation,
+  useCompleteDispatcherOrderMutation,
   useDispatchDispatcherOrderMutation,
   useGetDispatcherOrderQuery,
   useGetDispatcherOrderStockCheckQuery,
@@ -17,10 +18,9 @@ import { Toast } from "../../../components/dashboard/Toast.jsx";
 import { OrderDetailStyles, OrderMilestoneStepper } from "../../../dealer/orderDetailUI.jsx";
 import { normalizeStatus } from "../../../dealer/orderDetailLogic.js";
 import { formatFullDateTime, money } from "../../../admin/dashboard/orders/orderFormatting.js";
-import { StockCheckPanel } from "../../../admin/dashboard/orders/AdminOrdersPage.jsx";
+import { AmendModal, StockCheckPanel } from "../../../admin/dashboard/orders/AdminOrdersPage.jsx";
 import {
   ActionButton,
-  AmendOrderModal,
   CardLabel,
   DetailItem,
   GlassCard,
@@ -106,13 +106,15 @@ export default function DispatcherOrderDetailPage() {
 
   const [verifyDispatcherOrder] = useVerifyDispatcherOrderMutation();
   const [rejectDispatcherOrder] = useRejectDispatcherOrderMutation();
-  const [amendDispatcherOrder] = useAmendDispatcherOrderMutation();
+  const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [dispatchDispatcherOrder] = useDispatchDispatcherOrderMutation();
+  const [completeDispatcherOrder] = useCompleteDispatcherOrderMutation();
 
   const dealer = order?.dealerId || order?.dealerSnapshot || {};
   const normalizedStatus = normalizeStatus(order?.status);
   const canAct = normalizedStatus === "SUBMITTED";
   const canFulfill = normalizedStatus === "VERIFIED";
+  const canComplete = normalizedStatus === "DISPATCHED";
   const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED" || normalizedStatus === "COMPLETED";
   // Dispatcher orders never touch the central factory stock ledger - they're
   // covered by the dispatcher's own stock, only actually consumed at
@@ -186,6 +188,22 @@ export default function DispatcherOrderDetailPage() {
     }
   };
 
+  const handleComplete = async () => {
+    const success = await runAction(`complete-${order._id}`, () =>
+      completeDispatcherOrder({
+        orderId: order._id,
+        payload: { note: "" },
+      }).unwrap(),
+    );
+    if (success) {
+      setToast({
+        tone: "success",
+        title: "Order completed",
+        description: `${order.orderNumber} is now marked as completed.`,
+      });
+    }
+  };
+
   const handleReject = async () => {
     const reviewNote = window.prompt("Reason / rejection note:", "");
     if (reviewNote === null) return;
@@ -202,25 +220,32 @@ export default function DispatcherOrderDetailPage() {
   const handleSaveAmendment = async (payload) => {
     if (!order?._id) return;
 
-    const success = await runAction(`amend-${order._id}`, () =>
-      amendDispatcherOrder({
+    const success = await runAction(`amend-${order._id}`, async () => {
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const subtotal = items.reduce(
+        (sum, item) => sum + Number(item?.lineTotal || 0),
+        0,
+      );
+
+      await amendAdminOrder({
         orderId: order._id,
         payload: {
-          items: payload.items,
+          items,
           totals: {
-            subtotal: payload.subtotal,
+            subtotal,
             discount: 0,
-            taxableAmount: payload.subtotal,
+            taxableAmount: subtotal,
             tax: 0,
-            total: payload.subtotal,
+            total: subtotal,
             currency: order?.totals?.currency || "NPR",
           },
           dealerNote: payload.dealerNote,
           internalNote: payload.internalNote,
-          reviewNote: payload.reviewNote,
+          reason: payload.reason,
+          note: payload.note,
         },
-      }).unwrap(),
-    );
+      }).unwrap();
+    });
 
     if (success) setAmending(false);
   };
@@ -288,8 +313,14 @@ export default function DispatcherOrderDetailPage() {
                   <ActionButton icon="checkmark" onClick={() => setVerifyModalOpen(true)} disabled={busyAction === `verify-${order._id}`}>
                     Verify
                   </ActionButton>
-                  <ActionButton danger icon="reject" onClick={handleReject} disabled={busyAction === `reject-${order._id}`}>
-                    {busyAction === `reject-${order._id}` ? "Rejecting..." : "Reject"}
+                  <ActionButton
+                    danger
+                    icon="reject"
+                    onClick={handleReject}
+                    disabled={busyAction === `reject-${order._id}`}
+                    loading={busyAction === `reject-${order._id}`}
+                  >
+                    {busyAction === `reject-${order._id}` ? "Rejecting…" : "Reject"}
                   </ActionButton>
                 </>
               ) : canFulfill ? (
@@ -297,12 +328,22 @@ export default function DispatcherOrderDetailPage() {
                   icon="checkmark"
                   onClick={handleDispatch}
                   disabled={busyAction === `dispatch-${order._id}` || stockBlocksDispatch}
+                  loading={busyAction === `dispatch-${order._id}`}
                 >
                   {busyAction === `dispatch-${order._id}`
-                    ? "Dispatching..."
+                    ? "Dispatching…"
                     : stockBlocksDispatch
                       ? "Stock blocked"
                       : "Dispatch (deducts your stock)"}
+                </ActionButton>
+              ) : canComplete ? (
+                <ActionButton
+                  icon="checkmark"
+                  onClick={handleComplete}
+                  disabled={busyAction === `complete-${order._id}`}
+                  loading={busyAction === `complete-${order._id}`}
+                >
+                  {busyAction === `complete-${order._id}` ? "Completing…" : "Complete"}
                 </ActionButton>
               ) : null}
             </div>
@@ -393,7 +434,7 @@ export default function DispatcherOrderDetailPage() {
         />
       ) : null}
 
-      <AmendOrderModal
+      <AmendModal
         open={amending}
         order={order}
         saving={busyAction === `amend-${order._id}`}

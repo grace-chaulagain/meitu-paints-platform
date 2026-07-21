@@ -1,4 +1,5 @@
 import streamifier from "streamifier";
+import mongoose from "mongoose";
 import Product from "../models/Product.model.js";
 import ProductFamily from "../models/ProductFamily.model.js";
 import cloudinary from "../utils/cloudinary.js";
@@ -49,6 +50,60 @@ function validateTierRows(tiers = []) {
       throw new Error("Tier max must be numeric");
     }
   }
+}
+
+// A components array with every entry's productId set turns a product
+// into a fully-linked kit whose stock is derived from those components
+// instead of tracked on its own (see stock.service.js's
+// resolveOrderStockLines/getStock). productId is optional per entry -
+// omitting it keeps that row as pure display metadata, same as before
+// this link existed.
+async function validateComponentsPayload(components, ownProductId) {
+  if (!Array.isArray(components)) {
+    throw new Error("components must be an array");
+  }
+
+  const seenProductIds = new Set();
+  const normalized = [];
+
+  for (const entry of components) {
+    const quantity = Number(entry?.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new Error("Each component's quantity must be a positive whole number");
+    }
+
+    let linkedProductId = null;
+    if (entry?.productId) {
+      const idStr = String(entry.productId);
+      if (!mongoose.Types.ObjectId.isValid(idStr)) {
+        throw new Error("Invalid component productId");
+      }
+      if (idStr === String(ownProductId)) {
+        throw new Error("A product cannot list itself as its own component");
+      }
+      if (seenProductIds.has(idStr)) {
+        throw new Error("A component product cannot be listed more than once");
+      }
+      seenProductIds.add(idStr);
+      linkedProductId = idStr;
+    }
+
+    normalized.push({
+      productId: linkedProductId,
+      name: normalizeText(entry?.name),
+      packLabel: normalizeText(entry?.packLabel),
+      quantity,
+    });
+  }
+
+  if (seenProductIds.size) {
+    const found = await Product.find({ _id: { $in: Array.from(seenProductIds) } }).select("_id");
+    if (found.length !== seenProductIds.size) {
+      throw new Error("One or more linked component products could not be found");
+    }
+  }
+
+  return normalized;
 }
 
 function inferPricingModel(tiers = []) {
@@ -455,6 +510,14 @@ export async function updateProductService(productId, payload = {}) {
 
   if (payload.source !== undefined) {
     product.source = payload.source || null;
+  }
+
+  if (payload.components !== undefined) {
+    product.components = await validateComponentsPayload(payload.components, productId);
+  }
+
+  if (typeof payload.sellable === "boolean") {
+    product.sellable = payload.sellable;
   }
 
   await product.save();

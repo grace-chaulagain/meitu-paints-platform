@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  useEnsureProformaSerialNumberMutation,
   useMarkFactoryOrderDeliveredMutation,
   useMarkFactoryOrderOutForDeliveryMutation,
   useRejectFactoryOrderMutation,
@@ -99,6 +100,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   const [markDelivered, deliveredState] = useMarkFactoryOrderDeliveredMutation();
   const [rejectOrder, rejectState] = useRejectFactoryOrderMutation();
   const [updateDispatchPrep] = useUpdateFactoryDispatchPrepMutation();
+  const [ensureProformaSerialNumber] = useEnsureProformaSerialNumberMutation();
 
   const busy = markOutState.isLoading || deliveredState.isLoading || rejectState.isLoading || pdfBusy || savingDispatchPrep;
 
@@ -167,18 +169,20 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
 
   async function generateProforma(driver) {
     setPdfBusy(true);
-    await run(() =>
-      downloadProformaPdf({
+    await run(async () => {
+      const { item } = await ensureProformaSerialNumber(order._id).unwrap();
+      await downloadProformaPdf({
         orderId: order._id,
         orderNumber: order.orderNumber,
+        serialNumber: item?.serialNumber,
         generatedAt: new Date().toISOString(),
         dealer: order.dealerSnapshot || {},
         payment: order.payment || {},
         driver,
         items: order.items || [],
         totals: order.totals || {},
-      }),
-    );
+      });
+    });
     setPdfBusy(false);
   }
 

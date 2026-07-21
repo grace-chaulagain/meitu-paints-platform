@@ -340,11 +340,6 @@ export function DealerCartMobileView() {
                       Remove
                     </button>
                   </div>
-                  {group.components?.length ? (
-                    <div className="dealer-m-cart-card-components">
-                      Includes: {group.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                    </div>
-                  ) : null}
 
                   {group.lines.map((line) => (
                     <CartLineRow

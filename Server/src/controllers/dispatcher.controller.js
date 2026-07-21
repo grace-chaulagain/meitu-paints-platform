@@ -18,6 +18,7 @@ import {
   getMyDispatcherStock,
   getMyDispatcherStockHistory,
   dispatchAssignedOrder,
+  completeAssignedOrder,
   listMyReplenishmentOrders,
   getMyReplenishmentOrderById,
   getMyReplenishmentCatalog,
@@ -445,6 +446,26 @@ export async function dispatchAssignedOrderController(req, res, next) {
     return res.status(200).json({
       ok: true,
       message: "Order dispatched successfully.",
+      item,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function completeAssignedOrderController(req, res, next) {
+  try {
+    const { orderId } = req.params;
+
+    const item = await completeAssignedOrder({
+      user: req.user,
+      orderId,
+      payload: req.body || {},
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Order completed successfully.",
       item,
     });
   } catch (error) {

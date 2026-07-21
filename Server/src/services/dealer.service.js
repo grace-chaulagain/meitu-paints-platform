@@ -37,10 +37,15 @@ export async function createDealerOrder({
     throw new ApiError(400, "Order must contain at least one item.");
   }
 
+  // sellable:false blocks a kit's own component products (factory-internal
+  // stock, not directly orderable - see stock.service.js's
+  // resolveOrderStockLines) from ever being ordered directly, even via a
+  // crafted payload that bypasses the catalog UI.
   const skus = items.map((item) => item.sku);
   const products = await Product.find({
     sku: { $in: skus },
     isActive: true,
+    sellable: { $ne: false },
   }).lean();
 
   const productMap = new Map(products.map((p) => [p.sku, p]));

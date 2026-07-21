@@ -127,6 +127,7 @@ const OrderItemSchema = new mongoose.Schema(
     components: {
       type: [
         {
+          productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null },
           name: { type: String, default: "", trim: true },
           packLabel: { type: String, default: "", trim: true },
           quantity: { type: Number, default: 1 },
@@ -338,6 +339,18 @@ const OrderSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       index: true,
+    },
+
+    // Separate from orderNumber (ORD-XXXXXX, opaque/random) - a plain
+    // ever-increasing integer assigned via Counter at creation time so the
+    // Order Summary and Proforma Invoice PDFs can print a small "SN{n}"
+    // that matches the actual sequence orders were generated in. Optional/
+    // sparse since orders created before this field existed have none.
+    serialNumber: {
+      type: Number,
+      index: true,
+      unique: true,
+      sparse: true,
     },
 
     // DEALER for a dealer's own order; DISPATCHER_REPLENISHMENT for a

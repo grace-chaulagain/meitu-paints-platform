@@ -51,7 +51,11 @@ function buildFamilyMap(families = []) {
 }
 
 export async function listActiveProducts({ q, category }) {
-  const filter = { isActive: true };
+  // sellable:{$ne:false} keeps a kit's own component products (real,
+  // isActive Product docs the factory stocks independently - see
+  // stock.service.js's resolveOrderStockLines/getStock) out of the
+  // customer-facing catalog even once reactivated for factory use.
+  const filter = { isActive: true, sellable: { $ne: false } };
 
   if (category && category !== "ALL") {
     filter.category = category;
@@ -105,7 +109,7 @@ export async function listActiveProducts({ q, category }) {
 }
 
 export async function listProductCategories({ includeInactive = false } = {}) {
-  const filter = includeInactive ? {} : { isActive: true };
+  const filter = includeInactive ? {} : { isActive: true, sellable: { $ne: false } };
 
   const [productCategories, familyCategories] = await Promise.all([
     Product.distinct("category", filter),

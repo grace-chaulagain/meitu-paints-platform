@@ -7,6 +7,7 @@ import {
   getOrderStockCheckController,
   amendOrderController,
   verifyOrderController,
+  ensureProformaSerialNumberController,
   rejectOrderController,
 } from "../controllers/order.controller.js";
 
@@ -95,6 +96,16 @@ router.post(
   validateParams(orderIdParamsSchema),
   validateBody(orderReviewBodySchema),
   rejectOrderController,
+);
+
+// Assign (or return the already-assigned) Proforma Invoice serial number -
+// called right before Admin/Factory build the PI PDF client-side.
+router.post(
+  "/:orderId/proforma-serial-number",
+  auth,
+  requireRole("ADMIN", "FACTORY"),
+  validateParams(orderIdParamsSchema),
+  ensureProformaSerialNumberController,
 );
 
 export default router;

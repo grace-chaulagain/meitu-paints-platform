@@ -119,6 +119,12 @@ function NavAccountIcon({ name, size = 18 }) {
         <path d="M5 15h4.2l1.4 2h2.8l1.4-2H19" />
       </>
     ),
+    cart: (
+      <>
+        <path d="M6 8h12l-1.4 9.2a1.5 1.5 0 0 1-1.5 1.3H8.9a1.5 1.5 0 0 1-1.5-1.3L6 8Z" />
+        <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+      </>
+    ),
     bell: (
       <>
         <path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 6.8-2.5 8h17c0-1.2-2.5-2-2.5-8Z" />
@@ -222,6 +228,7 @@ function NavBar() {
   const factoryDashboardHref = "/factory/dashboard";
   const adminCatalogHref = "/admin/products";
   const dealerOrdersHref = "/dealer/orders";
+  const dispatcherShopHref = "/dispatcher";
   const notificationsHref = "/notifications";
   const unreadBadge = formatBadgeCount(notifications?.totalUnread || 0);
   const shouldReduceMotion = useReducedMotion();
@@ -546,12 +553,20 @@ function NavBar() {
     }
 
     if (role === "DISPATCHER") {
-      items.push({
-        label: "Dashboard",
-        description: "Dispatcher routes and orders",
-        href: dispatcherDashboardHref,
-        icon: "dashboard",
-      });
+      items.push(
+        {
+          label: "Dashboard",
+          description: "Dispatcher dashboard overview",
+          href: dispatcherDashboardHref,
+          icon: "dashboard",
+        },
+        {
+          label: "Order",
+          description: "Order your own replenishment stock from the factory",
+          href: dispatcherShopHref,
+          icon: "cart",
+        },
+      );
     }
 
     if (role === "FACTORY") {
@@ -581,6 +596,7 @@ function NavBar() {
     dashboardHref,
     dealerOrdersHref,
     dispatcherDashboardHref,
+    dispatcherShopHref,
     factoryDashboardHref,
     notifications?.enabled,
     notificationsHref,

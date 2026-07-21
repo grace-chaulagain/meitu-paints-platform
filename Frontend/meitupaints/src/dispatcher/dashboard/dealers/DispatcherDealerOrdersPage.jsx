@@ -15,17 +15,28 @@ import {
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 
+// A dispatcher-fulfilled dealer order's real lifecycle is SUBMITTED ->
+// VERIFIED -> DISPATCHED -> COMPLETED (the dispatcher can complete an
+// order after dispatch, same as Factory) plus the REJECTED off-ramp - this
+// list previously stopped at DISPATCHED (with a stale "ARCHIVED" key that
+// didn't match its own DISPATCHED status/label), so a completed order had
+// no tab it belonged to and effectively vanished from this page, including
+// from "All".
 const ORDER_FILTERS = [
-  { key: "ALL", label: "All", status: "SUBMITTED,VERIFIED,REJECTED,DISPATCHED" },
+  { key: "ALL", label: "All", status: "SUBMITTED,VERIFIED,REJECTED,DISPATCHED,COMPLETED" },
   { key: "SUBMITTED", label: "Submitted", status: "SUBMITTED" },
   { key: "VERIFIED", label: "Verified", status: "VERIFIED" },
+  { key: "DISPATCHED", label: "Dispatched", status: "DISPATCHED" },
+  { key: "COMPLETED", label: "Completed", status: "COMPLETED" },
   { key: "REJECTED", label: "Rejected", status: "REJECTED" },
-  { key: "ARCHIVED", label: "Dispatched", status: "DISPATCHED" },
 ];
 
+// Matches ORDER_STATUS_META's tone convention (dealer/orderDetailLogic.js)
+// so a status reads the same color everywhere in the app.
 function statusTone(status) {
   const normalized = normalizeStatus(status);
-  if (normalized === "VERIFIED" || normalized === "DISPATCHED") return "positive";
+  if (normalized === "VERIFIED" || normalized === "COMPLETED") return "positive";
+  if (normalized === "DISPATCHED") return "accent";
   if (normalized === "REJECTED") return "critical";
   return "caution";
 }
@@ -127,11 +138,6 @@ function OrderItemsTable({ items = [] }) {
                 <td style={{ padding: "10px 14px", verticalAlign: "top" }}>
                   <div style={{ fontWeight: 600, color: "var(--color-ink, #1d1d1f)", fontSize: 13 }}>{item.name || item.nameSnapshot || "—"}</div>
                   <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>{item.sku || item.skuSnapshot || item.code || ""}</div>
-                  {item.components?.length ? (
-                    <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
-                      Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                    </div>
-                  ) : null}
                 </td>
                 <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                   {item.packLabel || item.variantLabel || item.unit || item.uom || "—"}
@@ -248,7 +254,11 @@ export default function DispatcherDealerOrdersPage() {
   const dealer = dealerQuery.data?.item || null;
   const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
 
-  const loading = !dealer && (dealerQuery.isLoading || ordersQuery.isLoading);
+  // Previously `!dealer && (...)` dropped the skeleton the instant dealer
+  // info resolved, even if orders were still on their first load - which
+  // flashed the "No orders found" empty state for a beat before real
+  // orders rendered. Keep the skeleton up until BOTH have something to show.
+  const loading = dealerQuery.isLoading || (ordersQuery.isLoading && !ordersQuery.data);
   const refreshing = Boolean(dealer) && (dealerQuery.isFetching || ordersQuery.isFetching);
   const error = dealerQuery.error?.message || ordersQuery.error?.message || "";
 

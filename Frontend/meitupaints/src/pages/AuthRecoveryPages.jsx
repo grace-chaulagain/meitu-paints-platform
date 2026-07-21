@@ -1,52 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, getApiErrorMessage } from "../api/client.js";
+import NavBar from "../components/NavBar.jsx";
 
-const shellStyle = {
-  minHeight: "100vh",
-  background:
-    "radial-gradient(900px 520px at 12% 0%, rgba(255,230,160,.34), transparent 52%), radial-gradient(900px 520px at 88% 10%, rgba(255,120,80,.12), transparent 45%), linear-gradient(180deg, #f5f6f8 0%, #edf1f5 100%)",
-  padding: "88px 16px 48px",
-  display: "grid",
-  placeItems: "center",
-};
-
-const cardStyle = {
-  width: "100%",
-  maxWidth: 520,
-  borderRadius: 30,
-  background: "rgba(255,255,255,.82)",
-  border: "1px solid rgba(255,255,255,.72)",
-  boxShadow:
-    "0 30px 80px rgba(15,23,42,.12), inset 0 1px 0 rgba(255,255,255,.92)",
-  backdropFilter: "blur(24px)",
-  WebkitBackdropFilter: "blur(24px)",
-  padding: "clamp(22px, 4vw, 34px)",
-};
-
-const inputStyle = {
-  width: "100%",
-  height: 56,
-  borderRadius: 18,
-  border: "1px solid rgba(15,23,42,.08)",
-  background: "rgba(255,255,255,.94)",
-  padding: "0 16px",
-  outline: "none",
-  fontSize: 15,
-  fontWeight: 800,
-  color: "#0f172a",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,.92)",
-};
-
-const labelStyle = {
-  display: "block",
-  marginBottom: 8,
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: ".08em",
-  textTransform: "uppercase",
-  color: "rgba(15,23,42,.52)",
-};
+// Same visual family as UserLogin.jsx (the "apple-login-*" redesigned sibling)
+// - reusing its exact tokens/classes under an "apple-recovery-*" prefix
+// (fog canvas, plain white/thin-border input card, clamp(34px,6vw,48px)
+// weight-700 headline, 58px flat input rows, circular icon buttons, #0066cc
+// links) so every recovery-flow screen (forgot password, resend setup link,
+// reset password, set password) finally matches the rest of the redesigned
+// auth flow instead of the old glassmorphic/gradient-blob look.
 
 const neutralMessage =
   "If an eligible account exists for this email, an email has been sent.";
@@ -71,41 +34,39 @@ function EyeIcon({ hidden = false }) {
   );
 }
 
-function StatusAlert({ tone = "error", children }) {
-  const isSuccess = tone === "success";
+function ArrowRightIcon() {
   return (
-    <div
-      style={{
-        borderRadius: 18,
-        padding: "14px 16px",
-        border: isSuccess
-          ? "1px solid rgba(18,183,106,.16)"
-          : "1px solid rgba(180,35,24,.14)",
-        background: isSuccess ? "rgba(18,183,106,.10)" : "rgba(180,35,24,.08)",
-        color: isSuccess ? "#067647" : "#b42318",
-        fontSize: 14,
-        fontWeight: 800,
-        lineHeight: 1.55,
-      }}
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function StatusAlert({ tone = "error", children }) {
+  const toneClass = tone === "success" ? "success" : tone === "notice" ? "notice" : "error";
+  return (
+    <div className={`apple-recovery-alert ${toneClass}`} role={toneClass === "error" ? "alert" : "status"}>
       {children}
     </div>
   );
 }
 
-function PasswordInput({
-  label,
-  value,
-  onChange,
-  visible,
-  onToggleVisibility,
-  placeholder,
-  autoComplete,
-}) {
+function PasswordInput({ label, value, onChange, visible, onToggleVisibility, placeholder, autoComplete }) {
   return (
-    <div>
-      <label style={labelStyle}>{label}</label>
-      <div style={{ position: "relative" }}>
+    <div className="apple-recovery-field password">
+      <label>{label}</label>
+      <div className="apple-recovery-password-row">
         <input
           type={visible ? "text" : "password"}
           value={value}
@@ -113,27 +74,12 @@ function PasswordInput({
           placeholder={placeholder}
           autoComplete={autoComplete}
           required
-          style={{ ...inputStyle, paddingRight: 58 }}
         />
         <button
           type="button"
+          className="apple-recovery-quiet-button"
           aria-label={visible ? "Hide password" : "Show password"}
           onClick={onToggleVisibility}
-          style={{
-            position: "absolute",
-            right: 10,
-            top: "50%",
-            transform: "translateY(-50%)",
-            width: 38,
-            height: 38,
-            display: "inline-grid",
-            placeItems: "center",
-            borderRadius: 12,
-            border: "1px solid rgba(15,23,42,.08)",
-            background: "rgba(255,255,255,.92)",
-            color: "rgba(15,23,42,.72)",
-            cursor: "pointer",
-          }}
         >
           <EyeIcon hidden={visible} />
         </button>
@@ -144,62 +90,350 @@ function PasswordInput({
 
 function RecoveryShell({ eyebrow, title, description, children }) {
   return (
-    <div style={shellStyle}>
-      <section style={cardStyle}>
-        <div
-          style={{
-            display: "inline-flex",
-            padding: "8px 12px",
-            borderRadius: 999,
-            background: "rgba(255,255,255,.82)",
-            border: "1px solid rgba(15,23,42,.06)",
-            fontSize: 11,
-            fontWeight: 900,
-            letterSpacing: ".08em",
-            textTransform: "uppercase",
-            color: "rgba(15,23,42,.56)",
-          }}
-        >
-          {eyebrow}
-        </div>
-        <h1
-          style={{
-            margin: "18px 0 0",
-            fontSize: "clamp(32px, 7vw, 48px)",
-            lineHeight: 1,
-            fontWeight: 950,
-            letterSpacing: "-0.05em",
-            color: "#0f172a",
-          }}
-        >
-          {title}
-        </h1>
-        <p
-          style={{
-            margin: "14px 0 0",
-            fontSize: 15,
-            lineHeight: 1.7,
-            fontWeight: 650,
-            color: "rgba(15,23,42,.58)",
-          }}
-        >
-          {description}
-        </p>
-        <div style={{ marginTop: 24 }}>{children}</div>
-      </section>
-    </div>
+    <>
+      <NavBar />
+      <main className="apple-recovery-page">
+        <Link to="/" className="apple-recovery-logo" aria-label="Back to home">
+          <img src="/meitulogo.svg" alt="Meitu Paints" />
+        </Link>
+
+        <section className="apple-recovery-card" aria-labelledby="recovery-title">
+          <div className="apple-recovery-kicker">{eyebrow}</div>
+          <h1 id="recovery-title">{title}</h1>
+          <p className="apple-recovery-subtitle">{description}</p>
+
+          {children}
+        </section>
+
+        <style>{`
+        .apple-recovery-page{
+          min-height:calc(100vh - 44px);
+          padding:72px 20px 34px;
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          justify-content:center;
+          background:#f5f5f7;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+        }
+
+        .apple-recovery-logo{
+          width:56px;
+          height:56px;
+          margin-bottom:30px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          text-decoration:none;
+        }
+
+        .apple-recovery-logo img{
+          width:52px;
+          height:52px;
+          object-fit:contain;
+          display:block;
+        }
+
+        .apple-recovery-card{
+          width:min(100%, 480px);
+          text-align:center;
+        }
+
+        .apple-recovery-kicker{
+          color:#707070;
+          font-size:14px;
+          line-height:1.3;
+          font-weight:600;
+          letter-spacing:-.003em;
+        }
+
+        .apple-recovery-card h1{
+          margin:8px 0 0;
+          color:#1d1d1f;
+          font-family:var(--font-sf-pro-display, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+          font-size:clamp(34px, 6vw, 48px);
+          line-height:1.08;
+          font-weight:700;
+          letter-spacing:-.022em;
+        }
+
+        .apple-recovery-subtitle{
+          width:min(100%, 380px);
+          margin:12px auto 0;
+          color:#707070;
+          font-size:17px;
+          line-height:1.45;
+          font-weight:400;
+          letter-spacing:-.006em;
+        }
+
+        .apple-recovery-form{
+          margin-top:30px;
+          display:grid;
+          gap:16px;
+        }
+
+        .apple-recovery-input-card{
+          overflow:hidden;
+          border-radius:18px;
+          background:#fff;
+          border:1px solid #d2d2d7;
+          text-align:left;
+          transition:border-color .16s ease, background-color .16s ease;
+        }
+
+        .apple-recovery-input-card:focus-within{
+          border-color:#86868b;
+        }
+
+        .apple-recovery-field{
+          display:grid;
+          grid-template-columns:92px minmax(0, 1fr);
+          align-items:center;
+          min-height:58px;
+          padding:0 10px 0 16px;
+        }
+
+        .apple-recovery-field + .apple-recovery-field{
+          border-top:1px solid #e8e8ed;
+        }
+
+        .apple-recovery-field label{
+          color:#707070;
+          font-size:13px;
+          line-height:1;
+          font-weight:400;
+          letter-spacing:-.003em;
+        }
+
+        .apple-recovery-field:focus-within label{
+          color:#1d1d1f;
+        }
+
+        .apple-recovery-field input{
+          width:100%;
+          height:58px;
+          border:0 !important;
+          border-radius:0 !important;
+          background:#fff !important;
+          background-color:#fff !important;
+          background-image:none !important;
+          color:#1d1d1f;
+          outline:0;
+          box-shadow:none !important;
+          appearance:none;
+          -webkit-appearance:none;
+          -webkit-tap-highlight-color:transparent;
+          font-size:17px;
+          line-height:1.3;
+          font-weight:400;
+          letter-spacing:-.006em;
+          padding:0 !important;
+        }
+
+        .apple-recovery-field input:focus,
+        .apple-recovery-field input:focus-visible{
+          background:#fff !important;
+          border:0 !important;
+          outline:0 !important;
+          box-shadow:none !important;
+        }
+
+        .apple-recovery-field input:autofill,
+        .apple-recovery-field input:-webkit-autofill,
+        .apple-recovery-field input:-webkit-autofill:hover,
+        .apple-recovery-field input:-webkit-autofill:focus{
+          background:#fff !important;
+          background-color:#fff !important;
+          -webkit-text-fill-color:#1d1d1f !important;
+          caret-color:#1d1d1f !important;
+          box-shadow:0 0 0 1000px #fff inset !important;
+          -webkit-box-shadow:0 0 0 1000px #fff inset !important;
+          transition:background-color 9999s ease-in-out 0s !important;
+        }
+
+        .apple-recovery-field input::placeholder{
+          color:#86868b;
+        }
+
+        .apple-recovery-password-row{
+          display:grid;
+          grid-template-columns:minmax(0, 1fr) 36px;
+          align-items:center;
+          gap:6px;
+        }
+
+        .apple-recovery-single-row{
+          display:grid;
+          grid-template-columns:minmax(0, 1fr) 36px;
+          align-items:center;
+          gap:6px;
+        }
+
+        .apple-recovery-quiet-button,
+        .apple-recovery-icon-submit{
+          width:34px;
+          height:34px;
+          border-radius:999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:0;
+          cursor:pointer;
+          transition:background-color .1s ease, color .1s ease, opacity .1s ease;
+        }
+
+        .apple-recovery-quiet-button{
+          border:0;
+          background:transparent;
+          color:#707070;
+        }
+
+        .apple-recovery-quiet-button:hover{
+          background:#f5f5f7;
+          color:#1d1d1f;
+        }
+
+        .apple-recovery-icon-submit{
+          border:1px solid #86868b;
+          background:#fff;
+          color:#1d1d1f;
+        }
+
+        .apple-recovery-icon-submit:hover:not(:disabled){
+          background:#1d1d1f;
+          border-color:#1d1d1f;
+          color:#fff;
+        }
+
+        .apple-recovery-icon-submit:disabled{
+          cursor:not-allowed;
+          opacity:.48;
+        }
+
+        .apple-recovery-primary-button{
+          height:56px;
+          border-radius:999px;
+          border:1px solid #1d1d1f;
+          background:#1d1d1f;
+          color:#fff;
+          font-size:15px;
+          font-weight:600;
+          letter-spacing:-.006em;
+          cursor:pointer;
+          transition:transform .12s var(--ease-out, cubic-bezier(.23,1,.32,1)), background-color .14s ease, opacity .14s ease;
+        }
+
+        .apple-recovery-primary-button:hover:not(:disabled){
+          background:#000;
+        }
+
+        .apple-recovery-primary-button:active:not(:disabled){
+          transform:scale(.98);
+        }
+
+        .apple-recovery-primary-button:disabled{
+          cursor:not-allowed;
+          opacity:.4;
+        }
+
+        .apple-recovery-alert{
+          margin-top:20px;
+          width:100%;
+          border-radius:14px;
+          padding:12px 14px;
+          text-align:left;
+          font-size:13px;
+          line-height:1.45;
+          font-weight:500;
+        }
+
+        .apple-recovery-form .apple-recovery-alert{
+          margin-top:0;
+        }
+
+        .apple-recovery-alert.error{
+          background:rgba(182,68,0,.08);
+          border:1px solid rgba(182,68,0,.18);
+          color:#b64400;
+        }
+
+        .apple-recovery-alert.success{
+          background:rgba(18,183,106,.08);
+          border:1px solid rgba(18,183,106,.18);
+          color:#067647;
+        }
+
+        .apple-recovery-alert.notice{
+          background:#fff;
+          border:1px solid #e8e8ed;
+          color:#474747;
+        }
+
+        .apple-recovery-links{
+          margin-top:6px;
+          display:flex;
+          justify-content:space-between;
+          gap:12px;
+          flex-wrap:wrap;
+          font-size:13px;
+          line-height:1.35;
+        }
+
+        .apple-recovery-links.centered{
+          justify-content:center;
+        }
+
+        .apple-recovery-links a{
+          color:#0066cc;
+          text-decoration:none;
+        }
+
+        .apple-recovery-links a:hover{
+          text-decoration:underline;
+        }
+
+        .apple-recovery-hint{
+          margin-top:4px;
+          border-radius:14px;
+          padding:12px 14px;
+          background:#fff;
+          border:1px solid #e8e8ed;
+          color:#707070;
+          text-align:left;
+          font-size:13px;
+          line-height:1.5;
+        }
+
+        @media (max-width:560px){
+          .apple-recovery-page{
+            justify-content:flex-start;
+            padding-top:64px;
+          }
+
+          .apple-recovery-logo{
+            margin-bottom:24px;
+          }
+
+          .apple-recovery-field{
+            grid-template-columns:1fr;
+            align-items:start;
+            gap:4px;
+            padding:10px 12px 8px;
+          }
+
+          .apple-recovery-field input{
+            height:38px;
+          }
+        }
+      `}</style>
+      </main>
+    </>
   );
 }
 
-function RequestEmailPage({
-  mode,
-  eyebrow,
-  title,
-  description,
-  endpoint,
-  submitLabel,
-  footerLink,
-}) {
+function RequestEmailPage({ mode, eyebrow, title, description, endpoint, submitLabel, footerLink }) {
   const [email, setEmail] = useState("");
   const [state, setState] = useState({ loading: false, ok: false, err: "" });
 
@@ -221,83 +455,44 @@ function RequestEmailPage({
 
   return (
     <RecoveryShell eyebrow={eyebrow} title={title} description={description}>
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-        {state.ok ? (
-          <StatusAlert tone="success">{neutralMessage}</StatusAlert>
-        ) : null}
+      <form className="apple-recovery-form" onSubmit={onSubmit}>
+        {state.ok ? <StatusAlert tone="success">{neutralMessage}</StatusAlert> : null}
         {state.err ? <StatusAlert>{state.err}</StatusAlert> : null}
 
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="Enter your account email"
-            autoComplete="email"
-            required
-            style={inputStyle}
-          />
+        <div className="apple-recovery-input-card">
+          <div className="apple-recovery-field">
+            <label htmlFor="recovery-email">Email</label>
+            <div className="apple-recovery-single-row">
+              <input
+                id="recovery-email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@example.com"
+                autoComplete="email"
+                required
+              />
+              <button
+                type="submit"
+                className="apple-recovery-icon-submit"
+                disabled={state.loading}
+                aria-label={submitLabel}
+              >
+                {state.loading ? "…" : <ArrowRightIcon />}
+              </button>
+            </div>
+          </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={state.loading}
-          style={{
-            height: 56,
-            borderRadius: 18,
-            border: "1px solid rgba(196,0,0,.18)",
-            background: state.loading
-              ? "rgba(15,23,42,.12)"
-              : "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
-            color: "#fff",
-            fontWeight: 950,
-            fontSize: 15,
-            cursor: state.loading ? "not-allowed" : "pointer",
-            boxShadow: state.loading
-              ? "none"
-              : "0 18px 34px rgba(196,0,0,.20)",
-          }}
-        >
-          {state.loading ? "Sending..." : submitLabel}
-        </button>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            fontSize: 13,
-            fontWeight: 850,
-          }}
-        >
-          <Link to="/login" style={{ color: "#475467", textDecoration: "none" }}>
-            Back to login
-          </Link>
-          <Link
-            to={footerLink.to}
-            style={{ color: "#b42318", textDecoration: "none" }}
-          >
-            {footerLink.label}
-          </Link>
+        <div className="apple-recovery-links">
+          <Link to="/login">Back to login</Link>
+          <Link to={footerLink.to}>{footerLink.label}</Link>
         </div>
 
         {mode === "setup" ? (
-          <div
-            style={{
-              borderRadius: 18,
-              padding: "14px 16px",
-              background: "rgba(248,248,250,.9)",
-              border: "1px solid rgba(15,23,42,.06)",
-              color: "rgba(15,23,42,.58)",
-              fontSize: 13,
-              lineHeight: 1.6,
-              fontWeight: 750,
-            }}
-          >
-            Setup links are available only for approved dealer or dispatcher
-            accounts that have not completed password setup yet.
+          <div className="apple-recovery-hint">
+            Setup links are available only for approved dealer or dispatcher accounts that have not completed
+            password setup yet.
           </div>
         ) : null}
       </form>
@@ -305,14 +500,7 @@ function RequestEmailPage({
   );
 }
 
-function SetNewPasswordPage({
-  purpose,
-  endpoint,
-  title,
-  description,
-  expiredLink,
-  successRedirect = "/login",
-}) {
+function SetNewPasswordPage({ purpose, endpoint, title, description, expiredLink, successRedirect = "/login" }) {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const token = useMemo(() => params.get("token") || "", [params]);
@@ -320,11 +508,7 @@ function SetNewPasswordPage({
   const [pw2, setPw2] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [showPw2, setShowPw2] = useState(false);
-  const [tokenState, setTokenState] = useState({
-    loading: true,
-    valid: false,
-    reason: "",
-  });
+  const [tokenState, setTokenState] = useState({ loading: true, valid: false, reason: "" });
   const [state, setState] = useState({ loading: false, ok: false, err: "" });
 
   useEffect(() => {
@@ -337,10 +521,7 @@ function SetNewPasswordPage({
       }
 
       try {
-        const { data } = await api.post("/api/auth/password-token-status", {
-          token,
-          purpose,
-        });
+        const { data } = await api.post("/api/auth/password-token-status", { token, purpose });
 
         if (!cancelled) {
           setTokenState({
@@ -372,11 +553,7 @@ function SetNewPasswordPage({
     }
 
     if (pw.length < 8) {
-      setState({
-        loading: false,
-        ok: false,
-        err: "Password must be at least 8 characters.",
-      });
+      setState({ loading: false, ok: false, err: "Password must be at least 8 characters." });
       return;
     }
 
@@ -399,94 +576,48 @@ function SetNewPasswordPage({
   };
 
   const showInvalidLink = !tokenState.loading && !tokenState.valid;
+  const submitDisabled = state.loading || tokenState.loading || !tokenState.valid;
 
   return (
-    <RecoveryShell
-      eyebrow="Secure Access"
-      title={title}
-      description={description}
-    >
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
-        {tokenState.loading ? (
-          <StatusAlert tone="success">Checking secure link...</StatusAlert>
-        ) : null}
+    <RecoveryShell eyebrow="Secure Access" title={title} description={description}>
+      <form className="apple-recovery-form" onSubmit={onSubmit}>
+        {tokenState.loading ? <StatusAlert tone="notice">Checking secure link…</StatusAlert> : null}
         {showInvalidLink ? (
           <StatusAlert>
-            This link has expired or is no longer valid.{" "}
-            <Link
-              to={expiredLink.to}
-              style={{ color: "inherit", fontWeight: 950 }}
-            >
-              {expiredLink.label}
-            </Link>
+            This link has expired or is no longer valid. <Link to={expiredLink.to}>{expiredLink.label}</Link>
           </StatusAlert>
         ) : null}
-        {state.ok ? (
-          <StatusAlert tone="success">
-            Password saved. Redirecting to login...
-          </StatusAlert>
-        ) : null}
+        {state.ok ? <StatusAlert tone="success">Password saved. Redirecting to login…</StatusAlert> : null}
         {state.err ? <StatusAlert>{state.err}</StatusAlert> : null}
 
-        <PasswordInput
-          label="New Password"
-          value={pw}
-          onChange={(event) => setPw(event.target.value)}
-          visible={showPw}
-          onToggleVisibility={() => setShowPw((value) => !value)}
-          placeholder="Enter new password"
-          autoComplete="new-password"
-        />
+        <div className="apple-recovery-input-card">
+          <PasswordInput
+            label="New"
+            value={pw}
+            onChange={(event) => setPw(event.target.value)}
+            visible={showPw}
+            onToggleVisibility={() => setShowPw((value) => !value)}
+            placeholder="Enter new password"
+            autoComplete="new-password"
+          />
+          <PasswordInput
+            label="Confirm"
+            value={pw2}
+            onChange={(event) => setPw2(event.target.value)}
+            visible={showPw2}
+            onToggleVisibility={() => setShowPw2((value) => !value)}
+            placeholder="Re-enter new password"
+            autoComplete="new-password"
+          />
+        </div>
 
-        <PasswordInput
-          label="Confirm Password"
-          value={pw2}
-          onChange={(event) => setPw2(event.target.value)}
-          visible={showPw2}
-          onToggleVisibility={() => setShowPw2((value) => !value)}
-          placeholder="Re-enter new password"
-          autoComplete="new-password"
-        />
-
-        <button
-          type="submit"
-          disabled={state.loading || tokenState.loading || !tokenState.valid}
-          style={{
-            height: 56,
-            borderRadius: 18,
-            border: "1px solid rgba(196,0,0,.18)",
-            background:
-              state.loading || tokenState.loading || !tokenState.valid
-                ? "rgba(15,23,42,.12)"
-                : "linear-gradient(135deg, #c40000 0%, #ff5b2e 100%)",
-            color: "#fff",
-            fontWeight: 950,
-            fontSize: 15,
-            cursor:
-              state.loading || tokenState.loading || !tokenState.valid
-                ? "not-allowed"
-                : "pointer",
-            boxShadow:
-              state.loading || tokenState.loading || !tokenState.valid
-                ? "none"
-                : "0 18px 34px rgba(196,0,0,.20)",
-          }}
-        >
-          {state.loading ? "Saving..." : "Save Password"}
+        <button type="submit" className="apple-recovery-primary-button" disabled={submitDisabled}>
+          {state.loading ? "Saving…" : "Save Password"}
         </button>
 
-        <Link
-          to="/login"
-          style={{
-            justifySelf: "center",
-            color: "#475467",
-            textDecoration: "none",
-            fontSize: 13,
-            fontWeight: 850,
-          }}
-        >
-          Back to login
-        </Link>
+        <div className="apple-recovery-links centered">
+          <Link to="/login">Back to login</Link>
+        </div>
       </form>
     </RecoveryShell>
   );

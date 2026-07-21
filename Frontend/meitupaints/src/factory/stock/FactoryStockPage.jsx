@@ -115,9 +115,12 @@ function FactoryStockGridCard({ item, onAdjust }) {
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
         <div>
           <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-.02em", color: "var(--color-azure, #0071e3)" }}>{item.stock?.availableQuantity || 0}</span>
-          <span style={{ marginLeft: 5, fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>available</span>
+          <span style={{ marginLeft: 5, fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>{item.kit?.isKit ? "sets" : "available"}</span>
         </div>
-        <Pill tone={stockStatusTone(item.stock?.status)} size="small">{titleCaseLabel(item.stock?.status)}</Pill>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {item.kit?.isKit ? <Pill tone="neutral" size="small">Kit</Pill> : null}
+          <Pill tone={stockStatusTone(item.stock?.status)} size="small">{titleCaseLabel(item.stock?.status)}</Pill>
+        </div>
       </div>
       <div style={{ fontSize: 11, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
         {item.packLabel || item.pack?.label || "Variant"} · {item.stock?.currentQuantity || 0} current · {item.stock?.reservedQuantity || 0} reserved
@@ -342,7 +345,10 @@ export default function FactoryStockPage() {
                     <span style={{ textAlign: "right", fontSize: 13 }}>{item.stock?.currentQuantity || 0}</span>
                     <span style={{ textAlign: "right", fontSize: 13 }}>{item.stock?.reservedQuantity || 0}</span>
                     <span style={{ textAlign: "right", fontSize: 13, fontWeight: 700 }}>{item.stock?.availableQuantity || 0}</span>
-                    <span><Pill tone={stockStatusTone(item.stock?.status)} size="small">{titleCaseLabel(item.stock?.status)}</Pill></span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {item.kit?.isKit ? <Pill tone="neutral" size="small">Kit</Pill> : null}
+                      <Pill tone={stockStatusTone(item.stock?.status)} size="small">{titleCaseLabel(item.stock?.status)}</Pill>
+                    </span>
                     <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
                       {item.stock?.lastUpdatedAt ? timeAgo(item.stock.lastUpdatedAt) : "Not updated"}
                     </span>

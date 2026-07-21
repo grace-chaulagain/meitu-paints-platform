@@ -34,7 +34,58 @@ function ensureObjectId(value, label = "id") {
   }
 }
 
-function getStock(product) {
+// A fully-linked kit has no real stock of its own - "how many sets could
+// ship right now" is the minimum, across its components, of that
+// component's own available quantity divided by how many of it one set
+// needs. A missing component product resolves to zero availability rather
+// than being skipped, so a broken link fails loud (OUT_OF_STOCK) instead
+// of silently overstating what's sellable.
+function computeKitAvailableSets(product, componentsById) {
+  let min = Infinity;
+  for (const component of product.components) {
+    const componentProduct = componentsById.get(String(component.productId));
+    if (!componentProduct) return 0;
+    const currentQuantity = Number(componentProduct?.stock?.currentQuantity || 0);
+    const reservedQuantity = Number(componentProduct?.stock?.reservedQuantity || 0);
+    const available = Math.max(0, currentQuantity - reservedQuantity);
+    const perSet = Math.max(1, Number(component.quantity || 1));
+    min = Math.min(min, Math.floor(available / perSet));
+  }
+  return Number.isFinite(min) ? Math.max(0, min) : 0;
+}
+
+// `componentsById` is opt-in (a Map<string productId, Product>, batch-
+// fetched by the caller) - every existing caller that omits it keeps
+// today's exact behavior. Only listStock()/getStockDetail() supply it, so
+// a kit row's currentQuantity/availableQuantity/status are derived live
+// from its components instead of reading the kit's own frozen stock
+// fields (which order-time resolution no longer touches once a product
+// becomes a fully-linked kit - see resolveOrderStockLines).
+function getStock(product, { componentsById = null } = {}) {
+  if (componentsById && isFullyLinkedKit(product)) {
+    const availableSets = computeKitAvailableSets(product, componentsById);
+    const lowStockThreshold = Number(product?.stock?.lowStockThreshold || 0);
+    let status = STOCK_STATUS.IN_STOCK;
+    if (availableSets <= 0) {
+      status = STOCK_STATUS.OUT_OF_STOCK;
+    } else if (lowStockThreshold > 0 && availableSets <= lowStockThreshold) {
+      status = STOCK_STATUS.LOW_STOCK;
+    }
+
+    return {
+      currentQuantity: availableSets,
+      reservedQuantity: 0,
+      availableQuantity: availableSets,
+      lowStockThreshold,
+      unit: clean(product?.stock?.unit || "SET"),
+      notes: clean(product?.stock?.notes),
+      lastUpdatedAt: product?.stock?.lastUpdatedAt || null,
+      lastUpdatedBy: product?.stock?.lastUpdatedBy || null,
+      status,
+      isKit: true,
+    };
+  }
+
   const stock = product?.stock || {};
   const currentQuantity = Number(stock.currentQuantity || 0);
   const reservedQuantity = Number(stock.reservedQuantity || 0);
@@ -58,12 +109,30 @@ function getStock(product) {
     lastUpdatedAt: stock.lastUpdatedAt || null,
     lastUpdatedBy: stock.lastUpdatedBy || null,
     status,
+    isKit: false,
   };
 }
 
-function stockItem(product) {
+function stockItem(product, componentsById = null) {
   const images = Array.isArray(product.images) ? product.images : [];
   const primaryImage = images.find((image) => image?.isPrimary) || images[0] || null;
+  const kit =
+    componentsById && isFullyLinkedKit(product)
+      ? {
+          isKit: true,
+          components: product.components.map((component) => {
+            const componentProduct = componentsById.get(String(component.productId));
+            return {
+              productId: component.productId,
+              name: componentProduct?.name || component.name || "",
+              sku: componentProduct?.sku || "",
+              requiredPerSet: Number(component.quantity || 1),
+              currentQuantity: Number(componentProduct?.stock?.currentQuantity || 0),
+              reservedQuantity: Number(componentProduct?.stock?.reservedQuantity || 0),
+            };
+          }),
+        }
+      : null;
 
   return {
     _id: product._id,
@@ -78,8 +147,22 @@ function stockItem(product) {
     primaryImage,
     imageUrl: primaryImage?.url || "",
     isActive: product.isActive,
-    stock: getStock(product),
+    stock: getStock(product, { componentsById }),
+    kit,
   };
+}
+
+async function buildComponentsById(products) {
+  const ids = new Set();
+  for (const product of products) {
+    if (!isFullyLinkedKit(product)) continue;
+    for (const component of product.components) {
+      if (component?.productId) ids.add(String(component.productId));
+    }
+  }
+  if (!ids.size) return new Map();
+  const componentProducts = await Product.find({ _id: { $in: Array.from(ids) } }).lean();
+  return new Map(componentProducts.map((doc) => [String(doc._id), doc]));
 }
 
 function buildProductQuery({ q = "", category = "", code = "" } = {}) {
@@ -225,16 +308,22 @@ async function findProductForOrderItem(item) {
     if (byId) return byId;
   }
 
+  // sellable:{$ne:false} is defense in depth here (the real customer-facing
+  // gate is order creation, dealer.service.js/dispatcher.service.js) - a
+  // kit's own component products (sellable:false) must never resolve as an
+  // orderable line even from a crafted sku/code payload. The productId
+  // branch above stays unfiltered since that's also how a normal kit's own
+  // (sellable) line resolves.
   const sku = clean(item?.sku);
   if (sku) {
-    const bySku = await Product.findOne({ sku, isActive: { $ne: false } });
+    const bySku = await Product.findOne({ sku, isActive: { $ne: false }, sellable: { $ne: false } });
     if (bySku) return bySku;
   }
 
   const code = clean(item?.code);
   const packLabel = normalizePackLabel(item?.packLabel || item?.variantLabel || item?.unit);
   if (code && packLabel) {
-    const candidates = await Product.find({ code, isActive: { $ne: false } });
+    const candidates = await Product.find({ code, isActive: { $ne: false }, sellable: { $ne: false } });
     return (
       candidates.find((product) => {
         const labels = [
@@ -250,6 +339,17 @@ async function findProductForOrderItem(item) {
   return null;
 }
 
+// A product is a "fully-linked kit" once every entry in its display
+// `components` array also carries a real productId - see
+// Product.model.js's ProductComponentSchema comment. A components array
+// with no links (or only some) stays pure display metadata and the
+// product resolves as an ordinary single line, same as before this
+// concept existed.
+function isFullyLinkedKit(product) {
+  const components = Array.isArray(product?.components) ? product.components : [];
+  return components.length > 0 && components.every((component) => component?.productId);
+}
+
 async function resolveOrderStockLines(orderOrItems) {
   const items = Array.isArray(orderOrItems)
     ? orderOrItems
@@ -261,6 +361,39 @@ async function resolveOrderStockLines(orderOrItems) {
   for (const [index, item] of items.entries()) {
     const requestedQuantity = itemQuantity(item);
     const product = await findProductForOrderItem(item);
+
+    if (product && isFullyLinkedKit(product)) {
+      // Kits carry no real stock of their own - the order line is replaced
+      // entirely by one resolved line per component, each requesting
+      // requestedQuantity * that component's per-set quantity. Every
+      // downstream consumer (stock-check, reserve, consume, release,
+      // amend) already operates generically on whatever this function
+      // returns, so nothing past this point needs to know kits exist.
+      const componentIds = product.components.map((component) => component.productId);
+      const componentProducts = await Product.find({ _id: { $in: componentIds } });
+      const componentsById = new Map(componentProducts.map((doc) => [String(doc._id), doc]));
+      const kitParent = { productId: product._id, name: product.name, sku: product.sku };
+
+      for (const component of product.components) {
+        const componentProduct = componentsById.get(String(component.productId));
+        const componentQuantity = requestedQuantity * Number(component.quantity || 1);
+        lines.push({
+          index,
+          item,
+          product: componentProduct || null,
+          matched: Boolean(componentProduct),
+          requestedQuantity: componentQuantity,
+          productId: componentProduct?._id || component.productId,
+          sku: componentProduct?.sku || "",
+          name: componentProduct?.name || component.name || "",
+          category: componentProduct?.category || "",
+          packLabel: componentProduct?.pack?.label || component.packLabel || "",
+          kitParent,
+        });
+      }
+      continue;
+    }
+
     lines.push({
       index,
       item,
@@ -278,6 +411,15 @@ async function resolveOrderStockLines(orderOrItems) {
   return lines;
 }
 
+// A kit-expanded line's own product/sku name (a component) reads as
+// confusing on its own in a stock-check/reservation review - prefix it
+// with the kit's name so "Floor paint Gripcoat (A)" reads as "Granite
+// Epoxy Floor Paint — Floor paint Gripcoat (A)".
+function displayName(line, fallback) {
+  const base = fallback || line.name || "";
+  return line.kitParent?.name ? `${line.kitParent.name} — ${base}` : base;
+}
+
 function buildStockCheckRows(lines) {
   const requestedByProduct = new Map();
   for (const line of lines) {
@@ -291,7 +433,7 @@ function buildStockCheckRows(lines) {
       return {
         productId: line.productId || null,
         sku: line.sku || "",
-        name: line.name || "Unmatched item",
+        name: displayName(line, line.name || "Unmatched item"),
         requestedQuantity: line.requestedQuantity,
         currentQuantity: 0,
         reservedQuantity: 0,
@@ -324,7 +466,7 @@ function buildStockCheckRows(lines) {
     return {
       productId: line.product._id,
       sku: line.product.sku || line.sku || "",
-      name: line.product.name || line.name || "",
+      name: displayName(line, line.product.name || line.name || ""),
       requestedQuantity: line.requestedQuantity,
       currentQuantity: stock.currentQuantity,
       reservedQuantity: stock.reservedQuantity,
@@ -956,7 +1098,11 @@ export async function listStock({
     .sort({ category: 1, name: 1, sku: 1 })
     .lean();
 
-  const filtered = filterStockStatus(products.map(stockItem), status);
+  const componentsById = await buildComponentsById(products);
+  const filtered = filterStockStatus(
+    products.map((product) => stockItem(product, componentsById)),
+    status,
+  );
   const total = filtered.length;
   const start = (pageNumber - 1) * limitNumber;
   const items = filtered.slice(start, start + limitNumber);
@@ -1018,8 +1164,9 @@ export async function getStockDetail({ productId }) {
   ensureObjectId(productId, "productId");
   const product = await Product.findById(productId).lean();
   if (!product) throw new ApiError(404, "Product not found");
+  const componentsById = await buildComponentsById([product]);
   const reservations = await listReservingOrders(productId);
-  return { ...stockItem(product), reservations };
+  return { ...stockItem(product, componentsById), reservations };
 }
 
 export async function getStockHistory({ productId, page = 1, limit = 50, onlyMovements = "" }) {
@@ -1148,6 +1295,12 @@ export async function updateStockQuantity({
   return withStockSession(null, async (txnSession) => {
     const existing = await Product.findById(productId).session(txnSession);
     if (!existing) throw new ApiError(404, "Product not found");
+    if (isFullyLinkedKit(existing)) {
+      throw new ApiError(
+        400,
+        `${existing.name || "This product"}'s stock is computed automatically from its linked components - edit those instead.`,
+      );
+    }
 
     const previousQuantity = Number(existing.stock?.currentQuantity || 0);
     const reservedQuantity = Number(existing.stock?.reservedQuantity || 0);
@@ -1236,7 +1389,9 @@ export async function updateStockThreshold({
       session: txnSession,
     });
 
-    return stockItem(updated.toObject());
+    const updatedPlain = updated.toObject();
+    const componentsById = await buildComponentsById([updatedPlain]);
+    return stockItem(updatedPlain, componentsById);
   });
 }
 

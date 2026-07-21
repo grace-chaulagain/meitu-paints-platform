@@ -98,7 +98,6 @@ const styles = StyleSheet.create({
   headerLabel: { fontSize: 8, fontWeight: 700, color: PDF_COLORS.graphite, textTransform: "uppercase" },
   colSN: { width: 18, fontSize: 9, textAlign: "center", color: PDF_COLORS.graphite },
   colProduct: { flex: 2.9, fontSize: 9.5, fontWeight: 700 },
-  productComponents: { marginTop: 2, fontSize: 8, fontWeight: 400, color: PDF_COLORS.graphite },
   colQty: { flex: 0.5, fontSize: 9.5, textAlign: "right" },
   colUnit: { flex: 0.6, fontSize: 9, paddingLeft: 12 },
   colRate: { flex: 0.85, fontSize: 9.5, textAlign: "right" },
@@ -203,14 +202,7 @@ function SummaryPage({ order, dealer }) {
         {items.map((item, index) => (
           <View key={item.sku || item.name || index} style={styles.tableRow} wrap={false}>
             <Text style={styles.colSN}>{index + 1}</Text>
-            <View style={{ flex: 2.9 }}>
-              <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
-              {item?.components?.length ? (
-                <Text style={styles.productComponents}>
-                  Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                </Text>
-              ) : null}
-            </View>
+            <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
             <Text style={styles.colQty}>{item?.quantity ?? "—"}</Text>
             <Text style={styles.colUnit}>{item?.unit || item?.packLabel || item?.variantLabel || "—"}</Text>
             <Text style={styles.colRate}>{money(item?.unitPrice, currency)}</Text>

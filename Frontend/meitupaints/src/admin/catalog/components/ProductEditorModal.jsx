@@ -3,6 +3,7 @@ import {
   useCreateAdminProductMutation,
   useDeleteAdminProductImageMutation,
   useDeleteAdminProductMutation,
+  useGetAdminProductsQuery,
   useRestoreAdminProductMutation,
   useUpdateAdminProductMutation,
   useUploadAdminProductImageMutation,
@@ -135,6 +136,8 @@ function createInitialForm() {
     tierUnit: "L",
     tiers: createDefaultTiers(),
     isActive: true,
+    components: [],
+    sellable: true,
   };
 }
 
@@ -309,6 +312,64 @@ function TierLedgerEditor({ tierField, tiers, error, onAddTier, onUpdateTier, on
   );
 }
 
+// Backed by useGetAdminProductsQuery() (every product, including inactive
+// ones - a kit's components are often deliberately inactive/hidden from
+// customer catalogs) rather than the active-only picker AdminOrdersPage.jsx
+// uses for order amendment, since a kit component may not be customer-
+// orderable at all.
+function ComponentSearchPicker({ excludeIds = [], onSelect }) {
+  const [query, setQuery] = useState("");
+  const productsQuery = useGetAdminProductsQuery();
+  const allProducts = useMemo(() => productsQuery.data || [], [productsQuery.data]);
+
+  const results = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (trimmed.length < 2) return [];
+    const excludeSet = new Set(excludeIds);
+    return allProducts
+      .filter((product) => !excludeSet.has(String(product._id)))
+      .filter((product) =>
+        [product.name, product.sku, product.code].filter(Boolean).some((value) => String(value).toLowerCase().includes(trimmed)),
+      )
+      .slice(0, 8);
+  }, [allProducts, excludeIds, query]);
+
+  return (
+    <div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search products by name or SKU to add as a component…"
+        style={fieldInputStyle()}
+      />
+      {results.length > 0 ? (
+        <div style={{ marginTop: 6, display: "grid", gap: 4, maxHeight: 220, overflow: "auto", borderRadius: 12, border: "1px solid rgba(0,0,0,.08)", background: "#fff", padding: 6 }}>
+          {results.map((product) => (
+            <button
+              key={product._id}
+              type="button"
+              onClick={() => {
+                onSelect(product);
+                setQuery("");
+              }}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {product.name}
+                </span>
+                <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                  {product.sku} {product.pack?.label ? `· ${product.pack.label}` : ""} {product.isActive === false ? "· Inactive" : ""}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /* -----------------------------
    Modal
 ----------------------------- */
@@ -376,6 +437,15 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
             }))
           : createDefaultTiers(),
       isActive: product.isActive !== false,
+      components: Array.isArray(product.components)
+        ? product.components.map((component) => ({
+            productId: component.productId ? String(component.productId) : null,
+            name: component.name || "",
+            packLabel: component.packLabel || "",
+            quantity: component.quantity ?? 1,
+          }))
+        : [],
+      sellable: product.sellable !== false,
     };
 
     setForm(nextForm);
@@ -433,6 +503,32 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
 
   function removeTier(tierField, index) {
     setForm((prev) => ({ ...prev, [tierField]: prev[tierField].filter((_, i) => i !== index) }));
+  }
+
+  function addComponent(pickedProduct) {
+    setForm((prev) => {
+      const pickedId = String(pickedProduct._id);
+      if (prev.components.some((component) => component.productId === pickedId)) return prev;
+      return {
+        ...prev,
+        components: [
+          ...prev.components,
+          { productId: pickedId, name: pickedProduct.name || "", packLabel: pickedProduct.pack?.label || "", quantity: 1 },
+        ],
+      };
+    });
+  }
+
+  function updateComponentQuantity(index, value) {
+    setForm((prev) => {
+      const next = [...prev.components];
+      next[index] = { ...next[index], quantity: value };
+      return { ...prev, components: next };
+    });
+  }
+
+  function removeComponent(index) {
+    setForm((prev) => ({ ...prev, components: prev.components.filter((_, i) => i !== index) }));
   }
 
   function exitEditor(mode = "close") {
@@ -506,6 +602,9 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
     const tiersError = validateTierSet(form.tiers);
     if (tiersError) nextErrors.tiers = tiersError;
 
+    const badComponent = form.components.find((component) => !Number.isInteger(Number(component.quantity)) || Number(component.quantity) < 1);
+    if (badComponent) nextErrors.components = "Each component's quantity must be a positive whole number.";
+
     setFieldErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -533,6 +632,13 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
           tierUnit: form.tierUnit || form.unit.trim(),
           tiers: normalizeTiers(form.tiers),
         },
+        components: form.components.map((component) => ({
+          productId: component.productId || null,
+          name: (component.name || "").trim(),
+          packLabel: (component.packLabel || "").trim(),
+          quantity: Number(component.quantity) || 1,
+        })),
+        sellable: form.sellable,
       };
 
       if (isEdit) {
@@ -977,6 +1083,87 @@ export default function ProductEditorModal({ product, categoryOptions = [], forc
                 Dispatcher pricing for this SKU is configured per dispatcher, not here — open <strong>Dispatcher Price</strong> in the sidebar to set what each dispatcher pays.
               </span>
             </div>
+
+            {isEdit ? (
+              <Surface padding={18} className="product-editor-panel">
+                <SectionHeader
+                  icon="stock"
+                  title="Bundle / Kit Components"
+                  subtitle="Link this product to the real products it's assembled from. Once every row is linked, this product's factory stock is computed automatically from theirs instead of tracked on its own."
+                />
+
+                <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
+                  {form.components.length === 0 ? (
+                    <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                      Not a kit — this is a single, independently-stocked product.
+                    </div>
+                  ) : (
+                    form.components.map((component, index) => (
+                      <div
+                        key={component.productId || `${component.name}-${index}`}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0,1fr) 90px 38px",
+                          gap: 8,
+                          alignItems: "center",
+                          padding: 10,
+                          borderRadius: 12,
+                          background: component.productId ? "var(--color-fog, #f5f5f7)" : "rgba(180,35,24,.06)",
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {component.name || "Unnamed component"}
+                          </div>
+                          <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                            {component.productId ? component.packLabel || "Linked product" : "Not linked to a real product — display only"}
+                          </div>
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={component.quantity}
+                          onChange={(e) => updateComponentQuantity(index, e.target.value)}
+                          style={fieldInputStyle()}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeComponent(index)}
+                          aria-label={`Remove ${component.name || "component"}`}
+                          style={{ width: 34, height: 34, borderRadius: 10, border: "none", background: "var(--color-snow, #fff)", boxShadow: "inset 0 0 0 1px rgba(0,0,0,.08)", color: "#b42318", cursor: "pointer", display: "grid", placeItems: "center" }}
+                        >
+                          <DashboardIcon name="trash" size={14} strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  {fieldErrors.components ? <div style={{ fontSize: 11.5, fontWeight: 600, color: "#b42318" }}>{fieldErrors.components}</div> : null}
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <ComponentSearchPicker excludeIds={form.components.map((component) => component.productId).filter(Boolean)} onSelect={addComponent} />
+                </div>
+
+                <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(0,0,0,.06)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    id="product-sellable-toggle"
+                    checked={form.sellable}
+                    onChange={(e) => updateField("sellable", e.target.checked)}
+                    style={{ width: 18, height: 18 }}
+                  />
+                  <label htmlFor="product-sellable-toggle" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>
+                    Independently orderable by dealers/dispatchers
+                  </label>
+                </div>
+                {!form.sellable ? (
+                  <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                    Hidden from dealer and dispatcher catalogs. Still visible and stock-manageable on the Factory stock page.
+                  </div>
+                ) : null}
+              </Surface>
+            ) : null}
 
             <Surface padding={18} className="product-editor-panel">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>

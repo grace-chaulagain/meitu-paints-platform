@@ -78,6 +78,9 @@ function getSmtpTransport() {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
   return smtpTransport;
 }
@@ -643,6 +646,7 @@ export async function getProformaInvoice({ orderId }) {
   return {
     orderId: order._id,
     orderNumber: order.orderNumber,
+    serialNumber: order.serialNumber,
     generatedAt: new Date().toISOString(),
     dealer: order.dealerSnapshot || {},
     payment: order.payment || {},

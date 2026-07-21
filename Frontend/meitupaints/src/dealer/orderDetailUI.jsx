@@ -213,11 +213,6 @@ export function OrderItemsTable({ items = [], productsMap, familyMap }) {
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-ink, #1d1d1f)" }}>{item.name || "—"}</div>
                       <div style={{ fontSize: 11, color: "var(--color-graphite, #707070)" }}>{item.sku || item.code || ""}</div>
-                      {item.components?.length ? (
-                        <div style={{ marginTop: 3, fontSize: 11, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
-                          Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                 </td>

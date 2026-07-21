@@ -30,6 +30,8 @@ import {
   statusTone,
   timeAgo,
 } from "./dispatcherInventoryHelpers.js";
+import { useIsMobileDispatcher } from "../../mobile/useIsMobileDispatcher.js";
+import { DispatcherInventoryMobileView } from "../../mobile/DispatcherInventoryMobileView.jsx";
 
 const PAGE_SIZE = 8;
 const HISTORY_PAGE_SIZE = 20;
@@ -468,6 +470,11 @@ export default function DispatcherStockPage() {
   function submitSearch() {
     setQuery(draftQuery.trim());
     setVisibleCount(PAGE_SIZE);
+  }
+
+  const isMobile = useIsMobileDispatcher();
+  if (isMobile) {
+    return <DispatcherInventoryMobileView />;
   }
 
   return (

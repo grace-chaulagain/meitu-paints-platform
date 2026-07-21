@@ -13,6 +13,7 @@ import {
 } from "./adminNotification.service.js";
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { sendDealerStatusEmail } from "./factory.service.js";
+import { generateUniqueOrderNumber } from "./order.service.js";
 import {
   checkDispatcherOrderStock,
   consumeDispatcherStockForOrder,
@@ -20,10 +21,6 @@ import {
   listDispatcherStockHistory,
 } from "./dispatcherStock.service.js";
 import { recordPurchaseMovement } from "./dealerInventory.service.js";
-
-function generateOrderNumber() {
-  return `ORD-${Date.now()}`;
-}
 
 function normalizeEmail(email = "") {
   return String(email || "")
@@ -439,6 +436,12 @@ export async function listMyReplenishmentOrders({
 
   if (archive) {
     query.status = { $in: ["COMPLETED", "REJECTED", "CANCELLED"] };
+  } else if (normalizeStatus(status) === "ALL") {
+    // No status filter at all - matches every status. Without this, there
+    // was no way to actually see "all" orders: the default branch below
+    // only ever returns the pending bucket, so an "All" tab that never
+    // passes archive/status just silently re-filtered that same
+    // incomplete pending-only dataset client-side.
   } else if (status) {
     const statuses = String(status)
       .split(",")
@@ -511,6 +514,19 @@ export async function verifyAssignedOrder({
   const previousStatus = order.status;
   const actorId = user?.sub || user?.id || null;
 
+  let dealerEmailSentAt = null;
+  try {
+    dealerEmailSentAt = await sendDealerStatusEmail({
+      order,
+      status: "VERIFIED",
+    });
+  } catch (error) {
+    console.warn(
+      "[dispatcher-email] verified status email failed:",
+      error.message,
+    );
+  }
+
   // Conditional on status still being SUBMITTED at write time - this is
   // what prevents two concurrent verify/reject calls on the same order
   // from both succeeding.
@@ -539,6 +555,7 @@ export async function verifyAssignedOrder({
           changedByUserId: actorId,
           changedByRole: "DISPATCHER",
           changedAt: new Date(),
+          dealerEmailSentAt,
         },
       },
     },
@@ -733,11 +750,16 @@ export async function createDispatcherReplenishmentOrder({
     throw new Error("Order must contain at least one item.");
   }
 
+  // sellable:false blocks a kit's own component products (factory-internal
+  // stock, not directly orderable - see stock.service.js's
+  // resolveOrderStockLines) from ever being ordered directly, even via a
+  // crafted payload that bypasses the catalog UI.
   const productIds = items.map((item) => item.productId).filter(Boolean);
   const [products, priceRows] = await Promise.all([
     Product.find({
       _id: { $in: productIds },
       isActive: { $ne: false },
+      sellable: { $ne: false },
     }),
     // Each dispatcher has their own flat price per SKU (no tiers, unlike
     // dealer pricing) - configured by an admin via the Dispatcher Price
@@ -792,7 +814,7 @@ export async function createDispatcherReplenishmentOrder({
   }
 
   const order = await Order.create({
-    orderNumber: generateOrderNumber(),
+    orderNumber: await generateUniqueOrderNumber(),
     orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
     dispatcherCustomerId: dispatcher._id,
     // Reuses the dealer-shaped snapshot with the dispatcher's own profile
@@ -903,7 +925,16 @@ export async function dispatchAssignedOrder({
       const updated = await Order.findOneAndUpdate(
         { _id: order._id, dispatcherId, status: "VERIFIED" },
         {
-          $set: { status: "DISPATCHED" },
+          $set: {
+            status: "DISPATCHED",
+            // Mirrors factory.service.js's markOutForDelivery field names
+            // exactly, so the milestone stepper (orderDetailLogic.js's
+            // milestoneDate(), which reads these regardless of
+            // fulfillment mode) shows a real date instead of a blank
+            // "Dispatched" node for dispatcher-fulfilled orders.
+            "factory.outForDeliveryAt": new Date(),
+            "factory.outForDeliveryBy": actorUserId,
+          },
           $push: {
             statusHistory: {
               fromStatus: previousStatus || "",
@@ -952,4 +983,74 @@ export async function dispatchAssignedOrder({
   }
 
   return updatedOrder;
+}
+
+// Dispatched -> Completed, mirroring Factory's markDelivered - a dispatcher
+// can now confirm final-mile delivery instead of Dispatched being terminal.
+// Unlike dispatchAssignedOrder, this has no stock/inventory side effects:
+// the dispatcher's own stock deduction and the dealer's received-inventory
+// credit both already happened at dispatch time (consumeDispatcherStockForOrder
+// / recordPurchaseMovement above) - this is purely the status transition.
+export async function completeAssignedOrder({
+  user,
+  orderId,
+  payload = {},
+} = {}) {
+  const dispatcherId = ensureDispatcherId(user);
+  await getVerifiedActiveDispatcher(dispatcherId);
+
+  const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
+  if (normalizeStatus(order.status) !== "DISPATCHED") {
+    throw new Error("Order must be dispatched before it can be completed");
+  }
+
+  const note = normalizeText(payload.note);
+  const actorUserId = user?.sub || user?.id || null;
+  const previousStatus = order.status;
+
+  let dealerEmailSentAt = null;
+  try {
+    dealerEmailSentAt = await sendDealerStatusEmail({
+      order,
+      status: "COMPLETED",
+    });
+  } catch (error) {
+    console.warn(
+      "[dispatcher-email] completed status email failed:",
+      error.message,
+    );
+  }
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: order._id, dispatcherId, status: "DISPATCHED" },
+    {
+      $set: {
+        status: "COMPLETED",
+        // Mirrors factory.service.js's markDelivered field names exactly -
+        // see the same reasoning in dispatchAssignedOrder above.
+        "factory.deliveredAt": new Date(),
+        "factory.deliveredBy": actorUserId,
+      },
+      $push: {
+        statusHistory: {
+          fromStatus: previousStatus || "",
+          toStatus: "COMPLETED",
+          note,
+          changedByUserId: actorUserId,
+          changedByRole: "DISPATCHER",
+          changedAt: new Date(),
+          dealerEmailSentAt,
+        },
+      },
+    },
+    { new: true },
+  );
+
+  if (!updated) {
+    throw new Error(
+      "Order status changed before it could be completed. Please refresh and try again.",
+    );
+  }
+
+  return updated;
 }

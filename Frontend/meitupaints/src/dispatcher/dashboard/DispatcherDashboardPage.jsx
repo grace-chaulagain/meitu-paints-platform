@@ -8,15 +8,17 @@ import {
   useNotifications,
 } from "../../notifications/notificationContext.js";
 
+// This is strictly the "handle assigned dealer orders" workspace - placing
+// the dispatcher's own replenishment orders (catalog/cart/order history/
+// inventory) lives entirely separately under /dispatcher (DispatcherShopPage),
+// not nested here. Keeping the two apart means a dispatcher reviewing orders
+// never has "buy stock from the factory" navigation in the same sidebar as
+// "verify/dispatch a dealer's order".
 const SECTIONS = {
   OVERVIEW: "overview",
   DRAFT_ORDER: "draftOrder",
   ORDERS: "orders",
   DEALERS: "dealers",
-  STOCK: "stock",
-  ORDER_FROM_FACTORY: "orderFromFactory",
-  CART: "cart",
-  ORDER_HISTORY: "orderHistory",
   NOTIFICATIONS: "notifications",
   PROFILE: "profile",
 };
@@ -68,22 +70,6 @@ export default function DispatcherDashboardPage() {
       return SECTIONS.DEALERS;
     }
 
-    if (path.startsWith("/dispatcher/dashboard/stock")) {
-      return SECTIONS.STOCK;
-    }
-
-    if (path.startsWith("/dispatcher/dashboard/order/history")) {
-      return SECTIONS.ORDER_HISTORY;
-    }
-
-    if (path.startsWith("/dispatcher/dashboard/order/cart")) {
-      return SECTIONS.CART;
-    }
-
-    if (path.startsWith("/dispatcher/dashboard/order")) {
-      return SECTIONS.ORDER_FROM_FACTORY;
-    }
-
     if (path.startsWith("/dispatcher/dashboard/notifications")) {
       return SECTIONS.NOTIFICATIONS;
     }
@@ -99,9 +85,9 @@ export default function DispatcherDashboardPage() {
     () => [
       {
         key: SECTIONS.OVERVIEW,
-        title: "Overview",
+        title: "Home",
         subtitle: "Operational summary",
-        badge: "Home",
+        badge: "",
         icon: "overview",
         href: "/dispatcher/dashboard",
       },
@@ -133,38 +119,6 @@ export default function DispatcherDashboardPage() {
         badge: "Live",
         icon: "store",
         href: "/dispatcher/dashboard/dealers",
-      },
-      {
-        key: SECTIONS.STOCK,
-        title: "My Stock",
-        subtitle: "Regional warehouse quantities",
-        badge: "",
-        icon: "stock",
-        href: "/dispatcher/dashboard/stock",
-      },
-      {
-        key: SECTIONS.ORDER_FROM_FACTORY,
-        title: "My Order",
-        subtitle: "Replenish your stock",
-        badge: "",
-        icon: "package",
-        href: "/dispatcher/dashboard/order",
-      },
-      {
-        key: SECTIONS.CART,
-        title: "My Cart",
-        subtitle: "Review before you submit",
-        badge: "",
-        icon: "cart",
-        href: "/dispatcher/dashboard/order/cart",
-      },
-      {
-        key: SECTIONS.ORDER_HISTORY,
-        title: "My Order History",
-        subtitle: "Track factory orders",
-        badge: "",
-        icon: "history",
-        href: "/dispatcher/dashboard/order/history",
       },
       {
         key: SECTIONS.NOTIFICATIONS,
@@ -200,17 +154,6 @@ export default function DispatcherDashboardPage() {
         label: "Network",
         items: navigationItems.filter((item) =>
           [SECTIONS.DEALERS].includes(item.key),
-        ),
-      },
-      {
-        label: "Inventory",
-        items: navigationItems.filter((item) =>
-          [
-            SECTIONS.STOCK,
-            SECTIONS.ORDER_FROM_FACTORY,
-            SECTIONS.CART,
-            SECTIONS.ORDER_HISTORY,
-          ].includes(item.key),
         ),
       },
       {

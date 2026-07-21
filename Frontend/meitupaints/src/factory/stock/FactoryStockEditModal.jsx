@@ -32,6 +32,7 @@ const NUDGES = [-10, -5, 5, 10];
 const LARGE_ADJUSTMENT_THRESHOLD = 100;
 
 export default function FactoryStockEditModal({ product, onClose }) {
+  const isKit = Boolean(product?.kit?.isKit);
   const [newStock, setNewStock] = useState(product?.stock?.currentQuantity || 0);
   const [threshold, setThreshold] = useState(product?.stock?.lowStockThreshold || 0);
   const [reason, setReason] = useState("Manual Count");
@@ -51,13 +52,25 @@ export default function FactoryStockEditModal({ product, onClose }) {
 
   const current = Number(product.stock?.currentQuantity || 0);
   const next = Number(newStock || 0);
-  const delta = next - current;
+  // A kit's own quantity is computed from its linked components (see
+  // stock.service.js's getStock/resolveOrderStockLines) - the backend
+  // rejects a manual updateStockQuantity call for one outright, so this
+  // modal never offers a delta to submit for it in the first place.
+  const delta = isKit ? 0 : next - current;
   const thresholdChanged = Number(threshold) !== Number(product.stock?.lowStockThreshold || 0);
   const hasChange = delta !== 0 || thresholdChanged;
   const saving = stockState.isLoading || thresholdState.isLoading;
   const isLargeChange = Math.abs(delta) >= LARGE_ADJUSTMENT_THRESHOLD;
-  const reservedQuantity = Number(product.stock?.reservedQuantity || 0);
   const reservations = detailQuery.data?.reservations || [];
+  // A kit row's own stock.reservedQuantity is always reported as 0 (see
+  // stock.service.js's getStock - new reservations land on its components,
+  // not on it) - that's correct for the computed sets figure above, but
+  // this header still needs the real number so a legacy reservation still
+  // sitting on the kit's own product doc (from an order placed before it
+  // became a linked kit) doesn't read as "Reserved — none".
+  const reservedQuantity = isKit
+    ? reservations.reduce((sum, row) => sum + Number(row.reservedQuantity || 0), 0)
+    : Number(product.stock?.reservedQuantity || 0);
 
   function nudge(amount) {
     setConfirming(false);
@@ -79,7 +92,7 @@ export default function FactoryStockEditModal({ product, onClose }) {
   async function commit() {
     setError("");
     try {
-      if (delta !== 0) {
+      if (!isKit && delta !== 0) {
         await updateStock({ productId: product.productId || product._id, payload: { newQuantity: next, reason, note } }).unwrap();
       }
       if (thresholdChanged) {
@@ -112,59 +125,85 @@ export default function FactoryStockEditModal({ product, onClose }) {
           <CloseButton onClick={onClose} />
         </div>
 
-        <div className="stock-stepper-card">
-          <div className="stock-stepper-head">
-            <span>Available Stock</span>
-            {hasChange ? (
-              <button type="button" className="stock-stepper-reset" onClick={resetStock}>
-                Reset
+        {isKit ? (
+          <div className="stock-kit-card">
+            <div className="stock-stepper-head">
+              <span>Available Sets</span>
+              <Pill tone="accent" size="small">Computed</Pill>
+            </div>
+            <div className="stock-kit-value">{current}</div>
+            <div className="stock-kit-hint">
+              Computed automatically from {product.kit.components.length} linked component{product.kit.components.length === 1 ? "" : "s"} — edit those directly on the stock page, not here.
+            </div>
+            <div className="stock-kit-components">
+              {product.kit.components.map((component) => {
+                const componentAvailable = Math.max(0, Number(component.currentQuantity || 0) - Number(component.reservedQuantity || 0));
+                return (
+                  <div key={component.productId} className="stock-kit-component-row">
+                    <span>{component.name}</span>
+                    <span>
+                      {componentAvailable} available <span style={{ opacity: 0.6 }}>× {component.requiredPerSet}/set</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="stock-stepper-card">
+            <div className="stock-stepper-head">
+              <span>Available Stock</span>
+              {hasChange ? (
+                <button type="button" className="stock-stepper-reset" onClick={resetStock}>
+                  Reset
+                </button>
+              ) : null}
+            </div>
+
+            <div className="stock-stepper-row">
+              <button
+                type="button"
+                className="stock-stepper-btn"
+                onClick={() => nudge(-1)}
+                disabled={next <= 0}
+                aria-label="Decrease by 1"
+              >
+                <DashboardIcon name="minus" size={18} strokeWidth={2.6} />
               </button>
-            ) : null}
-          </div>
 
-          <div className="stock-stepper-row">
-            <button
-              type="button"
-              className="stock-stepper-btn"
-              onClick={() => nudge(-1)}
-              disabled={next <= 0}
-              aria-label="Decrease by 1"
-            >
-              <DashboardIcon name="minus" size={18} strokeWidth={2.6} />
-            </button>
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={newStock}
+                onChange={(event) => {
+                  setConfirming(false);
+                  setError("");
+                  setNewStock(event.target.value);
+                }}
+                className="stock-stepper-input"
+                aria-label="New stock quantity"
+              />
 
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={newStock}
-              onChange={(event) => {
-                setConfirming(false);
-                setError("");
-                setNewStock(event.target.value);
-              }}
-              className="stock-stepper-input"
-              aria-label="New stock quantity"
-            />
-
-            <button type="button" className="stock-stepper-btn is-add" onClick={() => nudge(1)} aria-label="Increase by 1">
-              <DashboardIcon name="plus" size={18} strokeWidth={2.6} />
-            </button>
-          </div>
-
-          <div className="stock-stepper-foot">
-            <span>Currently {current}</span>
-            {delta !== 0 ? <MovementBadge delta={delta} /> : null}
-          </div>
-
-          <div className="stock-stepper-nudges">
-            {NUDGES.map((amount) => (
-              <button key={amount} type="button" className="stock-nudge-chip" onClick={() => nudge(amount)}>
-                {amount > 0 ? `+${amount}` : amount}
+              <button type="button" className="stock-stepper-btn is-add" onClick={() => nudge(1)} aria-label="Increase by 1">
+                <DashboardIcon name="plus" size={18} strokeWidth={2.6} />
               </button>
-            ))}
+            </div>
+
+            <div className="stock-stepper-foot">
+              <span>Currently {current}</span>
+              {delta !== 0 ? <MovementBadge delta={delta} /> : null}
+            </div>
+
+            <div className="stock-stepper-nudges">
+              {NUDGES.map((amount) => (
+                <button key={amount} type="button" className="stock-nudge-chip" onClick={() => nudge(amount)}>
+                  {amount > 0 ? `+${amount}` : amount}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Reason</span>
@@ -366,6 +405,50 @@ export default function FactoryStockEditModal({ product, onClose }) {
           align-items:center;
           gap:6px;
           margin-top:2px;
+        }
+        .stock-kit-card{
+          display:grid;
+          gap:10px;
+          justify-items:center;
+          padding:22px 20px;
+          border-radius:24px;
+          background:var(--color-fog, #f5f5f7);
+        }
+        .stock-kit-value{
+          font-size:44px;
+          font-weight:800;
+          letter-spacing:-.02em;
+          color:var(--color-ink, #1d1d1f);
+          font-variant-numeric:tabular-nums;
+        }
+        .stock-kit-hint{
+          text-align:center;
+          font-size:12px;
+          font-weight:500;
+          line-height:1.5;
+          color:var(--color-graphite, #707070);
+        }
+        .stock-kit-components{
+          width:100%;
+          display:grid;
+          gap:6px;
+          margin-top:4px;
+          padding-top:12px;
+          border-top:1px solid rgba(29,29,31,.08);
+        }
+        .stock-kit-component-row{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:10px;
+          font-size:12px;
+          font-weight:600;
+          color:var(--color-ink, #1d1d1f);
+        }
+        .stock-kit-component-row span:last-child{
+          flex-shrink:0;
+          color:var(--color-graphite, #707070);
+          font-weight:500;
         }
         .stock-nudge-chip{
           height:28px;

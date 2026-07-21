@@ -150,11 +150,6 @@ export function DealerOrderDetailMobileView({ order, loading, loadError, onBack,
                       </span>
                       <span className="dealer-m-cart-card-name">{group.name}</span>
                     </div>
-                    {group.components?.length ? (
-                      <div className="dealer-m-cart-card-components">
-                        Includes: {group.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                      </div>
-                    ) : null}
                     {group.lines.map((item, index) => (
                       <div className="dealer-m-cart-line" key={`${item.sku}-${index}`}>
                         <div className="dealer-m-cart-line-info">

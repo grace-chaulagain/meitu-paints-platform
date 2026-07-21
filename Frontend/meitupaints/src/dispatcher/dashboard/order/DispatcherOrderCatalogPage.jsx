@@ -21,6 +21,8 @@ import {
   ViewToggle,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
+import { useIsMobileDispatcher } from "../../mobile/useIsMobileDispatcher.js";
+import { DispatcherCatalogMobileView } from "../../mobile/DispatcherCatalogMobileView.jsx";
 
 const CATEGORIES_PER_PAGE = 4;
 
@@ -570,7 +572,7 @@ export default function DispatcherOrderCatalogPage() {
 
   function handleReviewDraft() {
     saveDraft(sanitizeDraft(quantities));
-    navigate("/dispatcher/dashboard/order/cart");
+    navigate("/dispatcher/cart");
   }
 
   function goToPage(nextPage) {
@@ -605,6 +607,24 @@ export default function DispatcherOrderCatalogPage() {
       { replace: true },
     );
     setCategory("ALL");
+  }
+
+  const isMobile = useIsMobileDispatcher();
+
+  if (isMobile) {
+    return (
+      <DispatcherCatalogMobileView
+        loading={loading}
+        loadError={loadError}
+        onRetry={catalogQuery.refetch}
+        families={familyGroupsFlat}
+        search={search}
+        onSearchChange={updateSearch}
+        categoryOptions={categoryOptions}
+        activeCategory={activeCategory}
+        onCategoryChange={changeCategory}
+      />
+    );
   }
 
   return (

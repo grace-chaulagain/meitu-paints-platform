@@ -20,6 +20,7 @@ import {
   getMyDispatcherStockController,
   getMyDispatcherStockHistoryController,
   dispatchAssignedOrderController,
+  completeAssignedOrderController,
   getMyReplenishmentCatalogController,
   listMyReplenishmentOrdersController,
   getMyReplenishmentOrderController,
@@ -138,6 +139,15 @@ router.post(
   validateParams(orderIdParamsSchema),
   validateBody(orderReviewBodySchema),
   dispatchAssignedOrderController,
+);
+
+router.patch(
+  "/me/orders/:orderId/complete",
+  auth,
+  requireRole("DISPATCHER"),
+  validateParams(orderIdParamsSchema),
+  validateBody(orderReviewBodySchema),
+  completeAssignedOrderController,
 );
 
 /* ---------------------------------------

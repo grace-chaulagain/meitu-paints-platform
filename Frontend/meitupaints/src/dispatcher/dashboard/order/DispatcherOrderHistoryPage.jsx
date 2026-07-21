@@ -37,6 +37,8 @@ import {
   resolveOrderItemImage,
   statusLabel,
 } from "../../../dealer/orderDetailLogic.js";
+import { useIsMobileDispatcher } from "../../mobile/useIsMobileDispatcher.js";
+import { DispatcherOrdersMobileView } from "../../mobile/DispatcherOrdersMobileView.jsx";
 
 const PAGE_SIZE = 10;
 
@@ -519,13 +521,22 @@ export default function DispatcherOrderHistoryPage() {
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const resultsRef = useRef(null);
 
+  // The backend's default (no status/archive passed) only returns the
+  // pending bucket (SUBMITTED/VERIFIED/DISPATCHED) - without explicitly
+  // requesting archive:true or status:"ALL", the Completed and All tabs
+  // would silently keep re-filtering that same incomplete pending-only
+  // dataset client-side and never show anything else.
   const visibleParams = useMemo(() => {
     const params = { limit: 100 };
     if (committedSearch.trim()) params.q = committedSearch.trim();
+    if (statusFilter === "COMPLETED") params.archive = true;
+    else if (statusFilter === "ALL") params.status = "ALL";
     return params;
-  }, [committedSearch]);
+  }, [committedSearch, statusFilter]);
 
-  const countsQuery = useGetDispatcherReplenishmentOrdersQuery({ limit: 100 });
+  // Counts (tab badges) need every status too, not just the pending
+  // bucket, or the Completed/All counts would always read 0/pending-only.
+  const countsQuery = useGetDispatcherReplenishmentOrdersQuery({ limit: 100, status: "ALL" });
   const ordersQuery = useGetDispatcherReplenishmentOrdersQuery(visibleParams);
   const productsQuery = useGetProductsQuery();
   const familiesQuery = useGetProductFamiliesQuery();
@@ -627,6 +638,11 @@ export default function DispatcherOrderHistoryPage() {
   const filterOptions = ORDER_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
   const groupedOrders = useMemo(() => groupOrdersByDay(pagedOrders), [pagedOrders]);
 
+  const isMobile = useIsMobileDispatcher();
+  if (isMobile) {
+    return <DispatcherOrdersMobileView />;
+  }
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Surface padding={18} className="dash-fade-up">
@@ -665,7 +681,7 @@ export default function DispatcherOrderHistoryPage() {
               onApplyDate={applyDateFilter}
               onClearDate={clearDateFilter}
             />
-            <PrimaryButton icon="plus" onClick={() => navigate("/dispatcher/dashboard/order")}>New Order</PrimaryButton>
+            <PrimaryButton icon="plus" onClick={() => navigate("/dispatcher/catalog")}>New Order</PrimaryButton>
           </div>
         </div>
 

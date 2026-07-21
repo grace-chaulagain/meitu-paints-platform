@@ -51,7 +51,7 @@ export function Toast({ toast, onDismiss }) {
               opacity: 0,
               y: shouldReduceMotion ? 0 : 10,
               scale: shouldReduceMotion ? 1 : 0.97,
-              transition: { duration: shouldReduceMotion ? 0.001 : 0.16, ease: "easeIn" },
+              transition: { duration: shouldReduceMotion ? 0.001 : 0.16, ease: TOAST_EASE_OUT },
             }}
             transition={{ duration: shouldReduceMotion ? 0.001 : 0.34, ease: TOAST_EASE_OUT }}
             style={{

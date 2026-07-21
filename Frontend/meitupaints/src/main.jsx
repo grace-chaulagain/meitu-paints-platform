@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import RoomMaskTest from "./components/RoomMaskTest";
+import NavBar from "./components/NavBar.jsx";
 import Home from "./Home.jsx";
 import RateCalculator from "./pages/RateCalculator.jsx";
 import Dealership from "./pages/Dealership.jsx";
@@ -88,6 +89,8 @@ import DispatcherOrderCartPage from "./dispatcher/dashboard/order/DispatcherOrde
 import DispatcherOrderHistoryPage from "./dispatcher/dashboard/order/DispatcherOrderHistoryPage.jsx";
 import DispatcherRegisterPage from "./dispatcher/DispatcherRegisterPage.jsx";
 import DispatcherDashboardPage from "./dispatcher/dashboard/DispatcherDashboardPage.jsx";
+import DispatcherShopPage from "./dispatcher/DispatcherShopPage.jsx";
+import DispatcherHomePage from "./dispatcher/DispatcherHomePage.jsx";
 import FactoryDashboardPage from "./factory/FactoryDashboardPage.jsx";
 import "./index.css";
 
@@ -154,83 +157,142 @@ function RequireFactory({ children }) {
 
 function SessionExpiredPrompt() {
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: 24,
-        background:
-          "radial-gradient(760px 420px at 12% 6%, rgba(180,35,24,.10), transparent 58%), linear-gradient(180deg,#fbfbfc,#f2f4f7)",
-      }}
-    >
-      <section
-        style={{
-          width: "min(440px, 100%)",
-          borderRadius: 22,
-          border: "1px solid rgba(15,23,42,.08)",
-          background: "rgba(255,255,255,.94)",
-          boxShadow: "0 24px 70px rgba(15,23,42,.10)",
-          padding: 24,
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 950,
-            letterSpacing: ".12em",
-            textTransform: "uppercase",
-            color: "#b42318",
-          }}
-        >
-          Secure Session Ended
-        </div>
-        <h1
-          style={{
-            margin: "10px 0 0",
-            fontSize: 28,
-            lineHeight: 1.05,
-            fontWeight: 950,
-            letterSpacing: "-.05em",
-            color: "#0f172a",
-          }}
-        >
-          Please sign in again
-        </h1>
-        <p
-          style={{
-            margin: "10px 0 0",
-            color: "rgba(15,23,42,.62)",
-            fontSize: 14,
-            lineHeight: 1.7,
-            fontWeight: 700,
-          }}
-        >
-          Your refresh session is no longer valid. Access tokens are refreshed
-          automatically while your secure session is active.
-        </p>
-        <Link
-          to="/login"
-          style={{
-            marginTop: 18,
-            minHeight: 46,
-            borderRadius: 14,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "0 18px",
-            background: "linear-gradient(135deg,#b42318,#ec6f3b)",
-            color: "#fff",
-            fontWeight: 950,
-            textDecoration: "none",
-            boxShadow: "0 16px 34px rgba(180,35,24,.18)",
-          }}
-        >
-          Sign in
-        </Link>
-      </section>
-    </main>
+    <>
+      <NavBar />
+      <main className="se-root" aria-label="Session expired">
+        <section className="se-card">
+          <div className="se-status" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="11" width="14" height="10" rx="3" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M8 11V7.5a4 4 0 0 1 8 0V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="se-kicker">Session ended</div>
+          <h1 className="se-title">Please sign in again</h1>
+          <p className="se-sub">
+            Your session expired for security. Sign back in to pick up right where you left off.
+          </p>
+
+          <div className="se-actions">
+            <Link className="se-btn primary" to="/login">
+              Sign in
+              <span aria-hidden="true">›</span>
+            </Link>
+            <Link className="se-btn text" to="/">
+              Back to home
+            </Link>
+          </div>
+        </section>
+      </main>
+      <style>{`
+        .se-root{
+          min-height: calc(100vh - 44px);
+          display: grid;
+          place-items: center;
+          padding: 24px;
+          background:
+            radial-gradient(760px 420px at 50% 0%, rgba(0,113,227,.07), transparent 62%),
+            var(--color-fog, #f5f5f7);
+          font-family: var(--font-sf-pro-text, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif);
+        }
+
+        .se-card{
+          width: min(420px, 100%);
+          border-radius: 28px;
+          border: 1px solid var(--color-silver-mist, #e8e8ed);
+          background: var(--color-snow, #ffffff);
+          box-shadow: none;
+          padding: clamp(26px, 5vw, 34px);
+          text-align: center;
+        }
+
+        .se-status{
+          width: 48px;
+          height: 48px;
+          margin: 0 auto;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          background: var(--color-fog, #f5f5f7);
+          border: 1px solid var(--color-silver-mist, #e8e8ed);
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .se-kicker{
+          margin: 18px 0 0;
+          font-size: 12px;
+          line-height: 1.33;
+          letter-spacing: -0.26px;
+          font-weight: 600;
+          color: var(--color-graphite, #707070);
+        }
+
+        .se-title{
+          margin: 8px 0 0;
+          font-family: var(--font-sf-pro-display, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif);
+          font-size: clamp(26px, 4vw, 32px);
+          line-height: 1.05;
+          letter-spacing: -0.045em;
+          font-weight: 700;
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .se-sub{
+          margin: 10px 0 0;
+          font-size: 14px;
+          line-height: 1.55;
+          font-weight: 400;
+          color: var(--color-graphite, #707070);
+        }
+
+        .se-actions{
+          margin-top: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+
+        .se-btn{
+          min-height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          border-radius: 999px;
+          padding: 0 20px;
+          font-size: 16px;
+          line-height: 1;
+          letter-spacing: -0.1px;
+          font-weight: 400;
+          text-decoration: none;
+          cursor: pointer;
+          transition: opacity .1s ease, transform .1s ease;
+        }
+
+        .se-btn:hover{
+          transform: translateY(-1px);
+        }
+
+        .se-btn.primary{
+          background: var(--color-azure, #0071e3);
+          color: #fff;
+        }
+
+        .se-btn.text{
+          padding-inline: 0;
+          background: transparent;
+          color: var(--color-cobalt-link, #0066cc);
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          .se-btn{
+            transition: none;
+          }
+        }
+      `}</style>
+    </>
   );
 }
 
@@ -474,22 +536,6 @@ const router = createBrowserRouter([
             element: <DispatcherDealersPage />,
           },
           {
-            path: "stock",
-            element: <DispatcherStockPage />,
-          },
-          {
-            path: "order",
-            element: <DispatcherOrderCatalogPage />,
-          },
-          {
-            path: "order/cart",
-            element: <DispatcherOrderCartPage />,
-          },
-          {
-            path: "order/history",
-            element: <DispatcherOrderHistoryPage />,
-          },
-          {
             path: "notifications",
             element: <NotificationCenterPage embedded />,
           },
@@ -505,6 +551,26 @@ const router = createBrowserRouter([
             path: "dealers/:dealerId/orders",
             element: <DispatcherDealerOrdersPage />,
           },
+        ],
+      },
+      {
+        // The dispatcher's own "buy replenishment stock from the factory"
+        // workspace - deliberately a separate top-level route tree from
+        // /dispatcher/dashboard (see DispatcherShopPage.jsx), the same way
+        // /dealer is its own tree rather than living under an admin-style
+        // /dealer/dashboard prefix.
+        path: "/dispatcher",
+        element: (
+          <RequireDispatcher>
+            <DispatcherShopPage />
+          </RequireDispatcher>
+        ),
+        children: [
+          { index: true, element: <DispatcherHomePage /> },
+          { path: "catalog", element: <DispatcherOrderCatalogPage /> },
+          { path: "cart", element: <DispatcherOrderCartPage /> },
+          { path: "orders", element: <DispatcherOrderHistoryPage /> },
+          { path: "inventory", element: <DispatcherStockPage /> },
         ],
       },
 

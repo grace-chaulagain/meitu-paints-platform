@@ -5,6 +5,7 @@ import { downloadProformaPdf } from "../../../factory/invoices/downloadProformaP
 import {
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
+  useEnsureProformaSerialNumberMutation,
   useGetAdminOrderQuery,
   useGetAdminOrderStockCheckQuery,
   useRejectAdminOrderMutation,
@@ -13,7 +14,7 @@ import {
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { Spinner, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import { Surface } from "../../../components/dashboard/DashboardUI.jsx";
 import { Toast } from "../../../components/dashboard/Toast.jsx";
 import { OrderDetailStyles, OrderMilestoneStepper } from "../../../dealer/orderDetailUI.jsx";
 import { formatFullDateTime, money } from "./orderFormatting.js";
@@ -109,6 +110,7 @@ export default function AdminOrderDetailPage() {
   const [rejectAdminOrder] = useRejectAdminOrderMutation();
   const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [deleteAdminOrder] = useDeleteAdminOrderMutation();
+  const [ensureProformaSerialNumber] = useEnsureProformaSerialNumberMutation();
 
   const dealer = order?.dealerSnapshot || order?.dealerId || {};
   const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
@@ -182,9 +184,11 @@ export default function AdminOrderDetailPage() {
     if (!order) return;
     setPdfBusy(true);
     try {
+      const { item } = await ensureProformaSerialNumber(order._id).unwrap();
       await downloadProformaPdf({
         orderId: order._id,
         orderNumber: order.orderNumber,
+        serialNumber: item?.serialNumber,
         generatedAt: new Date().toISOString(),
         dealer,
         payment: order.payment || {},
@@ -323,18 +327,12 @@ export default function AdminOrderDetailPage() {
               {hasDispatchRecord ? (
                 <ActionButton
                   subtle
-                  icon={pdfBusy ? "" : "invoice"}
+                  icon="invoice"
                   onClick={handleDownloadProforma}
                   disabled={pdfBusy}
+                  loading={pdfBusy}
                 >
-                  {pdfBusy ? (
-                    <>
-                      <Spinner size={13} color="var(--color-graphite, #707070)" />
-                      Generating…
-                    </>
-                  ) : (
-                    "Proforma Invoice"
-                  )}
+                  {pdfBusy ? "Generating…" : "Proforma Invoice"}
                 </ActionButton>
               ) : null}
 
@@ -360,8 +358,9 @@ export default function AdminOrderDetailPage() {
                     icon="reject"
                     onClick={handleReject}
                     disabled={busyAction === `reject-${order._id}`}
+                    loading={busyAction === `reject-${order._id}`}
                   >
-                    {busyAction === `reject-${order._id}` ? "Rejecting..." : "Reject"}
+                    {busyAction === `reject-${order._id}` ? "Rejecting…" : "Reject"}
                   </ActionButton>
                 </>
               ) : null}
@@ -383,7 +382,10 @@ export default function AdminOrderDetailPage() {
 
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <StatusBadge status={order.status} />
-          <RoutingBadge mode={dealer?.fulfillmentMode || "FACTORY"} />
+          <RoutingBadge
+            mode={dealer?.fulfillmentMode || "FACTORY"}
+            dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
+          />
           <OriginBadge origin={order?.orderOrigin} />
         </div>
 

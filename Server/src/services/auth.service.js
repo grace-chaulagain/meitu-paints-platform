@@ -173,6 +173,9 @@ function getSmtpTransport() {
     port: Number(SMTP_PORT),
     secure: String(SMTP_SECURE) === "true",
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
 
   return _smtpTransport;

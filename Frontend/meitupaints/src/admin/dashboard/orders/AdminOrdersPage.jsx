@@ -17,6 +17,7 @@ import {
   PrimaryButton,
   SearchField,
   SectionHeader as DashboardSectionHeader,
+  Spinner,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { AppleDateField, AppleDropdown, PopoverListMenu } from "../../../components/dashboard/ApplePickers.jsx";
@@ -407,7 +408,10 @@ export function ActionButton({
   subtle = false,
   disabled = false,
   icon = "",
+  loading = false,
 }) {
+  const isDisabled = disabled || loading;
+  const spinnerColor = danger ? "#b42318" : subtle ? "#707070" : "#fff";
   return (
     <button
       type="button"
@@ -416,7 +420,7 @@ export function ActionButton({
         e.stopPropagation();
         onClick?.(e);
       }}
-      disabled={disabled}
+      disabled={isDisabled}
       style={{
         height: 36,
         padding: "0 14px",
@@ -430,14 +434,18 @@ export function ActionButton({
         color: danger ? "#b42318" : subtle ? "var(--color-ink, #1d1d1f)" : "#fff",
         fontWeight: 600,
         fontSize: 13,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
+        cursor: isDisabled ? "not-allowed" : "pointer",
+        opacity: isDisabled ? 0.55 : 1,
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
       }}
     >
-      {icon ? <DashboardIcon name={icon} size={14} strokeWidth={2} /> : null}
+      {loading ? (
+        <Spinner size={13} color={spinnerColor} />
+      ) : icon ? (
+        <DashboardIcon name={icon} size={14} strokeWidth={2} />
+      ) : null}
       {children}
     </button>
   );
@@ -453,11 +461,12 @@ export function StatusBadge({ status }) {
   );
 }
 
-export function RoutingBadge({ mode }) {
+export function RoutingBadge({ mode, dispatcherName = "" }) {
   const isDispatcher = mode === "DISPATCHER";
+  const label = isDispatcher && dispatcherName ? `Via ${dispatcherName}` : mode || "FACTORY";
   return (
     <Pill tone={isDispatcher ? "accent" : "neutral"} size="small">
-      {mode || "FACTORY"}
+      {label}
     </Pill>
   );
 }
@@ -579,6 +588,7 @@ function AdminOrderTimelineRow({ item, onOpen, productsMap, familyMap }) {
   const items = Array.isArray(item.items) ? item.items : [];
   const dealer = item?.dealerSnapshot || item?.dealerId || {};
   const dealerName = dealer?.companyName || dealer?.contactName || "Unassigned dealer";
+  const dispatcher = item?.dispatcherSnapshot || item?.dispatcherId || {};
 
   return (
     <div className="admin-order-timeline-row">
@@ -608,6 +618,11 @@ function AdminOrderTimelineRow({ item, onOpen, productsMap, familyMap }) {
             <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="admin-order-number">{item.orderNumber || "Unnamed Order"}</span>
               <Pill tone={meta.tone} size="small">{meta.label}</Pill>
+              <RoutingBadge
+                mode={dealer?.fulfillmentMode || "FACTORY"}
+                dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
+              />
+              <OriginBadge origin={item?.orderOrigin} />
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -714,11 +729,6 @@ export function OrderItemsTable({ items = [] }) {
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
-                {item.components?.length ? (
-                  <div style={{ marginTop: 3, fontSize: 12, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
-                    Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                  </div>
-                ) : null}
               </td>
               <td style={{ padding: "12px 0", textAlign: "right", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                 {Number(item.quantity || 0).toLocaleString()}

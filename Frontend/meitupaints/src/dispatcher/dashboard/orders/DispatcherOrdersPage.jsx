@@ -384,11 +384,6 @@ export function OrderItemsTable({ items = [] }) {
                 <td style={{ padding: "10px 14px", verticalAlign: "top" }}>
                   <div style={{ fontWeight: 600, color: "var(--color-ink, #1d1d1f)", fontSize: 13 }}>{item.name || item.nameSnapshot || "—"}</div>
                   <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>{item.sku || item.skuSnapshot || item.code || ""}</div>
-                  {item.components?.length ? (
-                    <div style={{ marginTop: 3, fontSize: 11.5, color: "var(--color-graphite, #707070)", lineHeight: 1.4 }}>
-                      Includes: {item.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-                    </div>
-                  ) : null}
                 </td>
                 <td style={{ padding: "10px 14px", fontSize: 13, fontWeight: 500, color: "var(--color-ink, #1d1d1f)" }}>
                   {item.packLabel || item.variantLabel || item.unit || item.uom || "—"}
@@ -701,6 +696,10 @@ function buildPageList(current, total) {
   return result;
 }
 
+// Statuses whose row click opens the full detail page instead of the
+// lightweight popup - see openOrderPreview below.
+const FULL_PAGE_STATUSES = new Set(["SUBMITTED", "VERIFIED", "DISPATCHED"]);
+
 export default function DispatcherOrdersPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -723,13 +722,14 @@ export default function DispatcherOrdersPage() {
     navigate({ pathname: location.pathname }, { replace: true });
   }, [location.pathname, navigate, queryOrderId]);
 
-  // Pending (SUBMITTED) orders get the full Admin-style detail page - that's
-  // where the actual verify/reject/amend decision happens, so it earns the
-  // extra screen real estate. Every other status is just a status check, so
-  // it stays a lightweight popup instead of a full navigation.
+  // Pending (SUBMITTED), Verified, and Dispatched orders get the full
+  // Admin-style detail page - that's where the actual verify/reject/amend/
+  // dispatch decisions happen, so they earn the extra screen real estate.
+  // Completed/Rejected orders are just a status check, so those stay a
+  // lightweight popup instead of a full navigation.
   const openOrderPreview = useCallback(
     (order) => {
-      if (normalizeStatus(order?.status) === "SUBMITTED") {
+      if (FULL_PAGE_STATUSES.has(normalizeStatus(order?.status))) {
         navigate(`/dispatcher/dashboard/orders/${order._id}`, { state: { fromOrdersList: true } });
         return;
       }

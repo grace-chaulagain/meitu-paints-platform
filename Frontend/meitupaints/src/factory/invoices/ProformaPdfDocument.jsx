@@ -14,6 +14,15 @@ const styles = StyleSheet.create({
   page: { padding: 36, fontFamily: "Helvetica", fontSize: 10, color: "#111111" },
   header: { textAlign: "center", alignItems: "center", position: "relative" },
   logo: { marginBottom: 6 },
+  serialWatermark: {
+    position: "absolute",
+    top: 2,
+    left: 0,
+    fontSize: 8.5,
+    fontWeight: 700,
+    color: "#dddddd",
+    letterSpacing: 0.5,
+  },
   panLabel: {
     position: "absolute",
     top: 2,
@@ -153,6 +162,9 @@ function InvoicePage({ invoice, proforma, proformaId }) {
   return (
     <Page size="A4" style={styles.page}>
       <View style={styles.header}>
+        {invoice?.serialNumber ? (
+          <Text style={styles.serialWatermark}>SN{invoice.serialNumber}</Text>
+        ) : null}
         <Text style={styles.panLabel}>PAN: {MEITU_PAN}</Text>
         <MeituLogoMark width={38} style={styles.logo} />
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>

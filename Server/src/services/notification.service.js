@@ -16,6 +16,7 @@ const ADMIN_CATEGORIES = new Set([
 
 const DISPATCHER_CATEGORIES = new Set([
   NOTIFICATION_CATEGORY.ASSIGNED_DEALER_ORDER,
+  NOTIFICATION_CATEGORY.DEALER_ASSIGNED,
 ]);
 
 const FACTORY_CATEGORIES = new Set([
@@ -271,7 +272,7 @@ export async function createFactoryOrderNotification(order) {
     category: NOTIFICATION_CATEGORY.FACTORY_ORDER,
     title: `New factory order ${order.orderNumber || ""}`.trim(),
     description: `${order.dealerSnapshot?.companyName || "A dealer"} placed a factory-handled order worth ${order.totals?.currency || "NPR"} ${Number(order.totals?.total || 0).toLocaleString()}.`,
-    targetUrl: `/admin/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+    targetUrl: `/admin/dashboard/orders/${encodeURIComponent(String(order._id))}`,
     dealerId: order.dealerId,
     orderId: order._id,
     metadata: {
@@ -301,7 +302,7 @@ export async function createAssignedDealerOrderNotification(order) {
     category: NOTIFICATION_CATEGORY.ASSIGNED_DEALER_ORDER,
     title: `New dealer order ${order.orderNumber || ""}`.trim(),
     description: `${order.dealerSnapshot?.companyName || "An assigned dealer"} placed an order worth ${order.totals?.currency || "NPR"} ${Number(order.totals?.total || 0).toLocaleString()}.`,
-    targetUrl: `/dispatcher/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+    targetUrl: `/dispatcher/dashboard/orders/${encodeURIComponent(String(order._id))}`,
     dealerId: order.dealerId,
     orderId: order._id,
     dispatcherId,

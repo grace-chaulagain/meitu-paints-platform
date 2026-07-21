@@ -258,11 +258,6 @@ export function ProductSheet({ open, onClose, family, draft }) {
         <div className="dealer-m-sheet-name">{renderedFamily.name}</div>
         <div className="dealer-m-sheet-category">{categoryLabel(renderedFamily.category)}</div>
         {renderedFamily.description ? <div className="dealer-m-sheet-desc">{renderedFamily.description}</div> : null}
-        {selectedProduct?.components?.length ? (
-          <div className="dealer-m-sheet-desc">
-            Includes: {selectedProduct.components.map((c) => `${c.name}${c.packLabel ? ` ${c.packLabel}` : ""}`).join(", ")}
-          </div>
-        ) : null}
       </div>
 
       <div className="dealer-m-sheet-packs">

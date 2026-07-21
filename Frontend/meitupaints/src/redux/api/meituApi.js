@@ -694,6 +694,18 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
     }),
 
+    // Assigns (or returns the already-assigned) Proforma Invoice serial
+    // number - called right before building the PI PDF, by Admin or
+    // Factory. Idempotent on the backend: re-generating the same order's
+    // PI always returns the same number.
+    ensureProformaSerialNumber: builder.mutation({
+      query: (orderId) => ({
+        url: `/api/orders/${orderId}/proforma-serial-number`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, orderId) => orderMutationTags(orderId),
+    }),
+
     amendAdminOrder: builder.mutation({
       query: ({ orderId, payload }) => ({
         url: `/api/orders/${orderId}/amend`,
@@ -788,6 +800,15 @@ export const meituApi = createApi({
       query: ({ orderId, payload }) => ({
         url: `/api/dispatchers/me/orders/${orderId}/dispatch`,
         method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    completeDispatcherOrder: builder.mutation({
+      query: ({ orderId, payload }) => ({
+        url: `/api/dispatchers/me/orders/${orderId}/complete`,
+        method: "PATCH",
         data: payload,
       }),
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
@@ -1642,6 +1663,7 @@ export const {
   useGetAdminScopedOrderQuery,
   useLazyGetAdminScopedOrderQuery,
   useVerifyAdminOrderMutation,
+  useEnsureProformaSerialNumberMutation,
   useRejectAdminOrderMutation,
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
@@ -1653,6 +1675,7 @@ export const {
   useRejectDispatcherOrderMutation,
   useAmendDispatcherOrderMutation,
   useDispatchDispatcherOrderMutation,
+  useCompleteDispatcherOrderMutation,
   useGetMyDispatcherStockQuery,
   useGetMyDispatcherStockHistoryQuery,
   useGetDispatcherReplenishmentCatalogQuery,

@@ -169,6 +169,25 @@ export const verifyOrderController = asyncHandler(async (req, res) => {
 });
 
 // ----------------------------
+// Ensure Proforma Invoice serial number (Admin / Factory, PI generation)
+// ----------------------------
+
+export const ensureProformaSerialNumberController = asyncHandler(async (req, res) => {
+  const { orderId } = req.params || {};
+  if (!orderId) throw new ApiError(400, "Missing orderId");
+
+  const serialNumber = await orderService.ensureProformaSerialNumber({
+    orderId,
+    actorUser: req.user,
+  });
+
+  res.status(200).json({
+    ok: true,
+    item: { serialNumber },
+  });
+});
+
+// ----------------------------
 // Reject order
 // ----------------------------
 

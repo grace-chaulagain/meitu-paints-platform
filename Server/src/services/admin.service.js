@@ -25,6 +25,7 @@ import DispatcherProductStock from "../models/DispatcherProductStock.model.js";
 import { createPasswordSetupTokenForUser } from "./auth.service.js";
 import {
   getAdminNotificationSettings,
+  notifyDispatcherDealerAssigned,
   sendAdminNotificationTest,
   updateAdminNotificationSettings,
 } from "./adminNotification.service.js";
@@ -1111,12 +1112,31 @@ export async function updateDealerRouting({
   if (!dealer) throw new ApiError(404, "Dealer not found");
   assertDeletionNotPending(dealer, "Dealer");
 
+  const previousDispatcherId = dealer.dispatcherId ? String(dealer.dispatcherId) : null;
+
   dealer.fulfillmentMode = routing.fulfillmentMode;
   dealer.dispatcherId = routing.dispatcherId;
   dealer.routingChangedBy = adminUser?.id || adminUser?._id || null;
   dealer.routingChangedAt = new Date();
 
   await dealer.save();
+
+  // Only the dispatcher is ever told about this - dealers must never know
+  // dispatchers exist. Fires on a genuine (re)assignment only, not on
+  // every routing save (e.g. re-saving FACTORY mode, or saving the same
+  // dispatcher again), matching the fire-and-forget, non-blocking pattern
+  // used elsewhere for side-effect notifications (see
+  // archiveVerifiedOrderToGoogleSheets call sites).
+  const nextDispatcherId = dealer.dispatcherId ? String(dealer.dispatcherId) : null;
+  if (nextDispatcherId && nextDispatcherId !== previousDispatcherId) {
+    notifyDispatcherDealerAssigned(dealer, dealer.dispatcherId).catch((error) => {
+      console.error("[dispatcher-notification] Failed to notify dispatcher of new dealer assignment", {
+        dealerId: String(dealer._id),
+        dispatcherId: nextDispatcherId,
+        message: error?.message,
+      });
+    });
+  }
 
   return {
     ok: true,

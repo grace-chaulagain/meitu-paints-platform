@@ -18,6 +18,8 @@ import {
   SectionHeader,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { useIsMobileDispatcher } from "../../mobile/useIsMobileDispatcher.js";
+import { DispatcherCartMobileView } from "../../mobile/DispatcherCartMobileView.jsx";
 
 const PAYMENT_METHODS = [
   { key: "CASH", label: "Cash" },
@@ -207,7 +209,7 @@ export default function DispatcherOrderCartPage() {
       setNote("");
       setPaymentMethod("");
       setPaymentPrompted(false);
-      setTimeout(() => navigate("/dispatcher/dashboard/order/history"), 1200);
+      setTimeout(() => navigate("/dispatcher/orders"), 1200);
     } catch (err) {
       setError(getQueryErrorMessage(err, "Failed to submit order."));
     } finally {
@@ -216,6 +218,11 @@ export default function DispatcherOrderCartPage() {
   }
 
   const disabled = cart.length === 0 || submitting;
+
+  const isMobile = useIsMobileDispatcher();
+  if (isMobile) {
+    return <DispatcherCartMobileView />;
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -250,7 +257,7 @@ export default function DispatcherOrderCartPage() {
               <div style={{ padding: 20 }}>
                 <EmptyState icon="package" title="Your order is empty" subtitle="Go back to the catalog and add products - they'll appear here for review." />
                 <div style={{ marginTop: 4 }}>
-                  <GhostButton onClick={() => navigate("/dispatcher/dashboard/order")}>Return to Catalog</GhostButton>
+                  <GhostButton onClick={() => navigate("/dispatcher/catalog")}>Return to Catalog</GhostButton>
                 </div>
               </div>
             ) : (
@@ -264,7 +271,7 @@ export default function DispatcherOrderCartPage() {
 
                 <button
                   type="button"
-                  onClick={() => navigate("/dispatcher/dashboard/order")}
+                  onClick={() => navigate("/dispatcher/catalog")}
                   style={{ marginTop: 18, width: "100%", height: 48, borderRadius: 12, border: "1.5px dashed rgba(0,113,227,.35)", background: "rgba(0,113,227,.03)", color: "var(--color-azure, #0071e3)", fontSize: 13.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 >
                   <DashboardIcon name="plus" size={14} strokeWidth={2.2} />

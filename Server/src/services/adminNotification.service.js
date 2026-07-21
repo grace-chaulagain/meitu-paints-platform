@@ -66,6 +66,9 @@ function getSmtpTransport() {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
 
   return smtpTransport;
@@ -406,7 +409,7 @@ export function notifyFactoryOrderSubmitted(order) {
     },
   ];
   const reviewUrl = buildAppLink(
-    `/admin/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+    `/admin/dashboard/orders/${encodeURIComponent(String(order._id))}`,
   );
 
   return sendAdminNotification({
@@ -447,7 +450,7 @@ export async function notifyAssignedDealerOrderSubmitted(order) {
       category: NOTIFICATION_CATEGORY.ASSIGNED_DEALER_ORDER,
       title: `New dealer order ${order.orderNumber || ""}`.trim(),
       description: `${order.dealerSnapshot?.companyName || "An assigned dealer"} placed a new order for dispatcher review.`,
-      targetUrl: `/dispatcher/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+      targetUrl: `/dispatcher/dashboard/orders/${encodeURIComponent(String(order._id))}`,
       dealerId: order.dealerId,
       orderId: order._id,
       dispatcherId: order.dispatcherId,
@@ -470,7 +473,7 @@ export async function notifyAssignedDealerOrderSubmitted(order) {
     }
 
     const reviewUrl = buildAppLink(
-      `/dispatcher/dashboard/orders?orderId=${encodeURIComponent(String(order._id))}`,
+      `/dispatcher/dashboard/orders/${encodeURIComponent(String(order._id))}`,
     );
     const placedAt = order.createdAt
       ? new Date(order.createdAt).toLocaleString()
@@ -516,6 +519,85 @@ export async function notifyAssignedDealerOrderSubmitted(order) {
     });
   } catch (error) {
     console.warn("[dispatcher-notification] email skipped:", error.message);
+    return false;
+  }
+}
+
+// Dispatcher-only - a dealer routed to a dispatcher must never be told
+// dispatchers exist at all (they only ever see "Meitu" as the counterpart),
+// so this notifies the dispatcher and nobody else. Same shape as
+// notifyAssignedDealerOrderSubmitted above: resolve the dispatcher
+// recipient, create an in-app notification, then a best-effort email.
+export async function notifyDispatcherDealerAssigned(dealer, dispatcherId) {
+  try {
+    const recipient = await resolveDispatcherRecipient(dispatcherId);
+    if (!recipient?.user?._id) {
+      console.warn(
+        `[dispatcher-notification] skipped dealer-assigned notice for dealer ${dealer?._id || ""}: dispatcher recipient is missing or inactive`,
+      );
+      return false;
+    }
+
+    await createDispatcherNotification({
+      recipientUserId: recipient.user._id,
+      category: NOTIFICATION_CATEGORY.DEALER_ASSIGNED,
+      title: `New dealer assigned: ${dealer?.companyName || "Dealer"}`.trim(),
+      description: `${dealer?.companyName || "A dealer"} has been routed to you for order fulfillment.`,
+      targetUrl: `/dispatcher/dashboard/dealers/${encodeURIComponent(String(dealer?._id || ""))}`,
+      dealerId: dealer?._id || null,
+      dispatcherId,
+      metadata: {
+        companyName: dealer?.companyName || "",
+        contactName: dealer?.contactName || "",
+        email: dealer?.email || "",
+        phone: dealer?.phone || "",
+      },
+    });
+
+    const to = normalizeEmail(recipient.dispatcher.email || recipient.user.email);
+    if (!to) {
+      console.warn(
+        `[dispatcher-notification] email skipped for dealer ${dealer?._id || ""}: dispatcher email is missing`,
+      );
+      return false;
+    }
+
+    const dealerUrl = buildAppLink(
+      `/dispatcher/dashboard/dealers/${encodeURIComponent(String(dealer?._id || ""))}`,
+    );
+
+    const rows = [
+      { label: "Dealer", value: dealer?.contactName },
+      { label: "Company", value: dealer?.companyName },
+      { label: "Email", value: dealer?.email },
+      { label: "Phone", value: dealer?.phone },
+    ];
+
+    const text = [
+      "A new dealer has been assigned to your route.",
+      "",
+      ...rows.map((row) => `${row.label}: ${row.value || "-"}`),
+      "",
+      `View dealer: ${dealerUrl}`,
+    ].join("\n");
+
+    return sendMail({
+      to,
+      subject: `New Dealer Assigned · ${dealer?.companyName || "Meitu"}`,
+      text,
+      html: buildHtmlShell({
+        eyebrow: "Dealer Routing",
+        title: "A New Dealer Was Added To Your Route",
+        body: "This dealer's orders will now come to you for review and fulfillment.",
+        rows,
+        audience: "Meitu Paints Dispatcher",
+        footer: "This is an automated dispatcher notification for dealer routing changes.",
+        ctaUrl: dealerUrl,
+        ctaLabel: "View Dealer",
+      }),
+    });
+  } catch (error) {
+    console.warn("[dispatcher-notification] dealer-assigned email skipped:", error.message);
     return false;
   }
 }
