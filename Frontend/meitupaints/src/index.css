@@ -148,6 +148,16 @@
 html {
   width: 100%;
   overflow-x: hidden;
+  /* Stops the browser's native vertical rubber-band/pull-to-refresh bounce
+     at the document root - without this, dragging down at the top of any
+     page (Chrome/Safari's pull-to-refresh gesture) visually stretches
+     everything on screen, including the fixed NavBar, and on some mobile
+     browsers that stretched frame can still be visible for a moment on the
+     freshly reloaded page before layout settles. `contain` (not `none`)
+     matches the same fix already used for individual scroll containers in
+     DashboardShell.jsx/DealerMobileStyles.pages.jsx - it stops the bounce
+     without blocking normal scrolling. */
+  overscroll-behavior-y: contain;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -157,6 +167,7 @@ body {
   width: 100%;
   min-width: 0;
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
   font-family: var(--font-text);
   font-size: var(--text-body);
   line-height: var(--leading-body);

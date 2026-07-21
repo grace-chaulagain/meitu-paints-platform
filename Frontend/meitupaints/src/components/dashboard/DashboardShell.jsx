@@ -216,7 +216,17 @@ export default function DashboardShell({
           --dashboard-nav-height:70px;
           --dashboard-rail-width:248px;
           position:relative;
-          height:calc(100dvh - var(--dashboard-nav-height));
+          /* svh (small viewport height), not dvh - dvh is meant to live-update
+             as Safari's address bar hides/shows, but iOS has real, documented
+             bugs where it computes against a transient mid-animation viewport
+             size (e.g. during a pull-to-refresh gesture) and doesn't settle
+             back down afterward, leaving this shell - and the gap above its
+             scrollable content - sized against a taller-than-real viewport.
+             svh always uses the smallest possible viewport (chrome fully
+             expanded), so it can't get stuck on a stale larger reading - the
+             only cost is not reclaiming the extra strip Safari shows once its
+             chrome auto-hides, which is a fine trade for never glitching. */
+          height:calc(100svh - var(--dashboard-nav-height));
           min-height:0;
           display:flex;
           align-items:stretch;

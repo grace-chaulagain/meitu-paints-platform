@@ -233,7 +233,9 @@ function NavBar() {
   const unreadBadge = formatBadgeCount(notifications?.totalUnread || 0);
   const shouldReduceMotion = useReducedMotion();
 
-  const [scrolled, setScrolled] = useState(false);
+  const [scrolled, setScrolled] = useState(
+    () => typeof window !== "undefined" && window.scrollY > 12,
+  );
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -294,6 +296,30 @@ function NavBar() {
       document.removeEventListener("click", onClickOutside);
       document.removeEventListener("keydown", onEscape);
     };
+  }, []);
+
+  // "Refresh" on mobile Safari/Chrome (pull-to-refresh, tapping the reload
+  // icon, or navigating back) very often restores the page from the
+  // back-forward cache (bfcache) instead of doing a cold reload - the DOM
+  // and every in-memory React state value come back exactly as they were,
+  // including mobileOpen/searchOpen/profileMenuOpen, so a panel that was
+  // open when the user "refreshed" reopens in that same stretched-open
+  // state instead of the collapsed default a fresh load would produce. The
+  // `pageshow` event's `persisted` flag is how the platform tells you this
+  // happened (a plain reload never sets it, since React re-mounts from
+  // scratch there and the initial useState values already apply) - MDN's
+  // own recommended pattern for resetting transient UI state on restore.
+  useEffect(() => {
+    const onPageShow = (event) => {
+      if (!event.persisted) return;
+      setMobileOpen(false);
+      setSearchOpen(false);
+      setProfileMenuOpen(false);
+      setActiveIndex(-1);
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
 
   useEffect(() => {
@@ -604,6 +630,25 @@ function NavBar() {
     unreadBadge,
     user,
   ]);
+
+  // Some roles have overlapping hrefs (a dispatcher's "Order" tool lives at
+  // /dispatcher, a prefix of its own "Dashboard" at /dispatcher/dashboard),
+  // so isActive() alone would light up both entries while looking at a
+  // dispatcher order. Picking the longest matching href resolves that to
+  // whichever entry is actually the more specific section you're in.
+  const activeAccountHref = useMemo(() => {
+    const path = location.pathname;
+    let best = "";
+
+    for (const item of accountMenuItems) {
+      const matches = path === item.href || path.startsWith(item.href + "/");
+      if (matches && item.href.length > best.length) {
+        best = item.href;
+      }
+    }
+
+    return best;
+  }, [accountMenuItems, location.pathname]);
 
   const mobilePanelOpen = mobileOpen || searchOpen || profileMenuOpen;
 
@@ -1000,28 +1045,33 @@ function NavBar() {
               </div>
 
               <div className="account-nav-grid" role="menu">
-                {accountMenuItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className="account-nav-action"
-                    role="menuitem"
-                    onClick={closeAccountPanel}
-                  >
-                    <span className="account-nav-icon">
-                      <NavAccountIcon name={item.icon} size={18} />
-                    </span>
-                    <span className="account-nav-action-copy">
-                      <span>{item.label}</span>
-                      <small>{item.description}</small>
-                    </span>
-                    {item.badge ? (
-                      <span className="account-nav-action-badge">
-                        {item.badge}
+                {accountMenuItems.map((item) => {
+                  const active = item.href === activeAccountHref;
+
+                  return (
+                    <Link
+                      key={item.href}
+                      to={item.href}
+                      className={`account-nav-action ${active ? "active" : ""}`}
+                      role="menuitem"
+                      aria-current={active ? "page" : undefined}
+                      onClick={closeAccountPanel}
+                    >
+                      <span className="account-nav-icon">
+                        <NavAccountIcon name={item.icon} size={18} />
                       </span>
-                    ) : null}
-                  </Link>
-                ))}
+                      <span className="account-nav-action-copy">
+                        <span>{item.label}</span>
+                        <small>{item.description}</small>
+                      </span>
+                      {item.badge ? (
+                        <span className="account-nav-action-badge">
+                          {item.badge}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
 
                 {user ? (
                   <button
@@ -2131,6 +2181,18 @@ function NavBar() {
           color:var(--color-ink, #1d1d1f);
         }
 
+        .account-nav-action.active{
+          background:rgba(0,113,227,.08);
+        }
+
+        .account-nav-action.active:hover{
+          background:rgba(0,113,227,.12);
+        }
+
+        .account-nav-action.active .account-nav-action-copy span{
+          color:var(--color-azure, #0071e3);
+        }
+
         .account-nav-icon{
           width:28px;
           height:28px;
@@ -2141,6 +2203,15 @@ function NavBar() {
           background:var(--surface-card, #ffffff);
           border:1px solid var(--color-silver-mist, #e8e8ed);
           color:var(--color-ink, #1d1d1f);
+          transition:background-color var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    border-color var(--duration-primary, 0.344s) var(--ease-smooth, ease),
+                    color var(--duration-primary, 0.344s) var(--ease-smooth, ease);
+        }
+
+        .account-nav-action.active .account-nav-icon{
+          background:var(--color-azure, #0071e3);
+          border-color:var(--color-azure, #0071e3);
+          color:#fff;
         }
 
         .account-nav-action-copy{

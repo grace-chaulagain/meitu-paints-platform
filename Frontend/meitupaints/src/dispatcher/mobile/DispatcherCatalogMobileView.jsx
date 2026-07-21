@@ -3,6 +3,7 @@ import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import { useDispatcherOrderDraft } from "./useDispatcherOrderDraft.js";
 import { DispatcherProductSheet } from "./DispatcherProductSheet.jsx";
 import { LargeTitleHeader } from "../../dealer/mobile/LargeTitleHeader.jsx";
+import { MobilePushHeader } from "../../dealer/mobile/MobilePushHeader.jsx";
 import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 
 // Mirrors src/dealer/mobile/DealerCatalogMobileView.jsx, minus the
@@ -66,6 +67,46 @@ export function DispatcherCatalogMobileView({
 }) {
   const draft = useDispatcherOrderDraft();
   const [openFamily, setOpenFamily] = useState(null);
+
+  // A category chevron used to reuse onCategoryChange - the same handler
+  // the horizontal pills use - which re-filtered this same "All Products"
+  // view in place (losing the grouped browsing context, no way back).
+  // This is a separate, purely local "push" instead: it never touches the
+  // parent's activeCategory/URL state at all, so the All Products view
+  // underneath is completely undisturbed and still there, exactly as left,
+  // the moment this closes.
+  const [drilldownCategory, setDrilldownCategory] = useState(null);
+  const savedScrollTopRef = useRef(0);
+
+  // One rAF isn't reliably enough: the target view (the tall, grouped All
+  // Products layout on the way back in particular) doesn't always finish
+  // relayout within a single frame, so a scrollTop assigned too early gets
+  // silently clamped to whatever's scrollable at that instant. Retrying at
+  // a few points covers that without guessing a single "safe" delay - same
+  // multi-attempt reliability pattern already used for exactly this class
+  // of problem in ScrollToTop.jsx.
+  function applyScrollTop(value) {
+    const setIt = () => {
+      const el = document.querySelector(".dashboard-main-shell");
+      if (el) el.scrollTop = value;
+    };
+    setIt();
+    requestAnimationFrame(() => requestAnimationFrame(setIt));
+    setTimeout(setIt, 80);
+    setTimeout(setIt, 250);
+  }
+
+  function openCategoryDrilldown(group) {
+    const scrollEl = document.querySelector(".dashboard-main-shell");
+    savedScrollTopRef.current = scrollEl ? scrollEl.scrollTop : 0;
+    setDrilldownCategory(group);
+    applyScrollTop(0);
+  }
+
+  function closeCategoryDrilldown() {
+    setDrilldownCategory(null);
+    applyScrollTop(savedScrollTopRef.current);
+  }
 
   const groupedByCategory = useMemo(() => {
     if (activeCategory !== "ALL") return null;
@@ -203,6 +244,16 @@ export function DispatcherCatalogMobileView({
     );
   }
 
+  if (drilldownCategory) {
+    return (
+      <div className="dealer-m-catalog">
+        <MobilePushHeader title={drilldownCategory.label} onBack={closeCategoryDrilldown} />
+        <div className="dealer-m-catalog-list">{drilldownCategory.items.map(renderFamilyCard)}</div>
+        <DispatcherProductSheet open={Boolean(openFamily)} onClose={() => setOpenFamily(null)} family={openFamily} draft={draft} />
+      </div>
+    );
+  }
+
   return (
     <div className="dealer-m-catalog">
       <SkeletonSwap
@@ -277,7 +328,7 @@ export function DispatcherCatalogMobileView({
         <div className="dealer-m-catalog-groups">
           {groupedByCategory.map((group) => (
             <div key={group.key} className="dealer-m-catalog-group">
-              <button type="button" className="dealer-m-catalog-group-header" onClick={() => onCategoryChange(group.key)}>
+              <button type="button" className="dealer-m-catalog-group-header" onClick={() => openCategoryDrilldown(group)}>
                 <span className="dealer-m-catalog-group-label">{group.label}</span>
                 <DashboardIcon name="chevron" size={14} strokeWidth={2.4} className="dealer-m-catalog-group-chevron" />
               </button>

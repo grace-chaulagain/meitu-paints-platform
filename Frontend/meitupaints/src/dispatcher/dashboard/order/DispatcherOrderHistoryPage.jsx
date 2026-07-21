@@ -2,7 +2,6 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
-  useGetDispatcherReplenishmentOrderQuery,
   useGetDispatcherReplenishmentOrdersQuery,
   useGetProductFamiliesQuery,
   useGetProductsQuery,
@@ -19,14 +18,7 @@ import {
   SectionHeader,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
-import {
-  OrderDetailStyles,
-  OrderInfoCard,
-  OrderItemsTable,
-  OrderMilestoneStepper,
-  OrderSummaryCard,
-  Spinner,
-} from "../../../dealer/orderDetailUI.jsx";
+import { OrderDetailStyles, Spinner } from "../../../dealer/orderDetailUI.jsx";
 import { AppleDateField } from "../../../components/dashboard/ApplePickers.jsx";
 import {
   DISPLAY_BUCKET_META,
@@ -452,63 +444,6 @@ function Pagination({ page, totalPages, totalCount, pageSize, onChange }) {
   );
 }
 
-function CloseButton({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Close"
-      style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center" }}
-    >
-      <DashboardIcon name="close" size={14} strokeWidth={2} />
-    </button>
-  );
-}
-
-// No routed detail page exists for a dispatcher's own replenishment orders
-// (unlike DealerOrderDetailPage.jsx) - a modal built from the same shared
-// dealer/orderDetailUI.jsx pieces (milestone stepper, items table, summary
-// cards) keeps this page's detail view visually identical without adding a
-// new route nobody asked for.
-function ReplenishmentOrderModal({ orderId, onClose, productsMap, familyMap }) {
-  const orderQuery = useGetDispatcherReplenishmentOrderQuery(orderId, { skip: !orderId });
-  const order = orderQuery.data?.item;
-
-  if (!orderId) return null;
-
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 28 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Surface className="dash-modal-surface-in" style={{ width: "min(760px, 100%)", maxHeight: "92vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
-        {orderQuery.isLoading || !order ? (
-          <div style={{ height: 240, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
-        ) : (
-          <div style={{ display: "grid", gap: 18 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-              <SectionHeader eyebrow="Order" icon="package" title={order.orderNumber || "Order"} subtitle={`Placed ${formatDate(order.createdAt)}`} />
-              <CloseButton onClick={onClose} />
-            </div>
-
-            <OrderMilestoneStepper order={order} />
-
-            <OrderItemsTable items={order.items || []} productsMap={productsMap} familyMap={familyMap} />
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <OrderInfoCard order={order} />
-              <OrderSummaryCard order={order} />
-            </div>
-          </div>
-        )}
-      </Surface>
-    </div>
-  );
-}
-
 export default function DispatcherOrderHistoryPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -518,7 +453,6 @@ export default function DispatcherOrderHistoryPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
   const resultsRef = useRef(null);
 
   // The backend's default (no status/archive passed) only returns the
@@ -726,7 +660,13 @@ export default function DispatcherOrderHistoryPage() {
                   </div>
                   <div style={{ display: "grid", gap: 14 }}>
                     {group.orders.map((order) => (
-                      <OrderTimelineRow key={order._id} order={order} onOpen={(item) => setSelectedOrderId(item._id)} productsMap={productsMap} familyMap={familyMap} />
+                      <OrderTimelineRow
+                        key={order._id}
+                        order={order}
+                        onOpen={(item) => navigate(`/dispatcher/orders/${item._id}`, { state: { fromOrdersList: true } })}
+                        productsMap={productsMap}
+                        familyMap={familyMap}
+                      />
                     ))}
                   </div>
                 </div>
@@ -737,8 +677,6 @@ export default function DispatcherOrderHistoryPage() {
           </>
         )}
       </div>
-
-      <ReplenishmentOrderModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} productsMap={productsMap} familyMap={familyMap} />
 
       <OrderDetailStyles />
 

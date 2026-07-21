@@ -42,7 +42,6 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 import ScrollToTop from "./components/ScrollToTop.jsx";
 import Footer from "./components/Footer.jsx";
-import DraftOrderUtilityPage from "./components/dashboard/DraftOrderUtilityPage.jsx";
 
 import { AuthProvider } from "./auth/AuthProvider.jsx";
 import { useAuth } from "./auth/AuthProvider.jsx";
@@ -87,6 +86,7 @@ import DispatcherStockPage from "./dispatcher/dashboard/stock/DispatcherStockPag
 import DispatcherOrderCatalogPage from "./dispatcher/dashboard/order/DispatcherOrderCatalogPage.jsx";
 import DispatcherOrderCartPage from "./dispatcher/dashboard/order/DispatcherOrderCartPage.jsx";
 import DispatcherOrderHistoryPage from "./dispatcher/dashboard/order/DispatcherOrderHistoryPage.jsx";
+import DispatcherOwnOrderDetailPage from "./dispatcher/dashboard/order/DispatcherOwnOrderDetailPage.jsx";
 import DispatcherRegisterPage from "./dispatcher/DispatcherRegisterPage.jsx";
 import DispatcherDashboardPage from "./dispatcher/dashboard/DispatcherDashboardPage.jsx";
 import DispatcherShopPage from "./dispatcher/DispatcherShopPage.jsx";
@@ -514,16 +514,6 @@ const router = createBrowserRouter([
             element: <DispatcherOverviewPage />,
           },
           {
-            path: "draft-order",
-            element: (
-              <DraftOrderUtilityPage
-                roleLabel="Dispatcher Utility"
-                title="Draft Order"
-                subtitle="Calculate product totals for assigned dealer discussions. This page is only a pricing utility and does not submit an order."
-              />
-            ),
-          },
-          {
             path: "orders",
             element: <DispatcherOrdersPage />,
           },
@@ -570,6 +560,7 @@ const router = createBrowserRouter([
           { path: "catalog", element: <DispatcherOrderCatalogPage /> },
           { path: "cart", element: <DispatcherOrderCartPage /> },
           { path: "orders", element: <DispatcherOrderHistoryPage /> },
+          { path: "orders/:orderId", element: <DispatcherOwnOrderDetailPage /> },
           { path: "inventory", element: <DispatcherStockPage /> },
         ],
       },

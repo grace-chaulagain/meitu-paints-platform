@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  useGetDispatcherReplenishmentOrderQuery,
   useGetDispatcherReplenishmentOrdersQuery,
   useGetProductFamiliesQuery,
   useGetProductsQuery,
@@ -12,27 +11,22 @@ import { formatMoney } from "../../dealer/pricing.js";
 import {
   DISPLAY_BUCKET_META,
   ORDER_STATUS_META,
-  formatPaymentMethod,
-  formatShortDateTime,
   normalizeStatus,
   orderDisplayBucket,
   resolveOrderItemImage,
 } from "../../dealer/orderDetailLogic.js";
 import { StatusChip } from "../../dealer/mobile/StatusChip.jsx";
-import { StatusRail } from "../../dealer/mobile/StatusRail.jsx";
 import { SegmentedControl } from "../../dealer/mobile/SegmentedControl.jsx";
 import { LargeTitleHeader } from "../../dealer/mobile/LargeTitleHeader.jsx";
-import { MobilePushHeader } from "../../dealer/mobile/MobilePushHeader.jsx";
 import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 
 // Mirrors src/dealer/mobile/DealerOrdersMobileView.jsx's filter/month-group
 // list, minus the swipe-to-reorder gesture (the desktop dispatcher history
 // page has no reorder shortcut either - see DispatcherOrderHistoryPage.jsx).
-// There's no routed order-detail page for a dispatcher's own replenishment
-// orders (see that same file's ReplenishmentOrderModal comment), so instead
-// of a route param this pushes an inline detail screen via local state -
-// same "no new route nobody asked for" reasoning, just a mobile push instead
-// of a desktop modal.
+// Detail is now a real routed page (/dispatcher/orders/:orderId, rendered
+// via DispatcherOwnOrderDetailPage.jsx -> DispatcherOwnOrderDetailMobileView
+// on this viewport) - same navigate() pattern DealerOrdersMobileView.jsx
+// already uses, replacing the old inline local-state push panel.
 const FILTERS = [
   { key: "ALL", label: "All" },
   { key: "ACTIVE", label: "Active" },
@@ -42,13 +36,6 @@ const FILTERS = [
 
 const STAGGER_CARD_CAP = 8;
 const STAGGER_WINDOW_MS = 8 * 40 + 300;
-
-const STAGE_HEADLINE = {
-  SUBMITTED: "Order placed",
-  VERIFIED: "Verified — being prepared",
-  DISPATCHED: "On its way",
-  COMPLETED: "Delivered",
-};
 
 function filterBucket(status) {
   if (status === "COMPLETED") return "COMPLETED";
@@ -67,21 +54,6 @@ function monthLabel(dateStr) {
 
 function cardDateLabel(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function milestoneDateFor(order, status) {
-  switch (status) {
-    case "SUBMITTED":
-      return order?.createdAt;
-    case "VERIFIED":
-      return order?.review?.reviewedAt || order?.factory?.sentToFactoryAt;
-    case "DISPATCHED":
-      return order?.factory?.outForDeliveryAt;
-    case "COMPLETED":
-      return order?.factory?.deliveredAt;
-    default:
-      return null;
-  }
 }
 
 function OrderCard({ order, isLive, image, itemCount, bucket, stagger, animationDelay, onNavigate }) {
@@ -113,132 +85,10 @@ function OrderCard({ order, isLive, image, itemCount, bucket, stagger, animation
   );
 }
 
-// Mirrors src/dealer/mobile/DealerOrderDetailMobileView.jsx, minus the
-// reorder action (buildReorderDraft() keys by sku - dispatcher's draft is
-// keyed by productId, see dispatcherOrderPricing.js - and the desktop
-// dispatcher history page has no reorder shortcut to mirror anyway) and the
-// invoice-PDF affordance (not offered for replenishment orders on desktop
-// either).
-function DispatcherOrderDetailView({ orderId, onBack, productsMap, familyMap }) {
-  const orderQuery = useGetDispatcherReplenishmentOrderQuery(orderId, { skip: !orderId });
-  const order = orderQuery.data?.item;
-  const loading = orderQuery.isLoading && !order;
-  const loadError = orderQuery.error ? getQueryErrorMessage(orderQuery.error, "This order could not be found.") : "";
-
-  if (!loading && (loadError || !order)) {
-    return (
-      <div className="dealer-m-order-detail">
-        <MobilePushHeader title="Order" onBack={onBack} />
-        <div className="dealer-m-error-card" style={{ marginTop: 16 }}>
-          <div className="dealer-m-error-title">{loadError || "This order could not be found."}</div>
-          <button type="button" className="dealer-m-error-retry" onClick={onBack}>
-            Back to orders
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const status = order ? normalizeStatus(order.status) : null;
-  const bucket = order ? orderDisplayBucket(status) : null;
-  const isOffRamp = status === "REJECTED" || status === "CANCELLED";
-  const stageDate = order ? milestoneDateFor(order, status) : null;
-
-  const familyGroups = order
-    ? (() => {
-        const map = new Map();
-        for (const item of order.items || []) {
-          const key = item.code || item.sku;
-          if (!map.has(key)) map.set(key, { code: key, name: item.name, lines: [] });
-          map.get(key).lines.push(item);
-        }
-        return Array.from(map.values());
-      })()
-    : [];
-
-  return (
-    <div className="dealer-m-order-detail">
-      <SkeletonSwap
-        loading={loading}
-        skeleton={
-          <>
-            <MobilePushHeader title="Order" onBack={onBack} />
-            <div className="dealer-m-skel" style={{ height: 140, marginTop: 16, borderRadius: 20 }} />
-            <div className="dealer-m-skel" style={{ height: 200, marginTop: 12, borderRadius: 20 }} />
-          </>
-        }
-      >
-        {order ? (
-          <>
-            <MobilePushHeader title={order.orderNumber || "Order"} onBack={onBack} />
-
-            <div className="dealer-m-order-hero">
-              <div className={`dealer-m-order-hero-headline ${isOffRamp ? "off-ramp" : ""}`}>
-                {isOffRamp ? DISPLAY_BUCKET_META[bucket]?.stateLabel : STAGE_HEADLINE[status] || DISPLAY_BUCKET_META[bucket]?.stateLabel}
-              </div>
-              <div className="dealer-m-order-hero-sub">
-                {isOffRamp
-                  ? order?.review?.rejectionReason || order?.review?.notes || "Contact Meitu for details."
-                  : stageDate
-                    ? formatShortDateTime(stageDate)
-                    : null}
-              </div>
-            </div>
-
-            {!isOffRamp ? (
-              <div className="dealer-m-order-card">
-                <StatusRail order={order} size="lg" />
-              </div>
-            ) : null}
-
-            {order?.payment?.method ? (
-              <div className="dealer-m-order-chip-row">
-                <span className="dealer-m-order-chip">{formatPaymentMethod(order.payment.method)}</span>
-              </div>
-            ) : null}
-
-            <div className="dealer-m-order-items-card">
-              <div className="dealer-m-order-items-title">Items</div>
-              {familyGroups.map((group) => {
-                const image = resolveOrderItemImage(group.lines[0], productsMap, familyMap);
-                return (
-                  <div className="dealer-m-order-item-group" key={group.code}>
-                    <div className="dealer-m-cart-card-head">
-                      <span className="dealer-m-cart-card-thumb">
-                        {image?.url ? <img src={image.url} alt="" /> : <DashboardIcon name="package" size={18} strokeWidth={1.6} />}
-                      </span>
-                      <span className="dealer-m-cart-card-name">{group.name}</span>
-                    </div>
-                    {group.lines.map((item, index) => (
-                      <div className="dealer-m-cart-line" key={`${item.sku}-${index}`}>
-                        <div className="dealer-m-cart-line-info">
-                          <div className="dealer-m-cart-line-label">
-                            {item.packLabel} &times; {item.quantity}
-                          </div>
-                          <div className="dealer-m-cart-line-rate">{formatMoney(item.unitPrice, order?.totals?.currency)}/pack</div>
-                        </div>
-                        <div className="dealer-m-cart-line-total">{formatMoney(item.lineTotal, order?.totals?.currency)}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-              <div className="dealer-m-order-items-total">
-                <span>Total</span>
-                <span>{formatMoney(order?.totals?.total, order?.totals?.currency)}</span>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </SkeletonSwap>
-    </div>
-  );
-}
-
 export function DispatcherOrdersMobileView() {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState("ALL");
   const [staggerActive, setStaggerActive] = useState(true);
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
   // status:"ALL" is required here - the backend's default (no status
   // passed) only returns the pending bucket, but this view buckets and
   // filters across every status (Active/Completed/Cancelled) client-side,
@@ -299,17 +149,6 @@ export function DispatcherOrdersMobileView() {
 
   const loading = ordersQuery.isLoading && orders.length === 0;
   const loadError = ordersQuery.error ? getQueryErrorMessage(ordersQuery.error, "Failed to load your order history.") : "";
-
-  if (selectedOrderId) {
-    return (
-      <DispatcherOrderDetailView
-        orderId={selectedOrderId}
-        onBack={() => setSelectedOrderId(null)}
-        productsMap={productsMap}
-        familyMap={familyMap}
-      />
-    );
-  }
 
   if (loadError) {
     return (
@@ -377,7 +216,7 @@ export function DispatcherOrdersMobileView() {
                       bucket={bucket}
                       stagger={stagger}
                       animationDelay={`${idx * 40}ms`}
-                      onNavigate={() => setSelectedOrderId(order._id)}
+                      onNavigate={() => navigate(`/dispatcher/orders/${order._id}`)}
                     />
                   );
                 })}
