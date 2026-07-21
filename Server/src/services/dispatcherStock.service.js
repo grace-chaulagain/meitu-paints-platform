@@ -4,7 +4,7 @@ import DispatcherStockMovement, {
   DISPATCHER_STOCK_MOVEMENT_TYPE,
 } from "../models/DispatcherStockMovement.model.js";
 import Product from "../models/Product.model.js";
-import Order, { STOCK_CHECK_STATUS } from "../models/Order.model.js";
+import Order, { STOCK_CHECK_STATUS, STOCK_RESERVATION_STATUS } from "../models/Order.model.js";
 import ApiError from "../utils/apiError.js";
 import { withStockSession } from "./stock.service.js";
 
@@ -26,13 +26,13 @@ async function findProductForOrderItem(item) {
 
 // Dispatcher-fulfilled orders never touch the central Product.stock ledger
 // (see reserveStockForOrder in stock.service.js) - they're covered entirely
-// by the dispatcher's own DispatcherProductStock rows, only ever consumed
-// at dispatch time. This mirrors checkOrderStock's status logic (AVAILABLE/
-// LOW/INSUFFICIENT/OUT_OF_STOCK/UNMATCHED) against that ledger instead, so
-// a dispatcher can see the same kind of stock-readiness signal before they
-// dispatch as an admin sees before verifying a factory order - there's no
-// separate "reserved" concept here, so availableQuantity always equals
-// currentQuantity.
+// by the dispatcher's own DispatcherProductStock rows. This mirrors
+// checkOrderStock's status logic (AVAILABLE/LOW/INSUFFICIENT/OUT_OF_STOCK/
+// UNMATCHED) against that ledger instead, so a dispatcher sees the same
+// kind of stock-readiness signal before verifying/dispatching as an admin
+// sees before verifying a factory order. availableQuantity accounts for
+// reservedQuantity (stock already committed to other verified orders),
+// same as the central ledger.
 export async function checkDispatcherOrderStock({ dispatcherId, order } = {}) {
   if (!dispatcherId) throw new ApiError(400, "dispatcherId is required");
 
@@ -75,19 +75,21 @@ export async function checkDispatcherOrderStock({ dispatcherId, order } = {}) {
 
     const stockRow = stockByProduct.get(String(line.product._id));
     const currentQuantity = Number(stockRow?.currentQuantity || 0);
+    const reservedQuantity = Number(stockRow?.reservedQuantity || 0);
+    const availableQuantity = Math.max(0, currentQuantity - reservedQuantity);
     const lowStockThreshold = Number(line.product?.stock?.lowStockThreshold || 0);
     const totalRequested = requestedByProduct.get(String(line.product._id)) || line.requestedQuantity;
 
     let status = STOCK_CHECK_STATUS.AVAILABLE;
     let message = "Stock available.";
 
-    if (currentQuantity <= 0) {
+    if (availableQuantity <= 0) {
       status = STOCK_CHECK_STATUS.OUT_OF_STOCK;
-      message = "You don't currently hold any stock for this product.";
-    } else if (currentQuantity < totalRequested) {
+      message = "You don't currently hold any available stock for this product.";
+    } else if (availableQuantity < totalRequested) {
       status = STOCK_CHECK_STATUS.INSUFFICIENT;
-      message = `You have ${currentQuantity}, this order requests ${totalRequested}.`;
-    } else if (lowStockThreshold > 0 && currentQuantity - totalRequested <= lowStockThreshold) {
+      message = `You have ${availableQuantity} available, this order requests ${totalRequested}.`;
+    } else if (lowStockThreshold > 0 && availableQuantity - totalRequested <= lowStockThreshold) {
       status = STOCK_CHECK_STATUS.LOW;
       message = "Stock is available but will be low after dispatch.";
     }
@@ -98,8 +100,8 @@ export async function checkDispatcherOrderStock({ dispatcherId, order } = {}) {
       name: line.product.name || clean(line.item?.name) || "",
       requestedQuantity: line.requestedQuantity,
       currentQuantity,
-      reservedQuantity: 0,
-      availableQuantity: currentQuantity,
+      reservedQuantity,
+      availableQuantity,
       status,
       matched: true,
       message,
@@ -130,6 +132,197 @@ function itemQuantity(item) {
     item?.quantity ?? item?.qty ?? item?.deductedQuantity ?? 0,
   );
   return Number.isFinite(quantity) ? quantity : 0;
+}
+
+function reservationStatus(order) {
+  return order?.stockReservation?.status || STOCK_RESERVATION_STATUS.NONE;
+}
+
+function stockBlockerMessage(items = []) {
+  const blockers = items.filter((item) =>
+    [STOCK_CHECK_STATUS.INSUFFICIENT, STOCK_CHECK_STATUS.OUT_OF_STOCK, STOCK_CHECK_STATUS.UNMATCHED].includes(
+      item.status,
+    ),
+  );
+  if (!blockers.length) return "";
+  return blockers
+    .map((item) => `${item.name || item.sku || "Item"}: ${item.message || item.status}`)
+    .join("; ");
+}
+
+function serializeReservationItem({ productId, sku, name, quantity, previousReservedQuantity, newReservedQuantity }) {
+  return {
+    productId,
+    sku: sku || "",
+    name: name || "",
+    quantity: Number(quantity || 0),
+    previousReservedQuantity: Number(previousReservedQuantity || 0),
+    newReservedQuantity: Number(newReservedQuantity || 0),
+  };
+}
+
+// Reserves this dispatcher's own regional stock for a submitted order at
+// the moment it's verified, mirroring reserveStockForOrder's role for
+// central Product.stock on factory orders - see that function's comment
+// in stock.service.js for the full rationale. Runs checkDispatcherOrderStock
+// first for a readable blocker message, then re-checks atomically per
+// product via a guarded $expr update so a concurrent reservation on the
+// same SKU can't oversell (the pre-check alone has a read-then-write gap).
+// No kit decomposition here (unlike resolveOrderStockLines) - a dispatcher
+// holds a kit as one directly-trackable SKU, not its components. `reason`/
+// `note` are accepted for interface parity with the factory reserve/
+// release pair but aren't persisted anywhere: DispatcherStockMovement is
+// scoped to on-hand-quantity changes only (see its header comment), and a
+// reservation never changes on-hand quantity - only consumeDispatcherStock
+// ForOrder's real DISPATCH_OUT decrement does, and that's already logged.
+export async function reserveDispatcherStockForOrder({
+  order,
+  actorUser,
+  reason = "Order verified and reserved for dispatcher fulfillment",
+  note = "",
+  session = null,
+} = {}) {
+  if (!order?._id) throw new ApiError(400, "Order is required");
+  const dispatcherId = order.dispatcherId;
+  if (!dispatcherId) throw new ApiError(400, "Order has no dispatcher assigned");
+
+  const currentStatus = reservationStatus(order);
+  if (currentStatus === STOCK_RESERVATION_STATUS.RESERVED) return order;
+  if (currentStatus === STOCK_RESERVATION_STATUS.CONSUMED) {
+    throw new ApiError(400, "Stock reservation has already been consumed");
+  }
+
+  const check = await checkDispatcherOrderStock({ dispatcherId, order });
+  if (!check.ok) {
+    order.stockCheck = { checkedAt: check.checkedAt, items: check.items };
+    await order.save({ session });
+    throw new ApiError(400, `Cannot verify. ${stockBlockerMessage(check.items)}`, { items: check.items });
+  }
+
+  const aggregated = new Map();
+  for (const item of check.items) {
+    if (!item.matched) continue;
+    const key = String(item.productId);
+    const existing = aggregated.get(key) || { productId: item.productId, sku: item.sku, name: item.name, quantity: 0 };
+    existing.quantity += item.requestedQuantity;
+    aggregated.set(key, existing);
+  }
+
+  return withStockSession(session, async (txnSession) => {
+    const reservationItems = [];
+    for (const { productId, sku, name, quantity } of aggregated.values()) {
+      const before = await DispatcherProductStock.findOne({ dispatcherId, productId }).session(txnSession);
+      const previousReservedQuantity = Number(before?.reservedQuantity || 0);
+
+      const updated = await DispatcherProductStock.findOneAndUpdate(
+        {
+          dispatcherId,
+          productId,
+          $expr: {
+            $gte: [
+              { $subtract: [{ $ifNull: ["$currentQuantity", 0] }, { $ifNull: ["$reservedQuantity", 0] }] },
+              quantity,
+            ],
+          },
+        },
+        {
+          $inc: { reservedQuantity: quantity },
+          $set: { lastUpdatedAt: new Date(), lastUpdatedBy: actorId(actorUser) },
+        },
+        { new: true, session: txnSession },
+      );
+
+      if (!updated) {
+        throw new ApiError(
+          409,
+          `Dispatcher stock for ${name || sku || "an item"} changed before the reservation could complete. Please retry.`,
+        );
+      }
+
+      reservationItems.push(
+        serializeReservationItem({
+          productId,
+          sku,
+          name,
+          quantity,
+          previousReservedQuantity,
+          newReservedQuantity: updated.reservedQuantity,
+        }),
+      );
+    }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.RESERVED,
+      reservedAt: new Date(),
+      reservedBy: actorId(actorUser),
+      releasedAt: null,
+      releasedBy: null,
+      consumedAt: null,
+      consumedBy: null,
+      items: reservationItems,
+    };
+    order.stockCheck = { checkedAt: check.checkedAt, items: check.items };
+    await order.save({ session: txnSession });
+    return order;
+  });
+}
+
+// Releases a dispatcher stock reservation without ever going negative -
+// mirrors releaseReservationForOrder's clamped aggregation-pipeline update
+// exactly (see stock.service.js). Idempotent: a no-op if nothing was ever
+// reserved or it was already released; throws if it was already consumed
+// (that stock is physically gone, not releasable).
+export async function releaseDispatcherStockForOrder({
+  order,
+  actorUser,
+  reason = "Order reservation released",
+  note = "",
+  session = null,
+} = {}) {
+  if (!order?._id) throw new ApiError(400, "Order is required");
+  const currentStatus = reservationStatus(order);
+  if (currentStatus === STOCK_RESERVATION_STATUS.NONE || currentStatus === STOCK_RESERVATION_STATUS.RELEASED) {
+    return order;
+  }
+  if (currentStatus === STOCK_RESERVATION_STATUS.CONSUMED) {
+    throw new ApiError(400, "Consumed stock cannot be released automatically");
+  }
+
+  const dispatcherId = order.dispatcherId;
+  const items = order.stockReservation?.items || [];
+
+  return withStockSession(session, async (txnSession) => {
+    for (const item of items) {
+      const releaseQuantity = Number(item.quantity || 0);
+      if (releaseQuantity <= 0 || !item.productId) continue;
+
+      await DispatcherProductStock.findOneAndUpdate(
+        { dispatcherId, productId: item.productId },
+        [
+          {
+            $set: {
+              reservedQuantity: {
+                $max: [0, { $subtract: [{ $ifNull: ["$reservedQuantity", 0] }, releaseQuantity] }],
+              },
+              lastUpdatedAt: new Date(),
+              lastUpdatedBy: actorId(actorUser),
+            },
+          },
+        ],
+        { new: true, session: txnSession, updatePipeline: true },
+      );
+    }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.RELEASED,
+      releasedAt: new Date(),
+      releasedBy: actorId(actorUser),
+    };
+    await order.save({ session: txnSession });
+    return order;
+  });
 }
 
 // Increments a dispatcher's on-hand stock for each line item, upserting
@@ -187,48 +380,73 @@ export async function creditDispatcherStock({
   });
 }
 
-// Decrements a dispatcher's on-hand stock for each line item, atomically
-// guarded so two concurrent dispatches from the same dispatcher can't
-// oversell their own regional stock - the same guarded-filter pattern
-// stock.service.js uses for central Product.stock. Also writes the
+// Decrements a dispatcher's on-hand stock for each line item at actual
+// dispatch time, consuming the reservation created at verify (both
+// currentQuantity and reservedQuantity move together) - mirrors
+// consumeReservationForOrder's dual-decrement pattern in stock.service.js.
+// Falls back to a fresh check-and-deduct (currentQuantity only) for orders
+// that reached VERIFIED before reservation-at-verify existed, same as the
+// factory side's fallbackWithoutReservation path. Still atomically guarded
+// either way, so two concurrent dispatches can't oversell. Also writes the
 // compensating DispatcherStockMovement row per item, same transaction.
 export async function consumeDispatcherStockForOrder({
-  dispatcherId,
-  items = [],
-  orderId = null,
+  order,
   reason = "Order dispatched to dealer",
   actorUser,
   session = null,
 } = {}) {
+  if (!order?._id) throw new ApiError(400, "Order is required");
+  const dispatcherId = order.dispatcherId;
   if (!dispatcherId) throw new ApiError(400, "dispatcherId is required");
 
+  if (order.stockDeduction?.deductedAt || reservationStatus(order) === STOCK_RESERVATION_STATUS.CONSUMED) {
+    throw new ApiError(400, "Stock has already been deducted for this order");
+  }
+
+  let sourceItems = order.stockReservation?.items || [];
+  let fallbackWithoutReservation = false;
+
+  if (reservationStatus(order) !== STOCK_RESERVATION_STATUS.RESERVED) {
+    const check = await checkDispatcherOrderStock({ dispatcherId, order });
+    if (!check.ok) {
+      throw new ApiError(400, `Cannot dispatch. ${stockBlockerMessage(check.items)}`, { items: check.items });
+    }
+    sourceItems = check.items
+      .filter((item) => item.matched)
+      .map((item) => ({ productId: item.productId, sku: item.sku, name: item.name, quantity: item.requestedQuantity }));
+    fallbackWithoutReservation = true;
+  }
+
   return withStockSession(session, async (txnSession) => {
-    for (const item of items) {
-      const productId = itemProductId(item);
-      const quantity = itemQuantity(item);
+    const deductionLines = [];
+
+    for (const item of sourceItems) {
+      const productId = item.productId;
+      const quantity = Number(item.quantity || 0);
       if (!productId || quantity <= 0) continue;
 
+      const exprConditions = [{ $gte: [{ $ifNull: ["$currentQuantity", 0] }, quantity] }];
+      const decrement = { currentQuantity: -quantity };
+      if (!fallbackWithoutReservation) {
+        exprConditions.push({ $gte: [{ $ifNull: ["$reservedQuantity", 0] }, quantity] });
+        decrement.reservedQuantity = -quantity;
+      }
+
       const updated = await DispatcherProductStock.findOneAndUpdate(
-        { dispatcherId, productId, currentQuantity: { $gte: quantity } },
+        { dispatcherId, productId, $expr: { $and: exprConditions } },
         {
-          $inc: { currentQuantity: -quantity },
-          $set: {
-            lastUpdatedAt: new Date(),
-            lastUpdatedBy: actorId(actorUser),
-          },
+          $inc: decrement,
+          $set: { lastUpdatedAt: new Date(), lastUpdatedBy: actorId(actorUser) },
         },
         { new: true, session: txnSession },
       );
 
       if (!updated) {
-        const [existing, product] = await Promise.all([
-          DispatcherProductStock.findOne({ dispatcherId, productId }).session(txnSession),
-          Product.findById(productId).select("name sku").session(txnSession),
-        ]);
+        const existing = await DispatcherProductStock.findOne({ dispatcherId, productId }).session(txnSession);
         const available = Number(existing?.currentQuantity || 0);
         throw new ApiError(
           400,
-          `Insufficient dispatcher stock for ${product?.name || product?.sku || clean(item?.name) || "item"}. Available ${available}, requested ${quantity}.`,
+          `Insufficient dispatcher stock for ${item.name || item.sku || "item"}. Available ${available}, requested ${quantity}.`,
         );
       }
 
@@ -242,14 +460,38 @@ export async function consumeDispatcherStockForOrder({
             previousQuantity: updated.currentQuantity + quantity,
             newQuantity: updated.currentQuantity,
             reason,
-            orderId,
+            orderId: order._id,
             actorUserId: actorId(actorUser),
             actorRole: "DISPATCHER",
           },
         ],
         { session: txnSession },
       );
+
+      deductionLines.push({
+        productId,
+        sku: item.sku || "",
+        name: item.name || "",
+        previousQuantity: updated.currentQuantity + quantity,
+        deductedQuantity: quantity,
+        newQuantity: updated.currentQuantity,
+      });
     }
+
+    order.stockReservation = {
+      ...(order.stockReservation?.toObject?.() || order.stockReservation || {}),
+      status: STOCK_RESERVATION_STATUS.CONSUMED,
+      consumedAt: new Date(),
+      consumedBy: actorId(actorUser),
+      items: sourceItems,
+    };
+    order.stockDeduction = {
+      deductedAt: new Date(),
+      deductedBy: actorId(actorUser),
+      lines: deductionLines,
+    };
+    await order.save({ session: txnSession });
+    return deductionLines;
   });
 }
 
@@ -342,6 +584,8 @@ export async function listDispatcherStock({ dispatcherId, page = 1, limit = 100 
     .filter((row) => row.productId)
     .map((row) => {
       const currentQuantity = Number(row.currentQuantity || 0);
+      const reservedQuantity = Number(row.reservedQuantity || 0);
+      const availableQuantity = Math.max(0, currentQuantity - reservedQuantity);
       // No per-purchase unit cost is tracked for dispatcher stock (unlike
       // DealerProductStock.lastKnownUnitCost, sourced from real
       // InventoryMovement history) - the current catalog price is used as
@@ -356,6 +600,8 @@ export async function listDispatcherStock({ dispatcherId, page = 1, limit = 100 
         pack: row.productId.pack || {},
         images: row.productId.images || [],
         currentQuantity,
+        reservedQuantity,
+        availableQuantity,
         inventoryValue: unitPrice > 0 ? currentQuantity * unitPrice : null,
         lowStockThreshold: Number(row.productId.stock?.lowStockThreshold || 0),
         lastUpdatedAt: row.lastUpdatedAt || null,

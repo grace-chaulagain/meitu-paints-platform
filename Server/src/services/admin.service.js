@@ -34,7 +34,7 @@ import {
   getDealerLeaderboard as getDealerLeaderboardService,
 } from "./dealerAnalytics.service.js";
 import { getDispatcherAnalytics as getDispatcherAnalyticsService } from "./dispatcherAnalytics.service.js";
-import { listDispatcherStock } from "./dispatcherStock.service.js";
+import { listDispatcherStock, releaseDispatcherStockForOrder } from "./dispatcherStock.service.js";
 import { releaseReservationForOrder } from "./stock.service.js";
 
 // ----------------------------
@@ -2673,7 +2673,7 @@ export async function hardDeleteOrder({
   if (!orderId) throw new ApiError(400, "Missing orderId");
 
   const order = await Order.findById(orderId).select(
-    "_id orderNumber status dealerId dispatcherId isDeleted deletion stockReservation",
+    "_id orderNumber status dealerId dispatcherId isDeleted deletion stockReservation dealerSnapshot.fulfillmentMode",
   );
   if (!order) throw new ApiError(404, "Order not found");
   if (order.deletion?.pending || order.isDeleted) {
@@ -2694,14 +2694,30 @@ export async function hardDeleteOrder({
     // reservation, and without this it would never be released (the
     // order disappears from every normal queue once isDeleted is set,
     // so nothing would ever call releaseReservationForOrder for it).
+    // Which ledger holds that reservation depends on fulfillment mode -
+    // a dispatcher-fulfilled order's stockReservation reuses the same
+    // generic Order field, but it was reserved against
+    // DispatcherProductStock, not the central Product.stock, so it must
+    // be released through the matching function or the wrong ledger's
+    // reservedQuantity gets corrupted.
     if (order.stockReservation?.status === "RESERVED") {
-      await releaseReservationForOrder({
-        order,
-        actorUser: adminUser,
-        reason: "Order deleted by admin",
-        note: normalizeText(reason),
-        session,
-      });
+      if (order.dealerSnapshot?.fulfillmentMode === "DISPATCHER") {
+        await releaseDispatcherStockForOrder({
+          order,
+          actorUser: adminUser,
+          reason: "Order deleted by admin",
+          note: normalizeText(reason),
+          session,
+        });
+      } else {
+        await releaseReservationForOrder({
+          order,
+          actorUser: adminUser,
+          reason: "Order deleted by admin",
+          note: normalizeText(reason),
+          session,
+        });
+      }
     }
 
     order.isDeleted = true;

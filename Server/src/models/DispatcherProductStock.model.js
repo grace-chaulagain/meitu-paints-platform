@@ -4,9 +4,13 @@ import mongoose from "mongoose";
 // warehouse. Credited when the central Factory dispatches the
 // dispatcher's own replenishment order; debited when the dispatcher
 // dispatches one of their assigned dealers' orders from this stock.
-// No reservation phase: replenishment reservation happens against the
-// central Product.stock (same pipeline as any Factory order), and this
-// ledger only ever reflects physical on-hand quantity at the dispatcher.
+// reservedQuantity mirrors Product.stock.reservedQuantity's role for the
+// central ledger: a dealer order routed to this dispatcher reserves
+// against currentQuantity the moment it's verified (see
+// reserveDispatcherStockForOrder in dispatcherStock.service.js), then the
+// reservation is consumed (both fields decremented) at actual dispatch -
+// this is what stops a dispatcher from verifying more orders than they
+// can physically fulfill.
 const DispatcherProductStockSchema = new mongoose.Schema(
   {
     dispatcherId: {
@@ -22,6 +26,7 @@ const DispatcherProductStockSchema = new mongoose.Schema(
       index: true,
     },
     currentQuantity: { type: Number, default: 0, min: 0 },
+    reservedQuantity: { type: Number, default: 0, min: 0 },
     lastUpdatedAt: { type: Date, default: null },
     lastUpdatedBy: {
       type: mongoose.Schema.Types.ObjectId,

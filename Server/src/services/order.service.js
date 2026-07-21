@@ -29,6 +29,10 @@ import {
   releaseReservationForOrder,
   reserveStockForOrder,
 } from "./stock.service.js";
+import {
+  reserveDispatcherStockForOrder,
+  releaseDispatcherStockForOrder,
+} from "./dispatcherStock.service.js";
 
 function getFactorySettingsModel() {
   const model = mongoose.models.FactorySettings;
@@ -993,6 +997,14 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
             order: updated,
             actorUser,
             reason: "Admin verified order for Factory fulfillment",
+            note: normalizedReviewNote,
+            session,
+          });
+        } else {
+          await reserveDispatcherStockForOrder({
+            order: updated,
+            actorUser,
+            reason: "Order verified and reserved for dispatcher fulfillment",
             note: normalizedReviewNote,
             session,
           });

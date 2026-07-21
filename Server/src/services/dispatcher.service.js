@@ -17,6 +17,7 @@ import { generateUniqueOrderNumber } from "./order.service.js";
 import {
   checkDispatcherOrderStock,
   consumeDispatcherStockForOrder,
+  reserveDispatcherStockForOrder,
   listDispatcherStock,
   listDispatcherStockHistory,
 } from "./dispatcherStock.service.js";
@@ -514,57 +515,86 @@ export async function verifyAssignedOrder({
   const previousStatus = order.status;
   const actorId = user?.sub || user?.id || null;
 
-  let dealerEmailSentAt = null;
+  // The status transition and the dispatcher stock reservation share one
+  // transaction: either both land, or neither does. This is what makes
+  // insufficient dispatcher stock actually block verification rather than
+  // silently letting a second, unfulfillable order also reach VERIFIED -
+  // mirrors order.service.js's verifyOrder reserving central Product.stock
+  // for factory orders. The findOneAndUpdate below is also what prevents
+  // two concurrent verify/reject calls on the same order from both
+  // succeeding (only matches if status is still SUBMITTED at write time).
+  //
+  // The dealer email is sent only after this transaction actually commits
+  // (not before, like the old code did) - insufficient stock is now a
+  // routine, expected failure here, and emailing "your order was verified"
+  // for an order that just failed to verify would be actively wrong.
+  let updated;
+  const session = await mongoose.startSession();
   try {
-    dealerEmailSentAt = await sendDealerStatusEmail({
-      order,
+    await session.withTransaction(async () => {
+      updated = await Order.findOneAndUpdate(
+        { _id: order._id, dispatcherId, status: "SUBMITTED" },
+        {
+          $set: {
+            status: "VERIFIED",
+            review: {
+              ...(order.review?.toObject?.() || order.review || {}),
+              reviewedByRole: "DISPATCHER",
+              reviewedByUserId: actorId,
+              reviewedAt: new Date(),
+              reviewNote,
+            },
+            ...(payload.internalNote !== undefined
+              ? { internalNote: normalizeText(payload.internalNote) }
+              : {}),
+            updatedBy: actorId,
+          },
+          $push: {
+            statusHistory: {
+              fromStatus: previousStatus || "",
+              toStatus: "VERIFIED",
+              note: reviewNote || "Order verified by dispatcher.",
+              changedByUserId: actorId,
+              changedByRole: "DISPATCHER",
+              changedAt: new Date(),
+            },
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!updated) {
+        throw new Error(
+          "This order was already reviewed by someone else. Please refresh and try again.",
+        );
+      }
+
+      await reserveDispatcherStockForOrder({
+        order: updated,
+        actorUser: user,
+        reason: "Dispatcher verified and reserved stock for this order",
+        note: reviewNote,
+        session,
+      });
+    });
+  } finally {
+    session.endSession();
+  }
+
+  try {
+    const dealerEmailSentAt = await sendDealerStatusEmail({
+      order: updated,
       status: "VERIFIED",
     });
+    if (dealerEmailSentAt) {
+      const lastHistoryEntry = updated.statusHistory[updated.statusHistory.length - 1];
+      if (lastHistoryEntry) lastHistoryEntry.dealerEmailSentAt = dealerEmailSentAt;
+      await updated.save();
+    }
   } catch (error) {
     console.warn(
       "[dispatcher-email] verified status email failed:",
       error.message,
-    );
-  }
-
-  // Conditional on status still being SUBMITTED at write time - this is
-  // what prevents two concurrent verify/reject calls on the same order
-  // from both succeeding.
-  const updated = await Order.findOneAndUpdate(
-    { _id: order._id, dispatcherId, status: "SUBMITTED" },
-    {
-      $set: {
-        status: "VERIFIED",
-        review: {
-          ...(order.review?.toObject?.() || order.review || {}),
-          reviewedByRole: "DISPATCHER",
-          reviewedByUserId: actorId,
-          reviewedAt: new Date(),
-          reviewNote,
-        },
-        ...(payload.internalNote !== undefined
-          ? { internalNote: normalizeText(payload.internalNote) }
-          : {}),
-        updatedBy: actorId,
-      },
-      $push: {
-        statusHistory: {
-          fromStatus: previousStatus || "",
-          toStatus: "VERIFIED",
-          note: reviewNote || "Order verified by dispatcher.",
-          changedByUserId: actorId,
-          changedByRole: "DISPATCHER",
-          changedAt: new Date(),
-          dealerEmailSentAt,
-        },
-      },
-    },
-    { new: true },
-  );
-
-  if (!updated) {
-    throw new Error(
-      "This order was already reviewed by someone else. Please refresh and try again.",
     );
   }
 
@@ -959,11 +989,14 @@ export async function dispatchAssignedOrder({
 
       // Both stock movements share this transaction with the status
       // transition: if either the dispatcher doesn't have enough stock,
-      // or something else fails, the status change rolls back too.
+      // or something else fails, the status change rolls back too. Consumes
+      // the reservation made at verify time (both currentQuantity and
+      // reservedQuantity decrement together); falls back to a fresh
+      // currentQuantity-only deduction for pre-existing orders that were
+      // verified before reservation-at-verify shipped.
       await consumeDispatcherStockForOrder({
-        dispatcherId,
-        items: updated.items,
-        orderId: updated._id,
+        order: updated,
+        reason: "Order dispatched to dealer",
         actorUser: user,
         session,
       });
