@@ -7,6 +7,7 @@ import Notification, {
 } from "../models/Notification.model.js";
 import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import User from "../models/User.model.js";
+import { sendPushToRole } from "./pushNotification.service.js";
 
 const ADMIN_CATEGORIES = new Set([
   NOTIFICATION_CATEGORY.DEALER_REGISTRATION,
@@ -126,7 +127,7 @@ export async function createAdminNotification({
 } = {}) {
   const normalizedCategory = assertCategoryForRole(category, ROLES.ADMIN);
 
-  return Notification.create({
+  const created = await Notification.create({
     recipientRole: ROLES.ADMIN,
     recipientUserId: null,
     category: normalizedCategory,
@@ -139,6 +140,21 @@ export async function createAdminNotification({
     dealerApplicationId: toObjectId(dealerApplicationId),
     metadata,
   });
+
+  // Best-effort desktop push - every admin notification category goes
+  // through this one function, so hooking here covers all of them
+  // without each call site needing its own push logic. Never blocks or
+  // fails notification creation itself.
+  sendPushToRole(ROLES.ADMIN, {
+    title: created.title,
+    body: created.description,
+    url: created.targetUrl,
+    tag: String(created._id),
+  }).catch((error) => {
+    console.warn("[web-push] admin notification push failed:", error.message);
+  });
+
+  return created;
 }
 
 export async function resolveDispatcherRecipient(dispatcherId) {

@@ -26,6 +26,37 @@ function categoryMeta(category) {
   return CATEGORY_META[category] || { label: category || "Notification", icon: "bell" };
 }
 
+// Admin-only opt-in for native OS notifications (see NotificationProvider's
+// desktopActive/requestDesktopPermission) - renders nothing for any other
+// role or if the browser lacks the Notification API entirely.
+function DesktopAlertControl({ notifications }) {
+  if (!notifications?.desktopCapable || !notifications?.desktopSupported) return null;
+
+  const permission = notifications.desktopPermission;
+
+  if (permission === "granted") {
+    return (
+      <Pill tone="positive" size="small">
+        Desktop alerts on
+      </Pill>
+    );
+  }
+
+  if (permission === "denied") {
+    return (
+      <Pill tone="critical" size="small">
+        Desktop alerts blocked — enable in browser settings
+      </Pill>
+    );
+  }
+
+  return (
+    <GhostButton icon="bell" onClick={() => notifications.requestDesktopPermission?.()}>
+      Enable Desktop Alerts
+    </GhostButton>
+  );
+}
+
 function formatBadgeCount(count) {
   const value = Number(count || 0);
   if (value <= 0) return "";
@@ -246,6 +277,7 @@ export default function NotificationCenterPage({ embedded = false } = {}) {
               <Pill tone={unreadCount ? "critical" : "neutral"} size="small">
                 {formatBadgeCount(unreadCount) || "0"} unread
               </Pill>
+              <DesktopAlertControl notifications={notifications} />
               <GhostButton icon="refresh" onClick={loadNotifications}>
                 {refreshing ? "Updating…" : "Refresh"}
               </GhostButton>

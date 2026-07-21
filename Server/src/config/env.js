@@ -128,6 +128,10 @@ export const SMTP_PASS = trimEnv("SMTP_PASS");
 export const MAIL_FROM = trimEnv("MAIL_FROM");
 export const ADMIN_NOTIFICATION_EMAIL = trimEnv("ADMIN_NOTIFICATION_EMAIL");
 
+export const VAPID_PUBLIC_KEY = trimEnv("VAPID_PUBLIC_KEY");
+export const VAPID_PRIVATE_KEY = trimEnv("VAPID_PRIVATE_KEY");
+export const VAPID_SUBJECT = trimEnv("VAPID_SUBJECT");
+
 const requiredProductionEnv = [
   "MONGO_URI",
   "JWT_ACCESS_SECRET",
@@ -144,6 +148,8 @@ const optionalProductionIntegrationEnv = [
   "CLOUD_NAME",
   "API_KEY",
   "API_SECRET",
+  "VAPID_PUBLIC_KEY",
+  "VAPID_PRIVATE_KEY",
 ];
 
 if (IS_PRODUCTION) {

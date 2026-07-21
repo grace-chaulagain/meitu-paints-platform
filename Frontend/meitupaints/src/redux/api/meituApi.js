@@ -237,6 +237,28 @@ export const meituApi = createApi({
         { type: "Notification", id: "SUMMARY" },
       ],
     }),
+
+    getVapidPublicKey: builder.query({
+      query: () => ({ url: "/api/push/vapid-public-key" }),
+      transformResponse: (response) => response?.publicKey || null,
+    }),
+
+    subscribePush: builder.mutation({
+      query: (subscription) => ({
+        url: "/api/push/subscribe",
+        method: "POST",
+        data: { subscription },
+      }),
+    }),
+
+    unsubscribePush: builder.mutation({
+      query: (endpoint) => ({
+        url: "/api/push/unsubscribe",
+        method: "POST",
+        data: { endpoint },
+      }),
+    }),
+
     getProducts: builder.query({
       query: (params = {}) => ({
         url: "/api/products",
@@ -1613,6 +1635,9 @@ export const {
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
   useMarkNotificationsReadMutation,
+  useGetVapidPublicKeyQuery,
+  useSubscribePushMutation,
+  useUnsubscribePushMutation,
   useGetProductsQuery,
   useGetProductCategoriesQuery,
   useGetProductFamiliesQuery,

@@ -10,6 +10,7 @@ import adminCatalogRoutes from "./admin.catalog.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
 import orderRoutes from "./order.routes.js";
 import notificationRoutes from "./notification.routes.js";
+import pushRoutes from "./push.routes.js";
 import stockRoutes from "./stock.routes.js";
 import factoryRoutes from "./factory.routes.js";
 import { applyForDealershipController } from "../controllers/dealer.controller.js";
@@ -44,6 +45,7 @@ router.use("/product-families", productFamilyRoutes);
 router.use("/dispatchers", dispatcherRoutes);
 router.use("/orders", orderRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/push", pushRoutes);
 router.use("/stock", stockRoutes);
 router.use("/factory", factoryRoutes);
 
