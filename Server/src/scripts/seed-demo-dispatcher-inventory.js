@@ -32,7 +32,7 @@ function normLabel(s) {
 }
 
 // [code, packLabel, qty]
-const DIPAK_ITEMS = [
+export const DIPAK_ITEMS = [
   ["GTONE-2D-DUSTPROOF-SURFACE", "3KG", 3],
   ["ACRYLIC-DIST-INT", "10KG", 4],
   ["ACRYLIC-DIST-INT", "5KG", 12],
@@ -142,15 +142,17 @@ const DIPAK_ITEMS = [
   ["TOOLS-SAFETY-BELT-SINGLE-HOOK", "1PC", 4], // "Safety Belt" - hook type unspecified, defaulted to Single Hook
   ["TOOLS-FLOOR-PAINT-SHOES", "1PAIR", 3],
   ["TOOLS-SCAFFOLDING-SET", "1SET", 20],
+  ["ECO-HG-NAT-INT", "20L", 3], // "High Glossy Na Inte Wall Paint 20L" - found via total-quantity reconciliation against the source sheet, missing from the initial transcription
+  ["ECO-HG-NAT-INT", "4L", 4], // "High Glossy Na Inter Wall Paint 4L" - same reconciliation
 ];
 
-const DIPAK_UNMATCHED = [
+export const DIPAK_UNMATCHED = [
   'Glossy Enamel G2 Black 1L (qty 11) - no "G2 Black" enamel exists in the catalog (G1 Black exists, already seeded separately)',
   'Liquid Granite Texture 2D Paint (qty 4, unit "Set") - no clear catalog match (Granite Wall 2D line is sold by KG, not as a "Set")',
 ];
 
 // [code, packLabel, qty]
-const KRITAGYA_ITEMS = [
+export const KRITAGYA_ITEMS = [
   ["ECO-INT-PRIMER", "10L", 26],
   ["ECO-INT-PRIMER", "4L", 8],
   ["ECO-INT-PRIMER", "1L", 12],
@@ -232,7 +234,7 @@ const KRITAGYA_ITEMS = [
   ["ENAMEL-G1-CHOCOLATE", "500ML", 14],
 ];
 
-const KRITAGYA_UNMATCHED = [
+export const KRITAGYA_UNMATCHED = [
   "Eco-friendly Primer 25L: 25 pcs - no 25L size exists for this product (only 1L/4L/10L/20L); likely a transcription typo, not applied to any size to avoid guessing which",
   'Celling White 20L:8 / 10L:5 - two catalog products ("Eco Friendly Ceiling White" and "High Glossy Ceiling White") match "Ceiling White"; source doesn\'t specify which',
   "Spray 5 pcs - two catalog products (Spray Gun With Set, Spray Gun Head) could match; source doesn't specify which",
@@ -399,12 +401,17 @@ async function main() {
   await mongoose.disconnect();
 }
 
-main().catch(async (err) => {
-  console.error("FATAL:", err);
-  try {
-    await mongoose.disconnect();
-  } catch (_) {
-    // ignore
-  }
-  process.exit(1);
-});
+// Guarded so seed-real-dispatcher-inventory.js can import the verified
+// item arrays above without also triggering this script's own demo-account
+// creation/connection - only runs when this file is executed directly.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(async (err) => {
+    console.error("FATAL:", err);
+    try {
+      await mongoose.disconnect();
+    } catch (_) {
+      // ignore
+    }
+    process.exit(1);
+  });
+}
