@@ -273,8 +273,18 @@ const PROFORMA_TAX_BUCKET_META = {
 // simplification), so it's matched by its stable `code` prefix instead -
 // category alone can no longer distinguish it from its Specialty siblings,
 // which need the "OTHER" 1.07x rate, not Wall Putty's 1.05x.
+//
+// Code prefix is checked first for every bucket, not just Wall Putty:
+// `item.category` on an Order is a snapshot taken at order-creation time,
+// and one code path (dispatcher replenishment orders) was found to leave
+// it blank - every COLORANT-*/TOOLS-* product code is 100% consistent
+// with its category catalog-wide, so the prefix is the more reliable
+// signal. category is kept as a fallback for any product whose code
+// doesn't carry a recognized prefix.
 function proformaBucketKey(item) {
-  if (item?.code?.startsWith("WALLPUTTY-")) return "WALL_PUTTY";
+  const code = item?.code || "";
+  if (code.startsWith("WALLPUTTY-")) return "WALL_PUTTY";
+  if (code.startsWith("COLORANT-") || code.startsWith("TOOLS-")) return "TOOLS_ACCESSORIES";
   if (item?.category === "TOOLS_AND_ACCESSORIES" || item?.category === "COLORANTS") return "TOOLS_ACCESSORIES";
   return "OTHER";
 }
@@ -285,14 +295,18 @@ function proformaBucketKey(item) {
 //   Wall Putty                    -> unitPrice / 1.13 / 1.05
 //   Tools & Accessories / Colorant -> unitPrice / 1.13            (0% excise)
 //   Everything else                -> unitPrice / 1.13 / 1.07
+// netUnitPrice rounds to the nearest whole rupee first (not just at
+// display time) - a proforma should never show paisa, and rounding the
+// Rate before deriving Amount keeps "Amount = Qty x Rate" reconcilable
+// by hand, which a reader checking the math would otherwise notice fails.
 export function computeProformaLineAmounts(item) {
   const rate = Number(item?.unitPrice || 0);
   const quantity = Number(item?.quantity || 0);
   const bucketKey = proformaBucketKey(item);
   const exciseMultiplier = PROFORMA_TAX_BUCKET_META[bucketKey].exciseMultiplier;
-  const netUnitPrice = rate / (1 + PROFORMA_VAT_RATE) / exciseMultiplier;
-  const netAmount = netUnitPrice * quantity;
-  const exciseAmount = netAmount * (exciseMultiplier - 1);
+  const netUnitPrice = Math.round(rate / (1 + PROFORMA_VAT_RATE) / exciseMultiplier);
+  const netAmount = Math.round(netUnitPrice * quantity);
+  const exciseAmount = Math.round(netAmount * (exciseMultiplier - 1));
   return { netUnitPrice, netAmount, exciseAmount, bucketKey };
 }
 
@@ -340,8 +354,8 @@ export function computeProformaTotals(items = [], { discount = 0 } = {}) {
   });
 
   const taxableAmount = basicAmount + totalExcise;
-  const discountAmount = Math.min(Number(discount || 0), taxableAmount);
-  const vat = (taxableAmount - discountAmount) * PROFORMA_VAT_RATE;
+  const discountAmount = Math.min(Math.round(Number(discount || 0)), taxableAmount);
+  const vat = Math.round((taxableAmount - discountAmount) * PROFORMA_VAT_RATE);
   const grandTotal = taxableAmount - discountAmount + vat;
 
   return { lines, buckets, basicAmount, taxableAmount, discountAmount, vat, grandTotal };

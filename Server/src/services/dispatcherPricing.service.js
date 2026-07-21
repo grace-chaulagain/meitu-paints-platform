@@ -3,6 +3,42 @@ import Product from "../models/Product.model.js";
 import DispatcherProductPrice from "../models/DispatcherProductPrice.model.js";
 import ApiError from "../utils/apiError.js";
 
+// Mirrors Frontend/meitupaints/src/factory/factoryHelpers.js's Proforma
+// Invoice tax scheme exactly (same VAT rate, same per-category excise
+// multipliers, same code-prefix-first classification) - net price here is
+// the same "back the tax out of the tax-inclusive price" figure shown on
+// a PI, just computed at pricing-entry time instead of PDF-generation
+// time. Kept in sync manually since one lives client-side (PDF rendering)
+// and the other server-side (this pricing save) - if the scheme ever
+// changes, update both.
+const VAT_RATE = 0.13;
+const EXCISE_MULTIPLIER_BY_BUCKET = {
+  WALL_PUTTY: 1.05,
+  OTHER: 1.07,
+  TOOLS_ACCESSORIES: 1,
+};
+
+function excisemultiplierForProduct(product) {
+  const code = product?.code || "";
+  if (code.startsWith("WALLPUTTY-")) return EXCISE_MULTIPLIER_BY_BUCKET.WALL_PUTTY;
+  if (code.startsWith("COLORANT-") || code.startsWith("TOOLS-")) {
+    return EXCISE_MULTIPLIER_BY_BUCKET.TOOLS_ACCESSORIES;
+  }
+  if (product?.category === "TOOLS_AND_ACCESSORIES" || product?.category === "COLORANTS") {
+    return EXCISE_MULTIPLIER_BY_BUCKET.TOOLS_ACCESSORIES;
+  }
+  return EXCISE_MULTIPLIER_BY_BUCKET.OTHER;
+}
+
+// The dispatcher-facing "Price" is the tax-inclusive figure (same
+// convention as Order.items[].unitPrice); Net Price is always derived
+// from it, never entered directly, so it can't drift out of sync with
+// the actual tax scheme.
+function computeNetPrice(price, product) {
+  const multiplier = excisemultiplierForProduct(product);
+  return Math.round(Number(price || 0) / (1 + VAT_RATE) / multiplier);
+}
+
 export async function getDispatcherPricingSummary() {
   const [dispatchers, counts, totalActiveProducts] = await Promise.all([
     Dispatcher.find({ status: "VERIFIED" })
@@ -127,14 +163,15 @@ export async function upsertDispatcherPricing({ dispatcherId, items = [], adminU
 
   const productIds = items.map((item) => item.productId).filter(Boolean);
   const validProducts = await Product.find({ _id: { $in: productIds } })
-    .select("_id")
+    .select("_id code category")
     .lean();
-  const validProductIdSet = new Set(validProducts.map((product) => String(product._id)));
+  const productById = new Map(validProducts.map((product) => [String(product._id), product]));
 
   const operations = [];
 
   for (const item of items) {
-    if (!item.productId || !validProductIdSet.has(String(item.productId))) continue;
+    const product = item.productId ? productById.get(String(item.productId)) : null;
+    if (!product) continue;
     // Blank price = "leave this SKU unpriced for now", not an error - admins
     // rarely price the entire catalog for a dispatcher in one sitting.
     if (item.price === "" || item.price === null || item.price === undefined) continue;
@@ -144,10 +181,9 @@ export async function upsertDispatcherPricing({ dispatcherId, items = [], adminU
       throw new ApiError(400, `Invalid price for product ${item.productId}`);
     }
 
-    const netPrice = item.netPrice === "" || item.netPrice === null || item.netPrice === undefined ? 0 : Number(item.netPrice);
-    if (!Number.isFinite(netPrice) || netPrice < 0) {
-      throw new ApiError(400, `Invalid net price for product ${item.productId}`);
-    }
+    // Net Price is always system-computed from Price, never accepted from
+    // the client - see computeNetPrice's comment.
+    const netPrice = computeNetPrice(price, product);
 
     operations.push({
       updateOne: {

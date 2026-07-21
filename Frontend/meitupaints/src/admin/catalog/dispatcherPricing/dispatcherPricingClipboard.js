@@ -10,7 +10,7 @@ export function copyDispatcherPricingToClipboard({ dispatcherId, dispatcherName,
     sourceDispatcherName: dispatcherName,
     items: (items || [])
       .filter((item) => item.price !== null && item.price !== undefined && item.price !== "")
-      .map((item) => ({ productId: item.productId, price: item.price, netPrice: item.netPrice ?? 0 })),
+      .map((item) => ({ productId: item.productId, price: item.price })),
     copiedAt: Date.now(),
   };
 

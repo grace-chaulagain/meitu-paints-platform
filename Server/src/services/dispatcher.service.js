@@ -796,6 +796,7 @@ export async function createDispatcherReplenishmentOrder({
       name: product.name,
       sku: product.sku,
       code: product.code || "",
+      category: product.category || "",
       packLabel: product.pack?.label || "",
       quantity,
       unit: product.uom?.base || product.pack?.unit || "PCS",

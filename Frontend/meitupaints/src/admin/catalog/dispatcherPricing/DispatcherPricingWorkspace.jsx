@@ -160,7 +160,7 @@ function DispatcherPriceTablePage({ dispatcherId, onBack }) {
   const [draft, setDraft] = useState({});
   const [banner, setBanner] = useState(null); // { tone: "info"|"success"|"error", text }
   const [search, setSearch] = useState("");
-  const [preImportSnapshot, setPreImportSnapshot] = useState(null); // items' price/netPrice right before the last import was applied
+  const [preImportSnapshot, setPreImportSnapshot] = useState(null); // items' price right before the last import was applied
   const [undoing, setUndoing] = useState(false);
 
   const dispatcher = pricingQuery.data?.dispatcher || null;
@@ -221,8 +221,7 @@ function DispatcherPriceTablePage({ dispatcherId, onBack }) {
       .map(([productId, values]) => {
         const existing = itemsById.get(productId);
         const price = values.price !== undefined ? values.price : existing?.price;
-        const netPrice = values.netPrice !== undefined ? values.netPrice : existing?.netPrice;
-        return { productId, price, netPrice };
+        return { productId, price };
       })
       .filter((row) => row.price !== undefined && row.price !== null && row.price !== "");
 
@@ -275,10 +274,10 @@ function DispatcherPriceTablePage({ dispatcherId, onBack }) {
 
   function handleImportTable() {
     if (!clipboard) return;
-    setPreImportSnapshot(items.map((item) => ({ productId: item.productId, price: item.price, netPrice: item.netPrice })));
+    setPreImportSnapshot(items.map((item) => ({ productId: item.productId, price: item.price })));
     const nextDraft = {};
     for (const row of clipboard.items) {
-      nextDraft[row.productId] = { price: row.price, netPrice: row.netPrice ?? 0 };
+      nextDraft[row.productId] = { price: row.price };
     }
     setDraft(nextDraft);
     setEditMode(true);
@@ -472,20 +471,13 @@ function DispatcherPriceTablePage({ dispatcherId, onBack }) {
                       </div>
                     )}
 
-                    {editMode ? (
-                      <input
-                        type="number"
-                        min="0"
-                        value={valueFor(item, "netPrice")}
-                        onChange={(e) => updateDraftField(item.productId, "netPrice", e.target.value)}
-                        placeholder="—"
-                        style={fieldInputStyle()}
-                      />
-                    ) : (
-                      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-                        {item.netPrice ? `NPR ${Number(item.netPrice).toLocaleString()}` : "—"}
-                      </div>
-                    )}
+                    {/* Net Price is always system-computed from Price (see
+                        dispatcherPricing.service.js's computeNetPrice) - never
+                        an editable field, so it can't drift out of sync with
+                        the actual tax scheme. */}
+                    <div style={{ textAlign: "right", fontSize: 13, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                      {item.netPrice ? `NPR ${Number(item.netPrice).toLocaleString()}` : "—"}
+                    </div>
                   </div>
                 );
               })}
