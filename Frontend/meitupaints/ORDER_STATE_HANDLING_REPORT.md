@@ -111,3 +111,37 @@ Irreversible transitions say so and offer no Undo. Reversible ones offer Undo fo
 **Verification for each step**: `git diff --stat` must show the intended files changed; exercise a full order lifecycle end-to-end across all three portals (dealer places → admin verifies → factory dispatches → factory delivers, plus a dispatcher-fulfilled order and one rejection) at 390×844 and desktop; `npm run lint` clean.
 
 **Acceptance test — the hallway question.** Pick any order in any portal. Without clicking, an operator must be able to answer: *What state is it in? Who is it waiting on? What happened last, and who did it? What happens next?* Today none of the three portals can answer more than the first. All four is the bar.
+
+---
+
+## Part 5 — Production engineering addendum (second audit, deeper layer)
+
+Two system-level findings that change the fix priority:
+
+### 5.1 The backend is right; the frontend can't keep up with it
+
+`order.service.js` and `factory.service.js` guard every transition correctly — status preconditions (`if (order.status !== ORDER_STATUS.VERIFIED) throw`) and, better, **atomic compare-and-set updates** (`findOneAndUpdate({ _id, status: VERIFIED }, …)`). Double-dispatch and double stock consumption are structurally prevented server-side. Keep the backend exactly as it is.
+
+But the frontend has **no freshness mechanism at all**: zero `pollingInterval`, zero `refetchOnFocus`, zero `refetchOnReconnect`, no push channel, in any portal. RTK Query tag invalidation only fires from *your own* mutations. In production this means:
+
+- The factory inbox does not learn that admin verified an order until someone reloads or navigates. Handoffs — the entire point of a multi-portal system — are invisible until manually discovered.
+- Operators routinely act on **stale cards**. The backend correctly rejects the action…
+
+### 5.2 …and the UI reports that correct rejection as a meaningless failure
+
+Every portal funnels errors through the same pattern (`FactoryOrderModal.run()` → `getQueryErrorMessage(err, "Action failed.")`). When operator B taps Verify on an order operator A verified 40 seconds ago, B sees **"Action failed."** on a card still claiming SUBMITTED. The system did the right thing and told the user it broke. This is the single fastest way to destroy operator trust in production: correct behavior experienced as random errors.
+
+### 5.3 Fix additions (prepend these — they now outrank the visual work)
+
+- **Step 0a — Freshness**: `refetchOnFocus` + `refetchOnReconnect` globally (`setupListeners`), plus `pollingInterval` (15–30s) on the three order-list queries and any open order detail. The backend's atomic guards make polling safe. WebSockets can come later; polling ships this week.
+- **Step 0b — Conflict UX**: on any 4xx from a transition, automatically refetch that order and render the truth: "Already verified by Admin Grace, 2 min ago" (the `reviewedAt`/`reviewedBy` fields exist) — never the generic "Action failed." A stale card that gets corrected in front of the operator *builds* trust; an error toast on a lying card destroys it.
+- These two are prerequisites: the in-place transformation animation (Solution 2) is only honest if the card's data is fresh enough to transform truthfully.
+
+### 5.4 Revised implementation order
+
+0. Freshness + conflict UX (5.3) — smallest diff, highest production value.
+1. `orderStateMachine.js` (Solution 1).
+2. Shared `StatusRail` + event feed (Solution 3).
+3. Owner chips + "Needs you" views (Solution 4).
+4. In-place transformation + directional exits (Solution 2).
+5. Confirm-sheet ceremony (Solution 5).
