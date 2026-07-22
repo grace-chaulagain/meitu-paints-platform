@@ -25,6 +25,8 @@ import { Toast } from "../../../components/dashboard/Toast.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
 import PainterIdCardModal from "./PainterIdCardModal.jsx";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminPainterProfileMobileView } from "../../mobile/AdminPainterProfileMobileView.jsx";
 
 const OVERVIEW_PREVIEW_SIZE = 5;
 const POINTS_PAGE_SIZE = 10;
@@ -149,6 +151,7 @@ function DetailItem({ label, value }) {
 export default function AdminPainterProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobileAdmin();
 
   const painterId = useMemo(() => {
     const match = location.pathname.match(/^\/admin\/dashboard\/painters\/([^/]+)$/);
@@ -217,6 +220,20 @@ export default function AdminPainterProfilePage() {
       setActionError(getQueryErrorMessage(err, "Failed to delete painter."));
       setDeleteOpen(false);
     }
+  }
+
+  if (isMobile) {
+    return (
+      <AdminPainterProfileMobileView
+        painter={painter}
+        salesSummary={salesQuery.data?.summary || {}}
+        loading={loading}
+        loadError={painterQuery.error ? getQueryErrorMessage(painterQuery.error, "Failed to load painter.") : ""}
+        onBack={() => navigate("/admin/dashboard/painters")}
+        onPromote={() => promotePainter({ painterId, payload: {} }).unwrap()}
+        promoting={promoting}
+      />
+    );
   }
 
   if (loading) {

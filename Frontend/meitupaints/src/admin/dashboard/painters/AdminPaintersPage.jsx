@@ -21,6 +21,8 @@ import {
 import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { exportToCsv } from "../../../utils/exportToCsv.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminPaintersMobileView } from "../../mobile/AdminPaintersMobileView.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
 
@@ -262,6 +264,7 @@ function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
 
 export default function AdminPaintersPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobileAdmin();
   const [search, setSearch] = useState("");
   const [type, setType] = useState("ALL");
   const [idStatus, setIdStatus] = useState("ALL");
@@ -345,6 +348,10 @@ export default function AdminPaintersPage() {
       ],
       visiblePainters,
     );
+  }
+
+  if (isMobile) {
+    return <AdminPaintersMobileView />;
   }
 
   return (

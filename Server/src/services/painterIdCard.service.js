@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { PDFDocument, PDFOperator, PDFOperatorNames, PDFNumber, rgb } from "pdf-lib";
+import { PDFDocument, PDFOperator, PDFOperatorNames, PDFNumber, rgb, breakTextIntoLines } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { XMLParser } from "fast-xml-parser";
 
@@ -30,31 +30,81 @@ const PAGE_HEIGHT_PT = PAGE_HEIGHT_MM * MM_TO_PT;
 const SCALE_X = PAGE_WIDTH_PT / SVG_WIDTH;
 const SCALE_Y = PAGE_HEIGHT_PT / SVG_HEIGHT;
 
-// Value field positions, measured directly from the template's own vector
-// geometry (getBBox of the colon glyph ending each label row) rather than
-// eyeballed - every row shares the same left edge; each baseline matches
-// its label's own baseline exactly. See conversation notes for the
-// measurement method if these ever need re-deriving after a template change.
-const FIELD_X_SVG = 780;
+// Template redesign (2026-07-22): the designer replaced the old template
+// with one where the 4 credential labels ("PAINTER ID", "NAME", "PHONE",
+// "ISSUE DATE") share one aligned colon column, and the header caption
+// ("Trained Painter / Granite Texture Paints Training Program") is now
+// baked into the template art at its own final size - both are fixed
+// vector artwork now, not something this file draws or resizes. The old
+// gold certification badge that used to sit to the right of the values
+// (and constrained their width to ~68pt) is gone too, replaced by a much
+// larger, low-opacity watermark that values are free to run over (same as
+// the header already does) since it reads fine under printed text.
+//
+// Value field positions, measured directly off the new template's own
+// vector geometry via getBBox (the colon glyph ending each label row, all
+// 4 now perfectly x-aligned at SVG x~716.8) rather than eyeballed. Re-read
+// these off the template's own paths if it ever changes again - see this
+// session's conversation notes for the getBBox measurement method.
+const FIELD_X_SVG = 750;
 const FIELD_BASELINE_SVG = {
-  licenseId: 470,
-  name: 554,
-  phone: 640,
-  issueDate: 715,
+  licenseId: 473,
+  phone: 637,
+  issueDate: 719,
 };
-const VALUE_FONT_SIZE_SVG = 26;
+// Right margin matches the template's own established content boundary
+// (the footer rule spans SVG x 67-1493) rather than a badge or watermark
+// edge, since neither constrains the value rows in this template - the
+// watermark is faint enough to run text over, and the baked header sits
+// entirely above y=417 (the value rows start at y>440), so it doesn't
+// intrude either.
+const VALUE_RIGHT_EDGE_SVG = 1493;
+const VALUE_MAX_WIDTH_SVG = VALUE_RIGHT_EDGE_SVG - FIELD_X_SVG;
+// 12pt (matching the cited "primary text" band in isolation) still read as
+// oversized once printed next to the actual baked labels - the designer
+// drew those at their own fixed size, not ours. Measured directly (getBBox
+// cap-height of "PAINTER ID"/"NAME"/"PHONE"/"ISSUE DATE"'s own glyphs,
+// averaged across all 4: 25.8 SVG units -> 4.13pt real cap-height) and
+// solved for the Inter-SemiBold `size` that reproduces that same cap-height
+// (font.heightAtSize(size)/size gives the font's own cap-height ratio,
+// ~0.716 - matching cap-height, not nominal size, is what makes two
+// different typefaces/tools look the same size side by side). That solves
+// to ~5.76pt; 6pt is close enough to be visually identical and happens to
+// land exactly on the cited "fine print >= 6pt" floor rather than under it.
+const VALUE_FONT_SIZE_PT = 6;
+const VALUE_MIN_FONT_SIZE_PT = 5;
 const VALUE_COLOR = rgb(0x1a / 255, 0x1a / 255, 0x1a / 255);
 
-// The template's grey photo placeholder (the <path fill="#D9D9D9"> in
-// painterIdCardTemplate.svg) - a rounded rect whose exact bezier corners we
-// reuse verbatim as a clip path when a photo is supplied, so the photo is
-// trimmed to precisely the same shape the template already draws, never an
-// approximation. Bounding box read directly off that path's own M/H/V
-// commands: x 98->409, y 395->768. If the template art ever changes, re-read
-// this path's `d` attribute rather than eyeballing new numbers.
+// The painter's name is still the one credential value with no fixed
+// format - real names in the actual painter directory range from ~10 to 24
+// characters, 2-3 words, median 15 (measured against the live painter
+// collection). Matched to VALUE_FONT_SIZE_PT for the same label-matching
+// reason - at 6pt against the ~120pt column even the longest real name
+// fits on a single line, so the wrap/shrink machinery below is now a rare
+// safety net rather than the common case it was before.
+//
+// The vertical budget (between license-ID's baseline, which has no
+// descender, and phone's own ink-top) is effectively unchanged from before
+// since the row baselines barely moved in the new template - computed at
+// render time from the font's real heightAtSize metric (see the
+// name-drawing block below), not a hand-measured guess.
+const NAME_FONT_SIZE_PT = 6;
+const NAME_MIN_FONT_SIZE_PT = 5;
+const NAME_MAX_LINES = 3;
+const NAME_LINE_GAP_RATIO = 0.2; // extra gap between baselines, as a fraction of font size
+
+// The template's grey photo placeholder (the <rect fill="#D9D9D9" rx="22">
+// in painterIdCardTemplate.svg) - a rounded rect whose exact bezier corners
+// we reuse verbatim as a clip path when a photo is supplied, so the photo
+// is trimmed to precisely the same shape the template already draws, never
+// an approximation. The 2026-07-22 template redesign shifted this box left
+// (x 98->69) at the same size (311x373, rx=22) - PHOTO_PLACEHOLDER_PATH_D
+// below is the old path translated by that same (-29, +0.5) offset, not
+// hand-drawn. If the template art ever changes again, re-read the rect's
+// own x/y/width/height/rx rather than eyeballing new numbers.
 const PHOTO_PLACEHOLDER_PATH_D =
-  "M98 417C98 404.85 107.85 395 120 395H387C399.15 395 409 404.85 409 417V746C409 758.15 399.15 768 387 768H120C107.85 768 98 758.15 98 746V417Z";
-const PHOTO_BBOX_SVG = { x: 98, y: 395, width: 311, height: 373 };
+  "M69 417.5C69 405.35 78.85 395.5 91 395.5H358C370.15 395.5 380 405.35 380 417.5V746.5C380 758.65 370.15 768.5 358 768.5H91C78.85 768.5 69 758.65 69 746.5V417.5Z";
+const PHOTO_BBOX_SVG = { x: 69, y: 395.5, width: 311, height: 373 };
 
 let cachedTemplate = null;
 let cachedBackTemplate = null;
@@ -394,6 +444,55 @@ export function getIdCardTemplateSvgRaw() {
   return cachedRawSvg;
 }
 
+// Shrinks a single line's font size only if it would otherwise overrun its
+// column width at the base size (a genuinely long name/phone, or a
+// template copy change), floored at minSize so it degrades gracefully
+// instead of disappearing back toward the old unreadable size. Text that
+// already fits at baseSize is returned unchanged. Used for both the 4
+// credential values and the 3 header caption lines - real Inter-SemiBold
+// metrics via fontkit, not an estimate, so this is correct regardless of
+// how the hand-measured baseline/column constants above were derived.
+function fitFontSize(font, text, baseSize, maxWidthPt, minSize) {
+  if (font.widthOfTextAtSize(text, baseSize) <= maxWidthPt) return baseSize;
+  for (let size = baseSize - 0.5; size >= minSize; size -= 0.5) {
+    if (font.widthOfTextAtSize(text, size) <= maxWidthPt) return size;
+  }
+  return minSize;
+}
+
+// Finds the largest font size (base down to minSize, in 0.5pt steps) at
+// which `text` both word-wraps into at most maxLines within maxWidthPt,
+// AND the resulting block of lines - using the font's own real cap-height
+// metric plus a proportional gap, not an assumed ratio - fits within
+// verticalBudgetPt with real breathing room (NAME_MIN_CLEARANCE_PT), not
+// just mathematically without literal overlap. A fit that only clears the
+// neighboring row by a few tenths of a point is invisible at print
+// resolution and reads as touching/crowded - caught via a debug render
+// during this template's rollout where a 24-character name's second line
+// sat 0.29pt above the phone row, indistinguishable from touching once
+// printed. Search runs largest-first so the first size that satisfies all
+// three constraints is already the best available; if nothing does even at
+// minSize, falls back to minSize's own wrap (however many lines that
+// takes) rather than throwing - the same graceful-degradation choice
+// fitFontSize() makes for the other fields.
+// Returns { fontSize, lines, lineGapPt }.
+const NAME_MIN_CLEARANCE_PT = 2;
+function layoutWrappedName(font, text, { baseSize, minSize, maxWidthPt, maxLines, verticalBudgetPt }) {
+  let fallback = null;
+  for (let size = baseSize; size >= minSize; size -= 0.5) {
+    const lines = breakTextIntoLines(text, [" "], maxWidthPt, (t) => font.widthOfTextAtSize(t, size)).map((line) =>
+      line.trim(),
+    );
+    const capHeight = font.heightAtSize(size, { descender: false });
+    const lineGapPt = size * NAME_LINE_GAP_RATIO;
+    const blockHeight = lines.length * capHeight + Math.max(0, lines.length - 1) * lineGapPt;
+    const result = { fontSize: size, lines, lineGapPt };
+    fallback = result; // last-written (smallest size tried) wins if the loop never satisfies both constraints
+    if (lines.length <= maxLines && blockHeight <= verticalBudgetPt - NAME_MIN_CLEARANCE_PT) return result;
+  }
+  return fallback;
+}
+
 function formatIssueDate(value) {
   const date = value ? new Date(value) : new Date();
   const day = String(date.getDate()).padStart(2, "0");
@@ -426,12 +525,14 @@ export async function generatePainterIdCardPdf({ licenseId, name, phone, issueDa
   }
 
   const font = await pdfDoc.embedFont(loadFontBytes(), { subset: true });
+
   const fieldValues = {
     licenseId: String(licenseId || "").trim(),
     name: String(name || "").trim().toUpperCase(),
     phone: String(phone || "").trim(),
     issueDate: formatIssueDate(issueDate),
   };
+  const valueMaxWidthPt = VALUE_MAX_WIDTH_SVG * SCALE_X;
 
   for (const [field, baselineSvgY] of Object.entries(FIELD_BASELINE_SVG)) {
     const text = fieldValues[field];
@@ -439,10 +540,42 @@ export async function generatePainterIdCardPdf({ licenseId, name, phone, issueDa
     page.drawText(text, {
       x: FIELD_X_SVG * SCALE_X,
       y: PAGE_HEIGHT_PT - baselineSvgY * SCALE_Y,
-      size: VALUE_FONT_SIZE_SVG * ((SCALE_X + SCALE_Y) / 2),
+      size: fitFontSize(font, text, VALUE_FONT_SIZE_PT, valueMaxWidthPt, VALUE_MIN_FONT_SIZE_PT),
       font,
       color: VALUE_COLOR,
     });
+  }
+
+  if (fieldValues.name) {
+    // License-ID's baseline (its ink ends exactly there, no descender) down
+    // to phone's own ink-top (phone's baseline plus its cap-height, since
+    // phone always renders at the fixed VALUE_FONT_SIZE_PT - confirmed
+    // earlier it never needs to shrink) is the real usable vertical budget
+    // for name's wrapped lines - not the raw baseline-to-baseline gap.
+    const licenseIdBaselinePt = PAGE_HEIGHT_PT - FIELD_BASELINE_SVG.licenseId * SCALE_Y;
+    const phoneBaselinePt = PAGE_HEIGHT_PT - FIELD_BASELINE_SVG.phone * SCALE_Y;
+    const phoneCapHeightPt = font.heightAtSize(VALUE_FONT_SIZE_PT, { descender: false });
+    const nameRangeBottomPt = phoneBaselinePt + phoneCapHeightPt;
+    const nameVerticalBudgetPt = licenseIdBaselinePt - nameRangeBottomPt;
+
+    const { fontSize, lines, lineGapPt } = layoutWrappedName(font, fieldValues.name, {
+      baseSize: NAME_FONT_SIZE_PT,
+      minSize: NAME_MIN_FONT_SIZE_PT,
+      maxWidthPt: valueMaxWidthPt,
+      maxLines: NAME_MAX_LINES,
+      verticalBudgetPt: nameVerticalBudgetPt,
+    });
+
+    const capHeightPt = font.heightAtSize(fontSize, { descender: false });
+    const baselineStepPt = capHeightPt + lineGapPt;
+    const blockHeightPt = lines.length * capHeightPt + Math.max(0, lines.length - 1) * lineGapPt;
+    const blockTopPt = licenseIdBaselinePt - (nameVerticalBudgetPt - blockHeightPt) / 2;
+    let lineY = blockTopPt - capHeightPt;
+
+    for (const line of lines) {
+      page.drawText(line, { x: FIELD_X_SVG * SCALE_X, y: lineY, size: fontSize, font, color: VALUE_COLOR });
+      lineY -= baselineStepPt;
+    }
   }
 
   // Page 2: the card back, identical for every painter - no photo, no

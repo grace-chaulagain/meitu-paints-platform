@@ -28,6 +28,8 @@ import {
 import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { exportToCsv } from "../../../utils/exportToCsv.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminDispatchersMobileView } from "../../mobile/AdminDispatchersMobileView.jsx";
 
 const STATUS_FILTERS = [
   { key: "ALL", label: "All Status" },
@@ -498,6 +500,7 @@ function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
 
 export default function AdminDispatchersPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobileAdmin();
   const [busyAction, setBusyAction] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -754,6 +757,10 @@ export default function AdminDispatchersPage() {
       setSavingEdit(false);
     }
   };
+
+  if (isMobile) {
+    return <AdminDispatchersMobileView />;
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>

@@ -12,6 +12,8 @@ import { DashboardUIStyles, DataTable, EmptyState, Pill, SectionHeader, Surface 
 import { Toast } from "../../../components/dashboard/Toast.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import { couponStatusTone, couponTypeLabel, formatDateTime, formatMoney } from "./couponFormatting.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminCouponBatchDetailMobileView } from "../../mobile/AdminCouponBatchDetailMobileView.jsx";
 
 // Full page (not a modal) for one generate-batch's coupons, reached by
 // clicking a batch row in BatchesTab - same "list drills into its own page"
@@ -22,6 +24,7 @@ import { couponStatusTone, couponTypeLabel, formatDateTime, formatMoney } from "
 export default function AdminCouponBatchDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobileAdmin();
   const [toast, setToast] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [confirmDeleteBatch, setConfirmDeleteBatch] = useState(false);
@@ -59,6 +62,18 @@ export default function AdminCouponBatchDetailPage() {
       hasRedemptions: redeemedCount > 0,
     };
   }, [items]);
+
+  if (isMobile) {
+    return (
+      <AdminCouponBatchDetailMobileView
+        summary={summary}
+        items={items}
+        loading={detailQuery.isLoading && !items.length}
+        loadError={loadError}
+        onBack={() => navigate("/admin/dashboard/coupons")}
+      />
+    );
+  }
 
   const backButton = (
     <div className="coupon-batch-breadcrumb">

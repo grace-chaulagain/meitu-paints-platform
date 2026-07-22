@@ -1,7 +1,29 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
+import { useIsMobileAdmin } from "../mobile/useIsMobileAdmin.js";
+import { AdminBottomTabBar } from "../mobile/AdminBottomTabBar.jsx";
+import { AdminMobileStyles } from "../mobile/AdminMobileStyles.jsx";
+import { AdminHomeMobileView } from "../mobile/AdminHomeMobileView.jsx";
+import { AdminOrdersMobileView } from "../mobile/AdminOrdersMobileView.jsx";
+import { AdminNotificationsMobileView } from "../mobile/AdminNotificationsMobileView.jsx";
+import { AdminApplicationsMobileView } from "../mobile/AdminApplicationsMobileView.jsx";
+import { AdminSalesMobileView } from "../mobile/AdminSalesMobileView.jsx";
+import { AdminCouponsMobileView } from "../mobile/AdminCouponsMobileView.jsx";
+import { AdminSettingsMobileView } from "../mobile/AdminSettingsMobileView.jsx";
+import { AdminTrashMobileView } from "../mobile/AdminTrashMobileView.jsx";
+// Reused directly, unmodified - same reasoning as DispatcherShopPage.jsx:
+// these are pure, prop-driven/role-agnostic components with zero
+// dealer-specific data coupling, and DealerMobileStylesCore/.pages carry
+// every .dealer-m-* class this file's mobile chrome (tab bar, sheets,
+// toast, more drawer) renders with - forking a second ~7,000-line CSS
+// copy under an admin-m- prefix would be a maintenance liability with no
+// visual upside. See DESIGN.md's "same token system" rule.
+import { MobileToastRenderer } from "../../dealer/mobile/MobileToast.jsx";
+import { DealerMoreDrawer } from "../../dealer/mobile/DealerMoreDrawer.jsx";
+import { DealerMobileStylesCore } from "../../dealer/mobile/DealerMobileStyles.core.jsx";
+import { DealerMobileStylesPages } from "../../dealer/mobile/DealerMobileStyles.pages.jsx";
 import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import {
   DashboardUIStyles,
@@ -514,12 +536,14 @@ function DashboardOverview({ onNavigate, notificationCategories, totalUnread }) 
 }
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const notifications = useNotifications();
   const notificationCategories = notifications?.categories;
   const markCategoriesRead = notifications?.markCategoriesRead;
+  const isMobile = useIsMobileAdmin();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const activeSection = useMemo(() => {
     const path = location.pathname;
@@ -713,6 +737,45 @@ export default function AdminDashboard() {
     [navigationItems],
   );
 
+  // Mobile-only "More" drawer (ADMIN_MOBILE_DESIGN_PROMPT.md §1) - Home/
+  // Orders/Dealers already live on the bottom tab bar (Catalog is its own
+  // top-level route, not a section here), so this holds the rest. The spec
+  // names 8 sections explicitly and doesn't mention Draft Order, but it's a
+  // real existing section (not something to silently drop) - grouped here
+  // alongside the other quoting/settlement tools rather than invented a
+  // 5th tab slot for it.
+  const moreGroups = useMemo(
+    () => [
+      {
+        label: "Operations",
+        items: navigationItems.filter((item) =>
+          [SECTIONS.APPLICATIONS, SECTIONS.SALES, SECTIONS.COUPONS, SECTIONS.DRAFT_ORDER].includes(item.key),
+        ),
+      },
+      {
+        label: "Network",
+        items: navigationItems.filter((item) =>
+          [SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.INSIGHTS].includes(item.key),
+        ),
+      },
+      {
+        label: "System",
+        items: navigationItems.filter((item) =>
+          [SECTIONS.NOTIFICATIONS, SECTIONS.SETTINGS].includes(item.key),
+        ),
+      },
+      {
+        label: "Account",
+        items: [{ key: "logout", title: "Logout", icon: "logout" }],
+      },
+    ],
+    [navigationItems],
+  );
+
+  // Tab-bar-owned sections - everything else reads as "More" being active,
+  // same reasoning as DispatcherShopPage.jsx's TAB_BAR_SECTIONS.
+  const isTabBarSection = [SECTIONS.OVERVIEW, SECTIONS.ORDERS, SECTIONS.DEALERS].includes(activeSection);
+
   const renderContent = () => {
     const path = location.pathname;
 
@@ -804,12 +867,14 @@ export default function AdminDashboard() {
     }
 
     if (path === "/admin/dashboard/settings/trash") {
-      return <AdminTrashPage />;
+      return isMobile ? <AdminTrashMobileView onBack={() => navigate("/admin/dashboard/settings")} /> : <AdminTrashPage />;
     }
 
     switch (activeSection) {
       case SECTIONS.OVERVIEW:
-        return (
+        return isMobile ? (
+          <AdminHomeMobileView onNavigate={handleNavigate} />
+        ) : (
           <DashboardOverview
             onNavigate={handleNavigate}
             notificationCategories={notificationCategories}
@@ -828,7 +893,7 @@ export default function AdminDashboard() {
         );
 
       case SECTIONS.APPLICATIONS:
-        return <AdminApplicationsPage />;
+        return isMobile ? <AdminApplicationsMobileView /> : <AdminApplicationsPage />;
 
       case SECTIONS.DEALERS:
         return <AdminDealersPage />;
@@ -840,25 +905,27 @@ export default function AdminDashboard() {
         return <AdminPaintersPage />;
 
       case SECTIONS.ORDERS:
-        return <AdminOrdersPage />;
+        return isMobile ? <AdminOrdersMobileView /> : <AdminOrdersPage />;
 
       case SECTIONS.SALES:
-        return <AdminSalesPage />;
+        return isMobile ? <AdminSalesMobileView /> : <AdminSalesPage />;
 
       case SECTIONS.COUPONS:
-        return <AdminCouponsPage />;
+        return isMobile ? <AdminCouponsMobileView /> : <AdminCouponsPage />;
 
       case SECTIONS.NOTIFICATIONS:
-        return <NotificationCenterPage embedded />;
+        return isMobile ? <AdminNotificationsMobileView /> : <NotificationCenterPage embedded />;
 
       case SECTIONS.INSIGHTS:
         return <AdminInsightsPage />;
 
       case SECTIONS.SETTINGS:
-        return <AdminSettingsPage />;
+        return isMobile ? <AdminSettingsMobileView /> : <AdminSettingsPage />;
 
       default:
-        return (
+        return isMobile ? (
+          <AdminHomeMobileView onNavigate={handleNavigate} />
+        ) : (
           <DashboardOverview
             onNavigate={handleNavigate}
             notificationCategories={notificationCategories}
@@ -869,16 +936,49 @@ export default function AdminDashboard() {
   };
 
   return (
-    <DashboardShell
-      title="Admin Dashboard"
-      eyebrow="Meitu Operations"
-      accountLabel={user?.email || "Meitu Paints operations"}
-      navGroups={navigationGroups}
-      activeKey={activeSection}
-      onNavigate={(item) => handleNavigate(item.key)}
-    >
-      <DashboardUIStyles />
-      {renderContent()}
-    </DashboardShell>
+    <>
+      <DashboardShell
+        title="Admin Dashboard"
+        eyebrow="Meitu Operations"
+        accountLabel={user?.email || "Meitu Paints operations"}
+        navGroups={navigationGroups}
+        activeKey={activeSection}
+        onNavigate={(item) => handleNavigate(item.key)}
+        hideMobileTopbar={isMobile}
+        mobileBleed={isMobile}
+      >
+        <DashboardUIStyles />
+        <AdminMobileStyles />
+        <DealerMobileStylesCore />
+        <DealerMobileStylesPages />
+        {isMobile ? <div className="admin-m">{renderContent()}</div> : renderContent()}
+      </DashboardShell>
+
+      {/* Rendered as siblings of DashboardShell, not children - same
+          reasoning as DispatcherShopPage.jsx: .dashboard-content carries a
+          transform during its entrance animation, which would constrain
+          these fixed-position elements to its bounds instead of the
+          viewport. */}
+      {isMobile ? (
+        <>
+          <AdminBottomTabBar onMoreClick={() => setMoreOpen(true)} moreActive={!isTabBarSection} />
+          <MobileToastRenderer />
+          <DealerMoreDrawer
+            open={moreOpen}
+            onClose={() => setMoreOpen(false)}
+            groups={moreGroups}
+            activeKey={activeSection}
+            onNavigate={(item) => {
+              if (item.key === "logout") {
+                logout();
+                return;
+              }
+              handleNavigate(item.key);
+              setMoreOpen(false);
+            }}
+          />
+        </>
+      ) : null}
+    </>
   );
 }

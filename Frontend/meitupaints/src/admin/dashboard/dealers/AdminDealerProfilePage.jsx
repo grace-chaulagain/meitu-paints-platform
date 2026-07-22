@@ -16,6 +16,8 @@ import {
   useUpdateAdminDealerStatusMutation,
 } from "../../../redux/api/meituApi.js";
 import { formatTime, normalizeStatus, orderStatusMeta } from "../../../dealer/orderDetailLogic.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminDealerProfileMobileView } from "../../mobile/AdminDealerProfileMobileView.jsx";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
@@ -910,6 +912,7 @@ function SalePreviewModal({ sale, onClose }) {
 export default function AdminDealerProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobileAdmin();
 
   const dealerId = useMemo(() => {
     const match = location.pathname.match(/^\/admin\/dashboard\/dealers\/([^/]+)$/);
@@ -1144,6 +1147,26 @@ export default function AdminDealerProfilePage() {
 
   function openOrder(order) {
     navigate(`/admin/dashboard/orders/${order._id}`, { state: { fromOrdersList: true } });
+  }
+
+  if (isMobile) {
+    return (
+      <AdminDealerProfileMobileView
+        dealer={dealer}
+        dispatchers={dispatchers}
+        performanceSummary={performanceSummary}
+        productIntelligence={productIntelligence}
+        recentOrders={recentOrders}
+        loading={loading}
+        loadError={loadError}
+        onBack={() => navigate("/admin/dashboard/dealers")}
+        busyAction={busyAction}
+        error={error}
+        onToggleStatus={handleToggleStatus}
+        onSaveRouting={handleSaveRouting}
+        onOpenOrder={openOrder}
+      />
+    );
   }
 
   if (loading) return <LoadingState />;

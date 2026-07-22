@@ -20,7 +20,7 @@ export function PrimaryButton({
   return (
     <button
       type={type}
-      className={`dealer-m-primary-btn ${variant === "secondary" ? "dealer-m-primary-btn-secondary" : ""}`}
+      className={`dealer-m-primary-btn ${variant === "secondary" ? "dealer-m-primary-btn-secondary" : ""} ${variant === "danger" ? "dealer-m-primary-btn-danger" : ""}`}
       onClick={onClick}
       disabled={disabled || loading}
       style={style}

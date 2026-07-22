@@ -383,6 +383,9 @@ export function DealerMobileStylesCore() {
         filter:none;
         background:var(--color-fog,#f5f5f7);
       }
+      .dealer-m-primary-btn-danger{
+        background:#b42318;
+      }
       .dealer-m-primary-btn-content{
         display:flex;
         flex-direction:column;

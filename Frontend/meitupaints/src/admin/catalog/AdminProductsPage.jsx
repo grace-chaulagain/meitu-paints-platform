@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import ProductEditorModal from "./components/ProductEditorModal";
 import DispatcherPricingWorkspace from "./dispatcherPricing/DispatcherPricingWorkspace.jsx";
@@ -29,6 +30,14 @@ import {
 } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import { exportToCsv } from "../../utils/exportToCsv.js";
+import { useIsMobileAdmin } from "../mobile/useIsMobileAdmin.js";
+import { AdminBottomTabBar } from "../mobile/AdminBottomTabBar.jsx";
+import { AdminMobileStyles } from "../mobile/AdminMobileStyles.jsx";
+import { AdminCatalogMobileView } from "../mobile/AdminCatalogMobileView.jsx";
+import { MobileToastRenderer } from "../../dealer/mobile/MobileToast.jsx";
+import { DealerMoreDrawer } from "../../dealer/mobile/DealerMoreDrawer.jsx";
+import { DealerMobileStylesCore } from "../../dealer/mobile/DealerMobileStyles.core.jsx";
+import { DealerMobileStylesPages } from "../../dealer/mobile/DealerMobileStyles.pages.jsx";
 import {
   markImageFailed,
   markImageLoaded,
@@ -1329,8 +1338,47 @@ function CatalogDetailModal({
   );
 }
 
+// Mobile-only "More" drawer for this page (ADMIN_MOBILE_DESIGN_PROMPT.md
+// §1/§4) - unlike AdminDashboardPage.jsx's own sidebar, this page's
+// DashboardShell nav is entirely local (category filters, dispatcher price
+// toggle - see handleNavigate below), not cross-section navigation, so it
+// can't be reused for the More drawer's real routing to other admin areas.
+// Static route map, not the notification-badge-aware navigationItems
+// AdminDashboardPage.jsx builds - this page has no notifications context
+// wired in and badges here would be a second, easily-stale source of truth.
+const MOBILE_MORE_GROUPS = [
+  {
+    label: "Operations",
+    items: [
+      { key: "draftOrder", icon: "invoice", title: "Draft Order", path: "/admin/dashboard/draft-order" },
+      { key: "applications", icon: "inbox", title: "Applications", path: "/admin/dashboard/applications" },
+      { key: "sales", icon: "chart", title: "Sales", path: "/admin/dashboard/sales" },
+      { key: "coupons", icon: "invoice", title: "Coupons", path: "/admin/dashboard/coupons" },
+    ],
+  },
+  {
+    label: "Network",
+    items: [
+      { key: "dispatchers", icon: "handshake", title: "Dispatchers", path: "/admin/dashboard/dispatchers" },
+      { key: "painters", icon: "user", title: "Painters", path: "/admin/dashboard/painters" },
+      { key: "insights", icon: "chart", title: "Insights", path: "/admin/dashboard/insights" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { key: "notifications", icon: "bell", title: "Notifications", path: "/admin/dashboard/notifications" },
+      { key: "settings", icon: "gear", title: "Settings", path: "/admin/dashboard/settings" },
+    ],
+  },
+  { label: "Account", items: [{ key: "logout", icon: "logout", title: "Logout" }] },
+];
+
 export default function AdminProductsPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const isMobile = useIsMobileAdmin();
+  const [moreOpen, setMoreOpen] = useState(false);
   const familiesQuery = useGetAdminProductFamiliesQuery();
   const productsQuery = useGetAdminProductsQuery();
   const categoriesQuery = useGetAdminProductCategoriesQuery();
@@ -1691,18 +1739,28 @@ export default function AdminProductsPage() {
   }
 
   return (
-    <DashboardShell
-      title="Meitu Catalog"
-      eyebrow="Admin Catalog"
-      accountLabel={user?.email || "Meitu Paints operations"}
-      navGroups={navGroups}
-      activeKey={activeNavKey}
-      onNavigate={handleNavigate}
-    >
+    <>
+      <DashboardShell
+        title="Meitu Catalog"
+        eyebrow="Admin Catalog"
+        accountLabel={user?.email || "Meitu Paints operations"}
+        navGroups={navGroups}
+        activeKey={activeNavKey}
+        onNavigate={handleNavigate}
+        hideMobileTopbar={isMobile}
+        mobileBleed={isMobile}
+      >
       <div style={{ display: "grid", gap: 16 }}>
         <DashboardUIStyles />
+        <AdminMobileStyles />
+        <DealerMobileStylesCore />
+        <DealerMobileStylesPages />
 
-        {section === "dispatcherPricing" ? (
+        {isMobile ? (
+          <div className="admin-m">
+            <AdminCatalogMobileView />
+          </div>
+        ) : section === "dispatcherPricing" ? (
           <DispatcherPricingWorkspace />
         ) : (
           <>
@@ -1829,6 +1887,27 @@ export default function AdminProductsPage() {
           />
         ) : null}
       </div>
-    </DashboardShell>
+      </DashboardShell>
+
+      {isMobile ? (
+        <>
+          <AdminBottomTabBar onMoreClick={() => setMoreOpen(true)} moreActive={moreOpen} />
+          <MobileToastRenderer />
+          <DealerMoreDrawer
+            open={moreOpen}
+            onClose={() => setMoreOpen(false)}
+            groups={MOBILE_MORE_GROUPS}
+            onNavigate={(item) => {
+              if (item.key === "logout") {
+                logout();
+                return;
+              }
+              navigate(item.path);
+              setMoreOpen(false);
+            }}
+          />
+        </>
+      ) : null}
+    </>
   );
 }

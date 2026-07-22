@@ -16,6 +16,8 @@ import {
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminDispatcherProfileMobileView } from "../../mobile/AdminDispatcherProfileMobileView.jsx";
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString()}`;
@@ -49,6 +51,7 @@ function StatusBadge({ status }) {
 export default function AdminDispatcherProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobileAdmin();
   const dispatcherId = useMemo(() => {
     const match = location.pathname.match(
       /^\/admin\/dashboard\/dispatchers\/([^/]+)$/,
@@ -60,12 +63,23 @@ export default function AdminDispatcherProfilePage() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const {
-    data: dispatcher = null,
+    data: dispatcherResponse,
     isLoading,
     isFetching,
     error: queryError,
     refetch,
   } = useGetAdminDispatcherQuery(dispatcherId, { skip: !dispatcherId });
+  // Every sibling page (AdminDispatcherOrdersPage.jsx,
+  // AdminDispatcherStockPage.jsx, AdminDispatcherSalesPurchasesPage.jsx,
+  // AdminDispatcherProductHistoryPage.jsx, AdminDispatcherApplicationDetailPage.jsx)
+  // unwraps `.item` from this same endpoint's { ok, item } response - this
+  // file previously destructured `data` directly as `dispatcher` and skipped
+  // that unwrap, so every field read below (name, status, assignedDealers,
+  // accessState, phone, email...) was silently reading off the wrapper
+  // object and evaluating to undefined. Pre-existing bug, not introduced by
+  // the mobile branch below - fixed here since the mobile view needs the
+  // real fields too.
+  const dispatcher = dispatcherResponse?.item || null;
   const analyticsQuery = useGetAdminDispatcherAnalyticsQuery(dispatcherId, {
     skip: !dispatcherId,
   });
@@ -78,6 +92,23 @@ export default function AdminDispatcherProfilePage() {
   const pageError = error || queryError?.message || "";
   const analytics = analyticsQuery.data || null;
   const stockItems = stockQuery.data?.items || [];
+
+  if (isMobile) {
+    return (
+      <AdminDispatcherProfileMobileView
+        dispatcher={dispatcher}
+        replenishment={analytics?.replenishment || {}}
+        network={analytics?.network || {}}
+        stock={analytics?.stock || {}}
+        commercial={analytics?.commercial || {}}
+        assignedDealers={dispatcher?.assignedDealers || []}
+        loading={loading}
+        loadError={pageError}
+        onBack={() => navigate("/admin/dashboard/dispatchers")}
+        onOpenDealer={(dealer) => navigate(`/admin/dashboard/dealers/${dealer._id}`)}
+      />
+    );
+  }
 
   if (loading) {
     return (

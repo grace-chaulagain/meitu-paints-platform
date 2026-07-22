@@ -12,6 +12,10 @@ import {
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminOrderDetailMobileView } from "../../mobile/AdminOrderDetailMobileView.jsx";
+import { AdminOrderConfirmSheet } from "../../mobile/AdminOrderConfirmSheet.jsx";
+import { toast as mobileToast } from "../../../dealer/mobile/useToast.js";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { Surface } from "../../../components/dashboard/DashboardUI.jsx";
@@ -85,6 +89,8 @@ function DetailSkeleton() {
 export default function AdminOrderDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobileAdmin();
+  const [mobileSheet, setMobileSheet] = useState(null); // { action: "verify"|"reject" }
 
   const orderId = useMemo(() => {
     const match = location.pathname.match(
@@ -220,6 +226,26 @@ export default function AdminOrderDetailPage() {
     if (success) goBackToOrders();
   };
 
+  // Mobile-only: AdminOrderConfirmSheet.jsx replaces the desktop
+  // AdminDecisionModal verify flow and the window.prompt() reject flow with
+  // one shared sheet UI, reusing the same runAction/busyAction/actionError
+  // plumbing the desktop handlers already use.
+  const submitMobileAction = async (note) => {
+    if (!order || !mobileSheet) return;
+    const isVerify = mobileSheet.action === "verify";
+    const success = await runAction(isVerify ? `verify-${order._id}` : `reject-${order._id}`, () =>
+      (isVerify ? verifyAdminOrder : rejectAdminOrder)({
+        orderId: order._id,
+        payload: { reviewNote: note },
+      }).unwrap(),
+    );
+    if (success) {
+      setMobileSheet(null);
+      mobileToast(isVerify ? `${order.orderNumber} verified` : `${order.orderNumber} rejected`);
+      if (!isVerify) goBackToOrders();
+    }
+  };
+
   const handleSaveAmendment = async (payload) => {
     if (!order?._id) return;
 
@@ -268,6 +294,42 @@ export default function AdminOrderDetailPage() {
 
     if (success) goBackToOrders();
   };
+
+  if (isMobile) {
+    return (
+      <>
+        <AdminOrderDetailMobileView
+          order={order}
+          loading={orderQuery.isLoading && !order}
+          loadError={!orderQuery.isLoading && !order ? "Order not found" : ""}
+          onBack={goBackToOrders}
+          dealer={dealer}
+          dispatcher={dispatcher}
+          hasDispatchRecord={hasDispatchRecord}
+          pdfBusy={pdfBusy}
+          onDownloadProforma={handleDownloadProforma}
+          onOpenVerify={() => setMobileSheet({ action: "verify" })}
+          onOpenReject={() => setMobileSheet({ action: "reject" })}
+          busyAction={busyAction}
+        />
+        <AdminOrderConfirmSheet
+          open={Boolean(mobileSheet)}
+          action={mobileSheet?.action}
+          order={order}
+          dealerName={dealer?.companyName}
+          busy={Boolean(busyAction)}
+          error={actionError}
+          onClose={() => {
+            if (!busyAction) {
+              setMobileSheet(null);
+              setActionError("");
+            }
+          }}
+          onConfirm={submitMobileAction}
+        />
+      </>
+    );
+  }
 
   if (orderQuery.isLoading && !order) {
     return <DetailSkeleton />;

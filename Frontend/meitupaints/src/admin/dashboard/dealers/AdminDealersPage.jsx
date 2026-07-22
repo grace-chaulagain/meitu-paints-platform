@@ -27,6 +27,8 @@ import {
 import { AppleDropdown, PopoverListMenu } from "../../../components/dashboard/ApplePickers.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { exportToCsv } from "../../../utils/exportToCsv.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminDealersMobileView } from "../../mobile/AdminDealersMobileView.jsx";
 
 const STATUS_FILTERS = [
   { key: "ALL", label: "All Status" },
@@ -520,6 +522,7 @@ function DealersCard({
 
 export default function AdminDealersPage() {
   const navigate = useNavigate();
+  const isMobile = useIsMobileAdmin();
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
   const [search, setSearch] = useState("");
@@ -824,6 +827,10 @@ export default function AdminDealersPage() {
       },
       { key: "panVat", label: "PAN/VAT" },
     ], dealersToExport);
+  }
+
+  if (isMobile) {
+    return <AdminDealersMobileView />;
   }
 
   return (

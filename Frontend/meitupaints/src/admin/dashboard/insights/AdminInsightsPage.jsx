@@ -25,6 +25,8 @@ import {
   downloadCsv,
   downloadInsightsPdf,
 } from "./insightsExport.js";
+import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
+import { AdminInsightsMobileView } from "../../mobile/AdminInsightsMobileView.jsx";
 
 const INSIGHT_SECTIONS = [
   { key: "home", label: "Home", path: "/admin/dashboard/insights", summary: "Executive pulse", icon: "overview" },
@@ -601,6 +603,15 @@ function LoadingSkeleton() {
 }
 
 export default function AdminInsightsPage() {
+  const isMobile = useIsMobileAdmin();
+  if (isMobile) {
+    return <AdminInsightsMobileView />;
+  }
+
+  return <AdminInsightsPageDesktop />;
+}
+
+function AdminInsightsPageDesktop() {
   const navigate = useNavigate();
   const location = useLocation();
   const activeSection = sectionFromPath(location.pathname);
