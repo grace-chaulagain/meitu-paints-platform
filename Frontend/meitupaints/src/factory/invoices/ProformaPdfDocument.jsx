@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
     left: 0,
     fontSize: 8.5,
     fontWeight: 700,
-    color: "#dddddd",
+    color: "#555555",
     letterSpacing: 0.5,
   },
   panLabel: {

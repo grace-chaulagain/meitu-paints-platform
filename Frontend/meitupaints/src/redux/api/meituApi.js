@@ -716,13 +716,14 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
     }),
 
-    // Assigns (or returns the already-assigned) Proforma Invoice serial
-    // number - called right before building the PI PDF, by Admin or
-    // Factory. Idempotent on the backend: re-generating the same order's
-    // PI always returns the same number.
-    ensureProformaSerialNumber: builder.mutation({
+    // Assigns/returns the Proforma Invoice's frozen metadata - serialNumber
+    // and generatedAt - called right before building the PI PDF, by Admin
+    // or Factory. Idempotent on the backend: serialNumber is fixed forever
+    // after the first call; generatedAt keeps refreshing while the order is
+    // still pre-dispatch, then freezes permanently once it isn't.
+    ensureProformaInvoiceMetadata: builder.mutation({
       query: (orderId) => ({
-        url: `/api/orders/${orderId}/proforma-serial-number`,
+        url: `/api/orders/${orderId}/proforma-metadata`,
         method: "POST",
       }),
       invalidatesTags: (_result, _error, orderId) => orderMutationTags(orderId),
@@ -1688,7 +1689,7 @@ export const {
   useGetAdminScopedOrderQuery,
   useLazyGetAdminScopedOrderQuery,
   useVerifyAdminOrderMutation,
-  useEnsureProformaSerialNumberMutation,
+  useEnsureProformaInvoiceMetadataMutation,
   useRejectAdminOrderMutation,
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,

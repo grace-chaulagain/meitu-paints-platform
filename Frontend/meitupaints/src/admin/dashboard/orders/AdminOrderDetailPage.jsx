@@ -5,7 +5,7 @@ import { downloadProformaPdf } from "../../../factory/invoices/downloadProformaP
 import {
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
-  useEnsureProformaSerialNumberMutation,
+  useEnsureProformaInvoiceMetadataMutation,
   useGetAdminOrderQuery,
   useGetAdminOrderStockCheckQuery,
   useRejectAdminOrderMutation,
@@ -116,7 +116,7 @@ export default function AdminOrderDetailPage() {
   const [rejectAdminOrder] = useRejectAdminOrderMutation();
   const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [deleteAdminOrder] = useDeleteAdminOrderMutation();
-  const [ensureProformaSerialNumber] = useEnsureProformaSerialNumberMutation();
+  const [ensureProformaInvoiceMetadata] = useEnsureProformaInvoiceMetadataMutation();
 
   const dealer = order?.dealerSnapshot || order?.dealerId || {};
   const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
@@ -190,12 +190,12 @@ export default function AdminOrderDetailPage() {
     if (!order) return;
     setPdfBusy(true);
     try {
-      const { item } = await ensureProformaSerialNumber(order._id).unwrap();
+      const { item } = await ensureProformaInvoiceMetadata(order._id).unwrap();
       await downloadProformaPdf({
         orderId: order._id,
         orderNumber: order.orderNumber,
         serialNumber: item?.serialNumber,
-        generatedAt: new Date().toISOString(),
+        generatedAt: item?.generatedAt,
         dealer,
         payment: order.payment || {},
         driver: {

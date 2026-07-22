@@ -353,6 +353,14 @@ const OrderSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // The single canonical "what date does the PI show" instant - separate
+    // from dispatchPrep.proformaGeneratedAt (factory checklist-step
+    // tracking, goes inert post-dispatch). Refreshed on every PI
+    // generation while status === VERIFIED; frozen the instant status
+    // leaves VERIFIED (or on first-ever post-dispatch generation, for
+    // orders dispatched without a PI ever being generated pre-dispatch).
+    proformaIssuedAt: { type: Date, default: null },
+
     // DEALER for a dealer's own order; DISPATCHER_REPLENISHMENT for a
     // dispatcher's own stock-replenishment order placed against the
     // central Factory. Required-ness of dealerId / dispatcherCustomerId

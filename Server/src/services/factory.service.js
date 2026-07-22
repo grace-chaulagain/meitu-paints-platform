@@ -647,7 +647,7 @@ export async function getProformaInvoice({ orderId }) {
     orderId: order._id,
     orderNumber: order.orderNumber,
     serialNumber: order.serialNumber,
-    generatedAt: new Date().toISOString(),
+    generatedAt: order.proformaIssuedAt || null,
     dealer: order.dealerSnapshot || {},
     payment: order.payment || {},
     driver: {

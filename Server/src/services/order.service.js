@@ -1103,47 +1103,94 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
   return finalOrder;
 }
 
-// Assigns serialNumber (the SN{n} watermark printed on the Proforma
-// Invoice - and only the Proforma Invoice, not the Order Summary) the
-// first time a PI is actually generated for this order, not at
-// verification or creation. Idempotent: an order that already has one
-// keeps it - re-generating/re-downloading the same PI always shows the
-// same number instead of consuming a new one each time. Called by both
-// Admin (order review) and Factory (pre-dispatch) right before they build
-// the PDF client-side.
-export async function ensureProformaSerialNumber({ orderId, actorUser }) {
+// Assigns/returns the two pieces of frozen Proforma Invoice metadata -
+// serialNumber (the SN{n} watermark) and proformaIssuedAt (the printed
+// date) - called by both Admin (order review) and Factory (pre-dispatch)
+// right before they build the PDF client-side.
+//
+// serialNumber: assigned the first time a PI is actually generated for
+// this order, not at verification or creation. Idempotent forever after -
+// re-generating/re-downloading the same PI always shows the same number.
+//
+// proformaIssuedAt: refreshed to "now" on every generation while the
+// order is still pre-dispatch (status === VERIFIED) - each regeneration
+// reflects the latest version before it goes out the door. The instant
+// status leaves VERIFIED, it freezes permanently: every later
+// redownload, by anyone, shows that same frozen instant instead of the
+// redownload time. (Edge case: if an order was dispatched without a PI
+// ever having been generated pre-dispatch, the first post-dispatch
+// generation freezes it then, exactly once.)
+//
+// These two fields have different race-condition guards (assign-once vs.
+// refresh-while-VERIFIED) and are deliberately written as two separate
+// findOneAndUpdate calls rather than one combined $set - bundling them
+// would make the timestamp refresh silently no-op whenever the
+// serial-number filter alone fails to match a concurrent write.
+export async function ensureProformaInvoiceMetadata({ orderId, actorUser }) {
   assertUser(actorUser);
   const role = normalizeUpper(actorUser?.role);
   if (role !== ROLES.ADMIN && role !== ROLES.FACTORY) {
     throw new ApiError(403, "Only Admin or Factory can generate a Proforma Invoice");
   }
 
-  const existing = await Order.findById(orderId).select("serialNumber").lean();
+  const existing = await Order.findById(orderId)
+    .select("serialNumber proformaIssuedAt status")
+    .lean();
   if (!existing) {
     throw new ApiError(404, "Order not found");
   }
-  if (existing.serialNumber) {
-    return existing.serialNumber;
+
+  let serialNumber = existing.serialNumber;
+  if (!serialNumber) {
+    const nextSerial = await getNextOrderSerialNumber();
+    const updated = await Order.findOneAndUpdate(
+      { _id: orderId, serialNumber: null },
+      { $set: { serialNumber: nextSerial } },
+      { new: true },
+    )
+      .select("serialNumber")
+      .lean();
+
+    // Lost a concurrent race to assign the first number for this order -
+    // the winner's number is what every PI for this order should show, so
+    // return that instead of the number we drew (never used again).
+    serialNumber = updated
+      ? updated.serialNumber
+      : (await Order.findById(orderId).select("serialNumber").lean())?.serialNumber;
   }
 
-  const serialNumber = await getNextOrderSerialNumber();
-  const updated = await Order.findOneAndUpdate(
-    { _id: orderId, serialNumber: null },
-    { $set: { serialNumber } },
-    { new: true },
-  )
-    .select("serialNumber")
-    .lean();
-
-  // Lost a concurrent race to assign the first number for this order - the
-  // winner's number is what every PI for this order should show, so return
-  // that instead of the number we drew (which is simply never used again).
-  if (!updated) {
-    const refetched = await Order.findById(orderId).select("serialNumber").lean();
-    return refetched?.serialNumber;
+  let generatedAt = existing.proformaIssuedAt;
+  if (existing.status === ORDER_STATUS.VERIFIED) {
+    // Status-scoped filter, not a blind update - if a concurrent dispatch
+    // won the race between our read above and this write, this matches
+    // zero documents and we fall through to whatever is now actually
+    // persisted, instead of stomping a value that just got frozen.
+    const refreshed = await Order.findOneAndUpdate(
+      { _id: orderId, status: ORDER_STATUS.VERIFIED },
+      { $set: { proformaIssuedAt: new Date() } },
+      { new: true },
+    )
+      .select("proformaIssuedAt")
+      .lean();
+    generatedAt = refreshed
+      ? refreshed.proformaIssuedAt
+      : (await Order.findById(orderId).select("proformaIssuedAt").lean())?.proformaIssuedAt;
+  } else if (!generatedAt) {
+    // Edge case: dispatched (or beyond) without a PI ever generated
+    // pre-dispatch. Freeze now, race-guarded exactly like serialNumber.
+    const claimed = await Order.findOneAndUpdate(
+      { _id: orderId, proformaIssuedAt: null },
+      { $set: { proformaIssuedAt: new Date() } },
+      { new: true },
+    )
+      .select("proformaIssuedAt")
+      .lean();
+    generatedAt = claimed
+      ? claimed.proformaIssuedAt
+      : (await Order.findById(orderId).select("proformaIssuedAt").lean())?.proformaIssuedAt;
   }
 
-  return updated.serialNumber;
+  return { serialNumber, generatedAt };
 }
 
 export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {

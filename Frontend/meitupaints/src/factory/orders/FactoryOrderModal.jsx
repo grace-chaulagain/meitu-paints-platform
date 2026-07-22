@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  useEnsureProformaSerialNumberMutation,
+  useEnsureProformaInvoiceMetadataMutation,
   useMarkFactoryOrderDeliveredMutation,
   useMarkFactoryOrderOutForDeliveryMutation,
   useRejectFactoryOrderMutation,
@@ -100,7 +100,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   const [markDelivered, deliveredState] = useMarkFactoryOrderDeliveredMutation();
   const [rejectOrder, rejectState] = useRejectFactoryOrderMutation();
   const [updateDispatchPrep] = useUpdateFactoryDispatchPrepMutation();
-  const [ensureProformaSerialNumber] = useEnsureProformaSerialNumberMutation();
+  const [ensureProformaInvoiceMetadata] = useEnsureProformaInvoiceMetadataMutation();
 
   const busy = markOutState.isLoading || deliveredState.isLoading || rejectState.isLoading || pdfBusy || savingDispatchPrep;
 
@@ -170,12 +170,12 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   async function generateProforma(driver) {
     setPdfBusy(true);
     await run(async () => {
-      const { item } = await ensureProformaSerialNumber(order._id).unwrap();
+      const { item } = await ensureProformaInvoiceMetadata(order._id).unwrap();
       await downloadProformaPdf({
         orderId: order._id,
         orderNumber: order.orderNumber,
         serialNumber: item?.serialNumber,
-        generatedAt: new Date().toISOString(),
+        generatedAt: item?.generatedAt,
         dealer: order.dealerSnapshot || {},
         payment: order.payment || {},
         driver,
