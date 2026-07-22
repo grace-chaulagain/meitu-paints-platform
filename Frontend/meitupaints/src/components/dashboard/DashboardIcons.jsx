@@ -335,6 +335,22 @@ const paths = {
       <path d="M4 15h5l1.5 2h3L15 15h5v1.2l-2.6 3.5a1 1 0 0 1-.8.4H8.4a1 1 0 0 1-.8-.4L5 16.2V15Z" fill="var(--color-snow,#fff)" stroke="none" opacity="0.001" />
     </>
   ),
+  // Arrival-chime mute toggle (order-flow §2.6) - a matched pair so the
+  // button's icon itself communicates current state, not just its title.
+  volume: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="M17 9a4.5 4.5 0 0 1 0 6" />
+      <path d="M19.5 6.5a8.5 8.5 0 0 1 0 11" />
+    </>
+  ),
+  volumeMuted: (
+    <>
+      <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+      <path d="M16.5 10 21 14.5" />
+      <path d="M21 10 16.5 14.5" />
+    </>
+  ),
 };
 
 export function DashboardIcon({ name, size = 20, strokeWidth = 1.9, className = "", style }) {

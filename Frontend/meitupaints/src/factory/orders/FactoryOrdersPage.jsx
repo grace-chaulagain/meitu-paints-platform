@@ -12,6 +12,7 @@ import {
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
 import { AppleDateField, AppleDropdown, PopoverListMenu } from "../../components/dashboard/ApplePickers.jsx";
+import OpsRefetchHairline from "../../components/dashboard/OpsRefetchHairline.jsx";
 import { Toast } from "../../components/dashboard/Toast.jsx";
 import { groupOrdersByDay } from "../../utils/orderDayGrouping.js";
 import {
@@ -26,6 +27,10 @@ import {
   todayKey,
 } from "../factoryHelpers.js";
 import FactoryOrderModal from "./FactoryOrderModal.jsx";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../components/orderflow/OrderStatusRail.jsx";
+import { OwnerChip, OwnerChipStyles } from "../../components/orderflow/OwnerChip.jsx";
+import { useQueueArrivals } from "../../components/orderflow/arrivals.js";
+import { ArrivalStyles, SoundMuteToggle } from "../../components/orderflow/ArrivalIndicators.jsx";
 
 const ORDER_LANES = [
   { key: "INBOX", label: "Inbox", icon: "inbox" },
@@ -134,9 +139,9 @@ function FactoryRouteMenu({ value, onChange }) {
   );
 }
 
-function OrderRow({ order, onOpen }) {
+function OrderRow({ order, onOpen, isArrived }) {
   return (
-    <ListRow onClick={() => onOpen(order._id)}>
+    <ListRow onClick={() => onOpen(order._id)} className={isArrived ? "orderflow-arrival-highlight" : ""}>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>
@@ -148,6 +153,7 @@ function OrderRow({ order, onOpen }) {
           {order.orderOrigin === "DISPATCHER_REPLENISHMENT" ? (
             <Pill tone="accent" size="small">Dispatcher</Pill>
           ) : null}
+          <OwnerChip order={order} role="FACTORY" />
         </div>
         <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -162,6 +168,7 @@ function OrderRow({ order, onOpen }) {
             <DashboardIcon name="truck" size={12} strokeWidth={1.8} />
             {order.factory?.driverName || "No driver"}
           </span>
+          <OrderStatusRail order={order} size="sm" />
         </div>
       </div>
       <strong style={{ fontSize: 13.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", flexShrink: 0 }}>
@@ -192,7 +199,10 @@ export default function FactoryOrdersPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const listQuery = useGetFactoryOrdersQuery({ stage: "ALL", q: query, limit: 100, ...routeModeParams(routeMode) });
+  const listQuery = useGetFactoryOrdersQuery(
+    { stage: "ALL", q: query, limit: 100, ...routeModeParams(routeMode) },
+    { pollingInterval: 20000 },
+  );
   const allOrders = listQuery.data?.items || [];
 
   const counts = ORDER_LANES.reduce((acc, item) => {
@@ -219,6 +229,11 @@ export default function FactoryOrdersPage() {
     });
 
   const groupedOrders = useMemo(() => groupOrdersByDay(items, factoryQueueTimestamp), [items]);
+
+  // Arrivals treatment (highlight + chime + aria announce) is scoped to
+  // Inbox only, per §2.6/Phase 4 - passing [] for any other lane means the
+  // hook never diffs (and never chimes) outside it.
+  const arrivedIds = useQueueArrivals(lane === "INBOX" ? items : [], lane, { laneLabel: "Inbox" });
 
   const hasFilters = Boolean(
     query || draftQuery || date || dealer || priority !== "ALL" || routeMode !== "FACTORY" || sort !== "received-desc" || sortOrder !== "desc",
@@ -275,7 +290,12 @@ export default function FactoryOrdersPage() {
           icon="orders"
           title="Factory Order Queue"
           subtitle="Search, prepare, invoice, and dispatch factory-routed orders."
-          action={listQuery.isFetching ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+          action={
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {listQuery.isFetching ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+              <SoundMuteToggle />
+            </div>
+          }
         />
 
         <div style={{ marginTop: 16 }}>
@@ -348,6 +368,8 @@ export default function FactoryOrdersPage() {
         ) : null}
       </Surface>
 
+      <OpsRefetchHairline visible={listQuery.isFetching && !(listQuery.isLoading && !listQuery.data)} />
+
       {listQuery.isLoading && !listQuery.data ? (
         <Surface padding={18}>
           <div style={{ height: 240, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
@@ -375,7 +397,7 @@ export default function FactoryOrdersPage() {
               <div style={{ marginLeft: 46 }}>
                 <Surface padding={0}>
                   {group.orders.map((order) => (
-                    <OrderRow key={order._id} order={order} onOpen={setSelectedOrderId} />
+                    <OrderRow key={order._id} order={order} onOpen={setSelectedOrderId} isArrived={arrivedIds.has(order._id)} />
                   ))}
                 </Surface>
               </div>
@@ -391,9 +413,14 @@ export default function FactoryOrdersPage() {
         onClose={() => setSelectedOrderId(null)}
         onDispatched={handleDispatched}
         onDelivered={handleDelivered}
+        onRefetchList={listQuery.refetch}
       />
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+      <OrderFlowRailStyles />
+      <OwnerChipStyles />
+      <ArrivalStyles />
 
       <style>{`
         .factory-order-dealer-filter{

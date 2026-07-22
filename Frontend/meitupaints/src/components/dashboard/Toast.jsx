@@ -9,6 +9,9 @@ const AUTO_DISMISS_MS = 3500;
 const TONES = {
   success: { bg: "rgba(22,163,74,.1)", color: "#15803d", icon: "checkmark" },
   error: { bg: "rgba(180,35,24,.1)", color: "#b42318", icon: "reject" },
+  // Used for "the truth changed under you" conflict toasts (order state
+  // moved on elsewhere) - distinct from error since nothing actually failed.
+  caution: { bg: "rgba(180,140,20,.12)", color: "#8a6300", icon: "warning" },
 };
 
 // A single, local (non-global-provider) toast - only one call site needs

@@ -14,9 +14,9 @@ import {
   OrderDetailStyles,
   OrderInfoCard,
   OrderItemsTable,
-  OrderMilestoneStepper,
   OrderSummaryCard,
 } from "../../../dealer/orderDetailUI.jsx";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
 import {
   DISPLAY_BUCKET_META,
   canDownloadOrderPdf,
@@ -134,6 +134,9 @@ export default function DispatcherOwnOrderDetailPage() {
           <div className="dealer-order-detail-main">
             <div className="dealer-order-detail-title-row">
               <div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--color-azure, #0071e3)" }}>
+                  Your stock orders
+                </div>
                 <div className="dealer-order-detail-title">
                   <span>{order.orderNumber || "Order Detail"}</span>
                   <Pill tone={bucketMeta.pillTone} size="small">{bucketMeta.pillLabel}</Pill>
@@ -147,7 +150,7 @@ export default function DispatcherOwnOrderDetailPage() {
             </div>
 
             <Surface padding={18} style={{ marginTop: 18, background: "var(--color-fog, #f5f5f7)" }}>
-              <OrderMilestoneStepper order={order} />
+              <OrderStatusRail order={order} size="lg" />
             </Surface>
 
             <Surface padding={0} style={{ marginTop: 16, border: "1px solid rgba(0,0,0,.06)" }}>
@@ -183,6 +186,7 @@ export default function DispatcherOwnOrderDetailPage() {
       </Surface>
 
       <OrderDetailStyles />
+      <OrderFlowRailStyles />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import Order, {
 import DealerProfile from "../models/DealerProfile.model.js";
 import { DEALER_STATUS } from "../constants/statuses.js";
 import ApiError from "../utils/apiError.js";
+import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
 import {
   createFactoryNotification,
   NOTIFICATION_CATEGORY,
@@ -349,7 +350,10 @@ export async function markOutForDelivery({
   requireActor(factoryUser, "FACTORY");
   const order = await loadFactoryOrder(orderId);
   if (order.status !== ORDER_STATUS.VERIFIED) {
-    throw new ApiError(400, `Order cannot be dispatched from status ${order.status}`);
+    throw buildOrderConflictError(order, {
+      status: 400,
+      message: `Order cannot be dispatched from status ${order.status}`,
+    });
   }
 
   const historyEntry = await buildStatusHistoryEntry({
@@ -384,10 +388,9 @@ export async function markOutForDelivery({
       );
 
       if (!updated) {
-        throw new ApiError(
-          409,
-          "Order status changed before it could be dispatched. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(orderId, {
+          message: "Order status changed before it could be dispatched. Please refresh and try again.",
+        });
       }
 
       // Deducts stock and persists order.stockDeduction itself, inside
@@ -429,7 +432,10 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
   requireActor(factoryUser, "FACTORY");
   const order = await loadFactoryOrder(orderId);
   if (order.status !== ORDER_STATUS.DISPATCHED) {
-    throw new ApiError(400, "Order must be dispatched before it can be completed");
+    throw buildOrderConflictError(order, {
+      status: 400,
+      message: "Order must be dispatched before it can be completed",
+    });
   }
 
   const historyEntry = await buildStatusHistoryEntry({
@@ -460,10 +466,9 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
       );
 
       if (!updated) {
-        throw new ApiError(
-          409,
-          "Order status changed before it could be marked completed. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(orderId, {
+          message: "Order status changed before it could be marked completed. Please refresh and try again.",
+        });
       }
 
       // Dealer-origin orders (dispatcher replenishment orders have no
@@ -497,7 +502,10 @@ export async function rejectFactoryOrder({ orderId, factoryUser, reason, note = 
   const order = await loadFactoryOrder(orderId);
   const disallowed = [ORDER_STATUS.COMPLETED, ORDER_STATUS.REJECTED];
   if (disallowed.includes(order.status)) {
-    throw new ApiError(400, `Order cannot be rejected from status ${order.status}`);
+    throw buildOrderConflictError(order, {
+      status: 400,
+      message: `Order cannot be rejected from status ${order.status}`,
+    });
   }
 
   const historyEntry = await buildStatusHistoryEntry({
@@ -530,10 +538,9 @@ export async function rejectFactoryOrder({ orderId, factoryUser, reason, note = 
       );
 
       if (!updated) {
-        throw new ApiError(
-          409,
-          "Order status changed before it could be rejected. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(orderId, {
+          message: "Order status changed before it could be rejected. Please refresh and try again.",
+        });
       }
 
       await releaseReservationForOrder({

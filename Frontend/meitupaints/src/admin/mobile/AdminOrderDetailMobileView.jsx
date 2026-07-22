@@ -1,31 +1,22 @@
 import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import { downloadOrderSummaryPdf } from "../../utils/downloadOrderSummaryPdf.jsx";
 import { formatMoney } from "../../dealer/pricing.js";
-import {
-  DISPLAY_BUCKET_META,
-  formatPaymentMethod,
-  formatShortDateTime,
-  normalizeStatus,
-  orderDisplayBucket,
-} from "../../dealer/orderDetailLogic.js";
-import { StatusRail } from "../../dealer/mobile/StatusRail.jsx";
+import { formatPaymentMethod, formatShortDateTime, normalizeStatus } from "../../dealer/orderDetailLogic.js";
+import { getOwner, getStatusLabel, getTransitions } from "../../shared/orderStateMachine.js";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../components/orderflow/OrderStatusRail.jsx";
+import { OwnerChip, OwnerChipStyles } from "../../components/orderflow/OwnerChip.jsx";
 import { MobilePushHeader } from "../../dealer/mobile/MobilePushHeader.jsx";
 import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 import { PrimaryButton } from "../../dealer/mobile/PrimaryButton.jsx";
 
-const STAGE_HEADLINE = {
-  SUBMITTED: "Awaiting review",
-  VERIFIED: "Verified — in factory queue",
-  DISPATCHED: "Out for delivery",
-  COMPLETED: "Completed",
-};
-
+// Mode-aware timestamp for the hero subline under the (also now mode-aware,
+// via getStatusLabel) headline - "Verified · Jul 21, 2:14 PM" style.
 function milestoneDateFor(order, status) {
   switch (status) {
     case "SUBMITTED":
       return order?.createdAt;
     case "VERIFIED":
-      return order?.review?.reviewedAt || order?.factory?.sentToFactoryAt;
+      return order?.review?.reviewedAt;
     case "DISPATCHED":
       return order?.factory?.outForDeliveryAt;
     case "COMPLETED":
@@ -76,10 +67,20 @@ export function AdminOrderDetailMobileView({
   }
 
   const status = order ? normalizeStatus(order.status) : null;
-  const bucket = order ? orderDisplayBucket(status) : null;
   const isOffRamp = status === "REJECTED" || status === "CANCELLED";
   const stageDate = order ? milestoneDateFor(order, status) : null;
-  const canAct = status === "SUBMITTED";
+  // getTransitions (not a bare status===SUBMITTED check) so a dispatcher-
+  // mode order - which Admin never reviews - never shows a Verify/Reject
+  // pair that silently does nothing when tapped. Checking `.length > 0`
+  // alone isn't enough on its own though: a VERIFIED, not-yet-dispatched
+  // order legitimately has one transition (revert-verification) with
+  // neither action being "verify" or "reject", which made this pair render
+  // and silently no-op when tapped - narrowed to specifically require one
+  // of the two actions this block actually renders, matching the correct
+  // pattern already used in the sibling AdminOrdersMobileView.jsx.
+  const canAct = order
+    ? getTransitions(order, "ADMIN").some((t) => t.action === "verify" || t.action === "reject")
+    : false;
   const contactLine = [dealer?.contactName, dealer?.phone].filter(Boolean).join(" · ");
   const paymentLine = [order?.payment?.method, order?.payment?.reference].filter(Boolean).join(" · ");
   const notes = order
@@ -121,23 +122,24 @@ export function AdminOrderDetailMobileView({
             />
 
             <div className="dealer-m-order-hero">
-              <div className={`dealer-m-order-hero-headline ${isOffRamp ? "off-ramp" : ""}`}>
-                {isOffRamp ? DISPLAY_BUCKET_META[bucket]?.stateLabel : STAGE_HEADLINE[status] || DISPLAY_BUCKET_META[bucket]?.stateLabel}
-              </div>
+              <div className={`dealer-m-order-hero-headline ${isOffRamp ? "off-ramp" : ""}`}>{getStatusLabel(order)}</div>
               <div className="dealer-m-order-hero-sub">
                 {isOffRamp
-                  ? order?.review?.reviewNote || "Contact the dealer for details."
+                  ? order?.rejection?.reason || order?.review?.reviewNote || "Contact the dealer for details."
                   : stageDate
                     ? formatShortDateTime(stageDate)
                     : null}
               </div>
             </div>
 
-            {!isOffRamp ? (
-              <div className="dealer-m-order-card">
-                <StatusRail order={order} size="lg" />
-              </div>
-            ) : null}
+            <div className="dealer-m-order-card">
+              {getOwner(order) ? (
+                <div style={{ marginBottom: 14 }}>
+                  <OwnerChip order={order} role="ADMIN" />
+                </div>
+              ) : null}
+              <OrderStatusRail order={order} size="lg" />
+            </div>
 
             <div className="dealer-m-order-chip-row">
               {order?.payment?.method ? <span className="dealer-m-order-chip">{formatPaymentMethod(order.payment.method)}</span> : null}
@@ -214,6 +216,8 @@ export function AdminOrderDetailMobileView({
           </>
         ) : null}
       </SkeletonSwap>
+      <OrderFlowRailStyles />
+      <OwnerChipStyles />
     </div>
   );
 }

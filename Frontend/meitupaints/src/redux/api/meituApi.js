@@ -194,6 +194,14 @@ export const meituApi = createApi({
     "PointsCatalogProduct",
   ],
   keepUnusedDataFor: 60,
+  // Global freshness: a stale order card is worse than a redundant fetch -
+  // refetch whenever the tab regains focus or the connection comes back,
+  // on top of the per-query pollingInterval set at specific order-list/
+  // detail call sites (not globally - catalogs/settings/etc. shouldn't
+  // poll). Requires setupListeners(store.dispatch) in store.js to actually
+  // fire (RTK Query doesn't wire the window focus/online listeners itself).
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   endpoints: (builder) => ({
 
     getNotificationSummary: builder.query({
@@ -714,6 +722,17 @@ export const meituApi = createApi({
         data: payload,
       }),
       invalidatesTags: (_result, _error, arg) => orderMutationTags(arg?.orderId),
+    }),
+
+    // Phase 6 of the order-state-handling redesign - the one reversible
+    // transition (admin verify only). Same invalidation shape as verify/
+    // reject since it's just another status-changing mutation on the order.
+    revertAdminOrderVerification: builder.mutation({
+      query: (orderId) => ({
+        url: `/api/orders/${orderId}/revert-verification`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, orderId) => orderMutationTags(orderId),
     }),
 
     // Assigns/returns the Proforma Invoice's frozen metadata - serialNumber
@@ -1689,6 +1708,7 @@ export const {
   useGetAdminScopedOrderQuery,
   useLazyGetAdminScopedOrderQuery,
   useVerifyAdminOrderMutation,
+  useRevertAdminOrderVerificationMutation,
   useEnsureProformaInvoiceMetadataMutation,
   useRejectAdminOrderMutation,
   useAmendAdminOrderMutation,

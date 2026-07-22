@@ -10,7 +10,7 @@ import {
   orderDisplayBucket,
   resolveOrderItemImage,
 } from "../../dealer/orderDetailLogic.js";
-import { StatusRail } from "../../dealer/mobile/StatusRail.jsx";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../components/orderflow/OrderStatusRail.jsx";
 import { MobilePushHeader } from "../../dealer/mobile/MobilePushHeader.jsx";
 import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 
@@ -106,11 +106,9 @@ export function DispatcherOwnOrderDetailMobileView({ order, loading, loadError, 
               </div>
             </div>
 
-            {!isOffRamp ? (
-              <div className="dealer-m-order-card">
-                <StatusRail order={order} size="lg" />
-              </div>
-            ) : null}
+            <div className="dealer-m-order-card">
+              <OrderStatusRail order={order} size="lg" />
+            </div>
 
             <div className="dealer-m-order-chip-row">
               {order?.payment?.method ? <span className="dealer-m-order-chip">{formatPaymentMethod(order.payment.method)}</span> : null}
@@ -159,6 +157,7 @@ export function DispatcherOwnOrderDetailMobileView({ order, loading, loadError, 
           </>
         ) : null}
       </SkeletonSwap>
+      <OrderFlowRailStyles />
     </div>
   );
 }

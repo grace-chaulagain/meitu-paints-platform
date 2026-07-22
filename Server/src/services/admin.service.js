@@ -1685,11 +1685,20 @@ export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 
   };
 }
 
+// DISPATCHED is the status dispatcher.service.js's own dispatch flow sets
+// (consumeDispatcherStockForOrder / the dealer's received-stock credit both
+// fire in that same transaction) - the moment stock actually left the
+// dispatcher's shelf. A dispatcher-fulfilled order doesn't stop there
+// though: it can go on to COMPLETED via the separate "Confirm Handover"
+// step, so every query below that means "this dispatcher has fulfilled
+// this order" has to match both statuses, not just DISPATCHED alone -
+// otherwise a promptly-confirmed order silently drops out of these
+// reports the moment it's actually finished.
+const DISPATCHER_RECEIVED_STATUSES = ["DISPATCHED", "COMPLETED"];
+
 // Every dealer order this dispatcher has fulfilled - the dispatcher's
 // "sales" side, where the customer is the dealer rather than an end
-// consumer. DISPATCHED is the status dispatcher.service.js's own dispatch
-// flow sets (consumeDispatcherStockForOrder fires in the same
-// transaction), so it's the equivalent of a dealer's COMPLETED signal.
+// consumer.
 export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, limit = 200 } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
 
@@ -1699,7 +1708,7 @@ export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, li
   const query = {
     dispatcherId,
     "dealerSnapshot.fulfillmentMode": "DISPATCHER",
-    status: "DISPATCHED",
+    status: { $in: DISPATCHER_RECEIVED_STATUSES },
     isDeleted: { $ne: true },
   };
 
@@ -1744,7 +1753,7 @@ export async function getDispatcherDealerStats({ dispatcherId } = {}) {
           $match: {
             dealerId: { $in: dealerIds },
             dispatcherId: new mongoose.Types.ObjectId(String(dispatcherId)),
-            status: "DISPATCHED",
+            status: { $in: DISPATCHER_RECEIVED_STATUSES },
             isDeleted: { $ne: true },
           },
         },
@@ -1783,8 +1792,6 @@ export async function getDispatcherDealerStats({ dispatcherId } = {}) {
 // totals for this dispatcher - the dispatcher-side equivalent of a
 // dealer's Product Summary. Derived entirely from Order line items since
 // there's no InventoryMovement-style ledger for dispatcher stock.
-const DISPATCHER_RECEIVED_STATUSES = ["DISPATCHED", "COMPLETED"];
-
 export async function getDispatcherProductSummary({ dispatcherId } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
   const dispatcherObjectId = new mongoose.Types.ObjectId(String(dispatcherId));
@@ -1808,7 +1815,7 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
         $match: {
           dispatcherId: dispatcherObjectId,
           "dealerSnapshot.fulfillmentMode": "DISPATCHER",
-          status: "DISPATCHED",
+          status: { $in: DISPATCHER_RECEIVED_STATUSES },
           isDeleted: { $ne: true },
         },
       },
@@ -1872,7 +1879,7 @@ export async function getDispatcherProductMovements({ dispatcherId, productId } 
     Order.find({
       dispatcherId,
       "dealerSnapshot.fulfillmentMode": "DISPATCHER",
-      status: "DISPATCHED",
+      status: { $in: DISPATCHER_RECEIVED_STATUSES },
       isDeleted: { $ne: true },
       items: { $elemMatch: { productId: productObjectId } },
     })

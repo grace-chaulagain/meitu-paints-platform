@@ -583,7 +583,7 @@ export default function DispatcherOrderHistoryPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <SectionHeader
             icon="history"
-            title="My Order History"
+            title="Your stock orders"
             subtitle="Track every order you've placed with the Factory, from submission through delivery."
             action={isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
           />

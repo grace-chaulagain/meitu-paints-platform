@@ -7,9 +7,13 @@
  * Covers both fulfillment lanes:
  *   - FACTORY mode:    Order.status === COMPLETED (DISPATCHED means still
  *                       in transit for a factory order, not yet received)
- *   - DISPATCHER mode: Order.status === DISPATCHED (terminal for these -
- *                       the dispatcher is the local final-mile handoff, so
- *                       there's no separate delivery confirmation)
+ *   - DISPATCHER mode: Order.status is DISPATCHED or COMPLETED. Dispatch is
+ *                       when recordPurchaseMovement actually fires (stock
+ *                       physically reaches the dealer then - the dispatcher
+ *                       is the local final-mile handoff), and COMPLETED is
+ *                       just a later "Confirm Handover" bookkeeping step on
+ *                       top of that same dispatch - the underlying delivery
+ *                       already happened either way, so both statuses count.
  * DISPATCHED means two different real-world things depending on
  * fulfillment mode, so this can't be a single bare status list - it has
  * to branch on dealerSnapshot.fulfillmentMode too.
@@ -65,7 +69,7 @@ async function main() {
     dealerId: { $ne: null },
     $or: [
       { "dealerSnapshot.fulfillmentMode": "FACTORY", status: "COMPLETED" },
-      { "dealerSnapshot.fulfillmentMode": "DISPATCHER", status: "DISPATCHED" },
+      { "dealerSnapshot.fulfillmentMode": "DISPATCHER", status: { $in: ["DISPATCHED", "COMPLETED"] } },
     ],
   })
     .sort({ createdAt: 1 })

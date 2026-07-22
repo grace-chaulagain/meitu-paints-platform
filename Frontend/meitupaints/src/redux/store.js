@@ -1,4 +1,5 @@
 import { configureStore } from "@reduxjs/toolkit";
+import { setupListeners } from "@reduxjs/toolkit/query";
 import userReducer from "./userSlice";
 import imageCacheReducer from "./imageCacheSlice.js";
 import colorsCacheReducer from "./colorsCacheSlice.js";
@@ -26,5 +27,10 @@ export const store = configureStore({
       immutableCheck: { warnAfter: 256 },
     }).concat(meituApi.middleware),
 });
+
+// Enables refetchOnFocus/refetchOnReconnect below - without this, those
+// options are silently inert (RTK Query needs the window focus/online
+// listeners wired up explicitly, it doesn't do it on import).
+setupListeners(store.dispatch);
 
 export default store;

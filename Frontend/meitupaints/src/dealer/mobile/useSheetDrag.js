@@ -22,7 +22,7 @@ const RELEASE_SPRING_MS = 300;
 // the node during the drag (no React state, no CSS variable on a shared
 // parent), and a transition is applied only once the finger lifts, so the
 // drag itself never fights a CSS transition mid-flight.
-export function useSheetDrag({ sheetRef, scrimRef, scrollRef, onDismiss }) {
+export function useSheetDrag({ sheetRef, scrimRef, scrollRef, onDismiss, disabled = false }) {
   const stateRef = useRef(null);
 
   function getSheetHeight() {
@@ -30,6 +30,7 @@ export function useSheetDrag({ sheetRef, scrimRef, scrollRef, onDismiss }) {
   }
 
   function handlePointerDown(e) {
+    if (disabled) return; // e.g. TransitionConfirmSheet blocking drag-dismiss while a mutation is in flight
     if (e.target.closest?.(".dealer-m-sheet-close")) return; // never drags - let its own click fire untouched
     if (stateRef.current) return; // a drag is already in flight - ignore a second pointer
 

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 
 import ApiError from "../utils/apiError.js";
+import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
 import { getNextOrderSerialNumber } from "../utils/orderSerialNumber.js";
 import Order, {
   ORDER_REVIEWED_BY,
@@ -263,10 +264,10 @@ async function assertCanReviewOrder({ order, actorUser }) {
   assertUser(actorUser);
 
   if (order.status !== ORDER_STATUS.SUBMITTED) {
-    throw new ApiError(
-      400,
-      `Order cannot be reviewed from status ${order.status}`,
-    );
+    throw buildOrderConflictError(order, {
+      status: 400,
+      message: `Order cannot be reviewed from status ${order.status}`,
+    });
   }
 
   const mode = order.dealerSnapshot?.fulfillmentMode || "FACTORY";
@@ -986,10 +987,9 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
         );
 
         if (!updated) {
-          throw new ApiError(
-            409,
-            "This order was already reviewed by someone else. Please refresh and try again.",
-          );
+          throw await buildOrderConflictErrorFresh(orderId, {
+            message: "This order was already reviewed by someone else. Please refresh and try again.",
+          });
         }
 
         if (isFactoryOrder) {
@@ -1026,27 +1026,52 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
 
   // Email is a best-effort side effect, not part of the transaction above -
   // a transaction should never stay open across a slow external network
-  // call, and a DB rollback can't "unsend" an email anyway. Sent after the
+  // call, and a DB rollback can't "unsend" an email anyway. Fired after the
   // retry loop (not inside it) so a retried attempt can never double-email.
-  try {
-    const dealerEmailSentAt = await sendDealerStatusEmail({
-      order: verifiedOrder,
-      status: ORDER_STATUS.VERIFIED,
-    });
-    if (dealerEmailSentAt) {
+  //
+  // Deliberately NOT awaited (unlike the original version of this code):
+  // an SMTP round-trip is 1-8+ seconds even with the bounded per-attempt
+  // timeout, and the admin who just clicked Verify has nothing to do with
+  // whether the dealer/factory notification email succeeds - awaiting it
+  // held the HTTP response, and therefore every rail/celebration animation
+  // downstream of it, hostage to mail-server latency. Same fire-and-forget
+  // shape as createFactoryNotification/archiveVerifiedOrderToGoogleSheets
+  // below, which never blocked the response to begin with.
+  // Both callbacks below used to call verifiedOrder.save() on the SAME
+  // in-memory document. That's two problems, not one: (1) Mongoose's
+  // parallel-save guard throws ParallelSaveError if the second .save()
+  // starts before the first's DB round-trip finishes - the factory-email
+  // path does strictly more work first (recipients query + PDF generation
+  // + SMTP), so the two calls race in practice, not just in theory, and
+  // the loser's timestamp silently never persists (caught below, only
+  // console.warn'd). (2) Even without that race, .save() writes the
+  // *whole* document - with versionKey disabled on this model there's no
+  // optimistic-concurrency check, so a `.save()` racing against any other
+  // concurrent write to this order (a revert, another admin's action)
+  // would silently clobber it. Targeted `updateOne`s below touch only the
+  // one field each callback actually owns, so both can run fully
+  // concurrently with each other and with anything else touching the
+  // order, and neither needs the shared in-memory instance at all.
+  sendDealerStatusEmail({ order: verifiedOrder, status: ORDER_STATUS.VERIFIED })
+    .then(async (dealerEmailSentAt) => {
+      if (!dealerEmailSentAt) return;
       const lastHistoryEntry = verifiedOrder.statusHistory[verifiedOrder.statusHistory.length - 1];
-      if (lastHistoryEntry) lastHistoryEntry.dealerEmailSentAt = dealerEmailSentAt;
-      await verifiedOrder.save();
-    }
-  } catch (error) {
-    console.warn("[dealer-email] verified status email failed:", error?.message);
-  }
+      if (!lastHistoryEntry) return;
+      await Order.updateOne(
+        { _id: verifiedOrder._id },
+        { $set: { "statusHistory.$[entry].dealerEmailSentAt": dealerEmailSentAt } },
+        { arrayFilters: [{ "entry.changedAt": lastHistoryEntry.changedAt, "entry.toStatus": ORDER_STATUS.VERIFIED }] },
+      );
+    })
+    .catch((error) => {
+      console.warn("[dealer-email] verified status email failed:", error?.message);
+    });
 
   if (isFactoryOrder) {
     if (!smtpConfigured()) {
       console.warn("[factory-email] SMTP is not configured; skipped factory order email.");
     } else {
-      try {
+      (async () => {
         const recipients = await buildFactoryRecipients();
         const mail = buildFactoryOrderEmail(verifiedOrder);
         const pdfAttachment = await buildOrderSummaryPdfAttachment(verifiedOrder);
@@ -1059,15 +1084,14 @@ export async function verifyOrder({ orderId, actorUser, reviewNote = "" }) {
           attachments: [pdfAttachment],
         });
 
-        verifiedOrder.factoryEmailSentAt = new Date();
-        await verifiedOrder.save();
-      } catch (error) {
+        await Order.updateOne({ _id: verifiedOrder._id }, { $set: { factoryEmailSentAt: new Date() } });
+      })().catch((error) => {
         console.warn("[factory-email] Failed to send factory order email; continuing without blocking verification.", {
           orderId: String(verifiedOrder._id),
           orderNumber: verifiedOrder.orderNumber,
           message: error?.message,
         });
-      }
+      });
     }
   }
 
@@ -1252,10 +1276,9 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
       );
 
       if (!updated) {
-        throw new ApiError(
-          409,
-          "This order was already reviewed by someone else. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(orderId, {
+          message: "This order was already reviewed by someone else. Please refresh and try again.",
+        });
       }
 
       await releaseReservationForOrder({
@@ -1273,4 +1296,101 @@ export async function rejectOrder({ orderId, actorUser, reviewNote = "" }) {
   }
 
   return rejectedOrder;
+}
+
+// Phase 6 of the order-state-handling redesign: the one reversible
+// transition in the whole system. Admin-only by design (dispatcher revert
+// of their own verify is out of scope - dispatcher verify has no
+// reservation to unwind and less mis-click risk).
+//
+// The atomic filter deliberately does NOT check `factory.sentToFactoryAt`
+// even though an earlier draft of this feature's spec called for it -
+// verified directly against verifyOrder above: for factory-mode orders,
+// `factory.sentToFactoryAt` is stamped in the SAME $set as the verify
+// itself ("verification IS 'sent to Factory'"), so that field is already
+// non-null the instant verify succeeds and would make revert permanently
+// unreachable. `status === VERIFIED` (not yet dispatched) plus the
+// reservation-not-consumed check already fully capture the real
+// irreversibility boundary (stock consumption at dispatch, per A5).
+export async function revertOrderVerification({ orderId, actorUser }) {
+  assertUser(actorUser);
+  if (normalizeUpper(actorUser?.role) !== ROLES.ADMIN) {
+    throw new ApiError(403, "Only Admin can revert a verification");
+  }
+  if (!orderId) {
+    throw new ApiError(400, "Missing orderId");
+  }
+
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw new ApiError(404, "Order not found");
+  }
+
+  // Dispatcher-assigned orders are reviewed by their dispatcher, not Admin
+  // (A3) - reverting one from the admin workspace would be undoing an
+  // action Admin never took. Kept as a plain guard (not a conflict) since
+  // it's about the wrong actor, not stale state.
+  if ((order.dealerSnapshot?.fulfillmentMode || "FACTORY") === "DISPATCHER") {
+    throw new ApiError(400, "Dispatcher-assigned orders cannot be reverted from the admin workspace");
+  }
+
+  const previousStatus = order.status;
+
+  let revertedOrder;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const updated = await Order.findOneAndUpdate(
+        {
+          _id: orderId,
+          status: ORDER_STATUS.VERIFIED,
+          "stockReservation.status": { $ne: "CONSUMED" },
+        },
+        {
+          $set: {
+            status: ORDER_STATUS.SUBMITTED,
+            review: {
+              reviewedByRole: null,
+              reviewedByUserId: null,
+              reviewedAt: null,
+              reviewNote: "",
+            },
+            unverifiedAt: new Date(),
+            unverifiedBy: getUserId(actorUser),
+          },
+          $push: {
+            statusHistory: {
+              fromStatus: previousStatus || "",
+              toStatus: ORDER_STATUS.SUBMITTED,
+              note: "Verification reverted by the Admin",
+              changedByUserId: getUserId(actorUser),
+              changedByRole: normalizeUpper(actorUser.role),
+              changedAt: new Date(),
+            },
+          },
+        },
+        { new: true, session },
+      );
+
+      if (!updated) {
+        throw await buildOrderConflictErrorFresh(orderId, {
+          message: "This order can no longer be reverted — it may have already moved on.",
+        });
+      }
+
+      await releaseReservationForOrder({
+        order: updated,
+        actorUser,
+        reason: "Verification reverted by admin",
+        note: "",
+        session,
+      });
+
+      revertedOrder = updated;
+    });
+  } finally {
+    session.endSession();
+  }
+
+  return revertedOrder;
 }

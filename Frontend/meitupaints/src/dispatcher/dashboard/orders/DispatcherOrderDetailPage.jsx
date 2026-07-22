@@ -11,11 +11,13 @@ import {
   useVerifyDispatcherOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
-import AdminDecisionModal from "../../../admin/dashboard/components/AdminDecisionModal.jsx";
+import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
+import { ACTION_VERB, getTransitions } from "../../../shared/orderStateMachine.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { SectionHeader, Surface } from "../../../components/dashboard/DashboardUI.jsx";
+import OpsRefetchHairline from "../../../components/dashboard/OpsRefetchHairline.jsx";
 import { Toast } from "../../../components/dashboard/Toast.jsx";
-import { OrderDetailStyles, OrderMilestoneStepper } from "../../../dealer/orderDetailUI.jsx";
+import { OrderDetailStyles } from "../../../dealer/orderDetailUI.jsx";
 import { normalizeStatus } from "../../../dealer/orderDetailLogic.js";
 import { formatFullDateTime, money } from "../../../admin/dashboard/orders/orderFormatting.js";
 import { AmendModal, StockCheckPanel } from "../../../admin/dashboard/orders/AdminOrdersPage.jsx";
@@ -27,6 +29,12 @@ import {
   OrderItemsTable,
   StatusBadge,
 } from "./DispatcherOrdersPage.jsx";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
+import { OwnerChip, OwnerChipStyles } from "../../../components/orderflow/OwnerChip.jsx";
+import { OrderEventFeed, OrderEventFeedStyles } from "../../../components/orderflow/OrderEventFeed.jsx";
+import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
+import { useOrderTransition } from "../../../components/orderflow/useOrderTransition.js";
+import { CelebrationLine, OrderTransitionStyles } from "../../../components/orderflow/CelebrationLine.jsx";
 
 function BackButton({ onClick }) {
   return (
@@ -51,6 +59,43 @@ function BackButton({ onClick }) {
       <DashboardIcon name="chevron" size={13} strokeWidth={2.2} style={{ transform: "rotate(180deg)" }} />
       Orders
     </button>
+  );
+}
+
+// Same field/copy pattern as Admin's own TransitionNoteField
+// (AdminOrderDetailPage.jsx) - kept as its own local copy per this
+// codebase's per-portal-duplication convention.
+function TransitionNoteField({ action, value, onChange, disabled }) {
+  if (action !== "verify" && action !== "reject") return null;
+  const label = action === "verify" ? "Verification note (optional)" : "Rejection reason (optional)";
+  const placeholder =
+    action === "verify"
+      ? "e.g. Payment receipt confirmed, stock checked manually…"
+      : "e.g. Out of stock, payment not received…";
+  return (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>{label}</span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        disabled={disabled}
+        style={{
+          width: "100%",
+          borderRadius: 14,
+          border: "none",
+          background: "var(--color-fog, #f5f5f7)",
+          padding: 12,
+          fontSize: 13.5,
+          fontWeight: 500,
+          color: "var(--color-ink, #1d1d1f)",
+          outline: "none",
+          resize: "vertical",
+          fontFamily: "inherit",
+        }}
+      />
+    </label>
   );
 }
 
@@ -97,11 +142,12 @@ export default function DispatcherOrderDetailPage() {
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
   const [amending, setAmending] = useState(false);
-  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
-  const [verifyNote, setVerifyNote] = useState("");
+  const [confirmTransition, setConfirmTransition] = useState(null); // { action, target, kind, irreversible }
+  const [reviewNote, setReviewNote] = useState("");
   const [toast, setToast] = useState(null);
+  const orderTransition = useOrderTransition();
 
-  const orderQuery = useGetDispatcherOrderQuery(orderId, { skip: !orderId });
+  const orderQuery = useGetDispatcherOrderQuery(orderId, { skip: !orderId, pollingInterval: 15000 });
   const order = orderQuery.data?.item || null;
 
   const [verifyDispatcherOrder] = useVerifyDispatcherOrderMutation();
@@ -112,10 +158,13 @@ export default function DispatcherOrderDetailPage() {
 
   const dealer = order?.dealerId || order?.dealerSnapshot || {};
   const normalizedStatus = normalizeStatus(order?.status);
-  const canAct = normalizedStatus === "SUBMITTED";
-  const canFulfill = normalizedStatus === "VERIFIED";
-  const canComplete = normalizedStatus === "DISPATCHED";
   const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED" || normalizedStatus === "COMPLETED";
+  // getTransitions (not bare status===SUBMITTED/VERIFIED/DISPATCHED checks)
+  // decides what's legal - mirrors the exact same replacement made in
+  // AdminOrderDetailPage.jsx and FactoryOrderModal.jsx (§Phase 1 "Deletions").
+  const dispatcherTransitions = order ? getTransitions(order, "DISPATCHER") : [];
+  const canAct = dispatcherTransitions.some((t) => t.action === "verify" || t.action === "reject");
+  const canFulfill = dispatcherTransitions.some((t) => t.action === "dispatch");
   // Dispatcher orders never touch the central factory stock ledger - they're
   // covered by the dispatcher's own stock, only actually consumed at
   // dispatch time (see consumeDispatcherStockForOrder). So this stays
@@ -136,7 +185,15 @@ export default function DispatcherOrderDetailPage() {
       await request();
       return true;
     } catch (err) {
-      setActionError(getQueryErrorMessage(err, "Action failed."));
+      const wasConflict = await handleTransitionError(err, {
+        refetchOrder: () => orderQuery.refetch(),
+        showToast: (t) => setToast({ tone: t.tone, title: t.message }),
+      });
+      if (wasConflict) {
+        setConfirmTransition(null);
+      } else {
+        setActionError(getQueryErrorMessage(err, GENERIC_ACTION_ERROR));
+      }
       return false;
     } finally {
       setBusyAction("");
@@ -154,67 +211,44 @@ export default function DispatcherOrderDetailPage() {
     }
   };
 
-  const handleVerify = async () => {
-    const success = await runAction(`verify-${order._id}`, () =>
-      verifyDispatcherOrder({
-        orderId: order._id,
-        payload: { reviewNote: verifyNote.trim() },
-      }).unwrap(),
-    );
+  function openTransition(transition) {
+    setReviewNote("");
+    setConfirmTransition(transition);
+  }
+
+  // Single handler for every DISPATCHER transition (verify, reject,
+  // dispatch, confirm-handover) - replaces the four separate handlers that
+  // each duplicated the same runAction/toast plumbing.
+  const handleConfirmTransition = async () => {
+    if (!confirmTransition || !order) return false;
+    const { action, kind } = confirmTransition;
+    const mutation =
+      action === "verify"
+        ? () => verifyDispatcherOrder({ orderId: order._id, payload: { reviewNote: reviewNote.trim() } }).unwrap()
+        : action === "reject"
+          ? () => rejectDispatcherOrder({ orderId: order._id, payload: { reviewNote: reviewNote.trim() } }).unwrap()
+          : action === "dispatch"
+            ? () => dispatchDispatcherOrder({ orderId: order._id, payload: { note: reviewNote.trim() } }).unwrap()
+            : action === "confirm-handover"
+              ? () => completeDispatcherOrder({ orderId: order._id, payload: { note: reviewNote.trim() } }).unwrap()
+              : null;
+    if (!mutation) return false;
+
+    const success = await runAction(`${action}-${order._id}`, mutation);
     if (success) {
-      setVerifyModalOpen(false);
-      setVerifyNote("");
-      setToast({
-        tone: "success",
-        title: "Order verified",
-        description: `${order.orderNumber} is ready to dispatch.`,
-      });
+      if (action === "reject") {
+        goBackToOrders();
+        return true;
+      }
+      orderTransition.celebrate({ action, kind, irreversible: true });
+      const TITLE = {
+        verify: "Order verified",
+        dispatch: "Order dispatched",
+        "confirm-handover": "Handover confirmed",
+      };
+      setToast({ tone: "success", title: TITLE[action] || "Done" });
     }
-  };
-
-  const handleDispatch = async () => {
-    const success = await runAction(`dispatch-${order._id}`, () =>
-      dispatchDispatcherOrder({
-        orderId: order._id,
-        payload: { note: "" },
-      }).unwrap(),
-    );
-    if (success) {
-      setToast({
-        tone: "success",
-        title: "Order dispatched",
-        description: `${order.orderNumber} has been dispatched and your stock deducted.`,
-      });
-    }
-  };
-
-  const handleComplete = async () => {
-    const success = await runAction(`complete-${order._id}`, () =>
-      completeDispatcherOrder({
-        orderId: order._id,
-        payload: { note: "" },
-      }).unwrap(),
-    );
-    if (success) {
-      setToast({
-        tone: "success",
-        title: "Order completed",
-        description: `${order.orderNumber} is now marked as completed.`,
-      });
-    }
-  };
-
-  const handleReject = async () => {
-    const reviewNote = window.prompt("Reason / rejection note:", "");
-    if (reviewNote === null) return;
-
-    const success = await runAction(`reject-${order._id}`, () =>
-      rejectDispatcherOrder({
-        orderId: order._id,
-        payload: { reviewNote: reviewNote.trim() },
-      }).unwrap(),
-    );
-    if (success) goBackToOrders();
+    return success;
   };
 
   const handleSaveAmendment = async (payload) => {
@@ -306,52 +340,41 @@ export default function DispatcherOrderDetailPage() {
               </ActionButton>
 
               {canAct ? (
-                <>
-                  <ActionButton subtle icon="edit" onClick={() => setAmending(true)} disabled={busyAction === `amend-${order._id}`}>
-                    Amend
-                  </ActionButton>
-                  <ActionButton icon="checkmark" onClick={() => setVerifyModalOpen(true)} disabled={busyAction === `verify-${order._id}`}>
-                    Verify
-                  </ActionButton>
-                  <ActionButton
-                    danger
-                    icon="reject"
-                    onClick={handleReject}
-                    disabled={busyAction === `reject-${order._id}`}
-                    loading={busyAction === `reject-${order._id}`}
-                  >
-                    {busyAction === `reject-${order._id}` ? "Rejecting…" : "Reject"}
-                  </ActionButton>
-                </>
-              ) : canFulfill ? (
-                <ActionButton
-                  icon="checkmark"
-                  onClick={handleDispatch}
-                  disabled={busyAction === `dispatch-${order._id}` || stockBlocksDispatch}
-                  loading={busyAction === `dispatch-${order._id}`}
-                >
-                  {busyAction === `dispatch-${order._id}`
-                    ? "Dispatching…"
-                    : stockBlocksDispatch
-                      ? "Stock blocked"
-                      : "Dispatch (deducts your stock)"}
-                </ActionButton>
-              ) : canComplete ? (
-                <ActionButton
-                  icon="checkmark"
-                  onClick={handleComplete}
-                  disabled={busyAction === `complete-${order._id}`}
-                  loading={busyAction === `complete-${order._id}`}
-                >
-                  {busyAction === `complete-${order._id}` ? "Completing…" : "Complete"}
+                <ActionButton subtle icon="edit" onClick={() => setAmending(true)} disabled={busyAction === `amend-${order._id}`}>
+                  Amend
                 </ActionButton>
               ) : null}
+
+              {/* getTransitions(order,"DISPATCHER") drives what's offered -
+                  confirm-handover now renders here like every other action
+                  (4-stage lifecycle: it's the owned final-mile confirmation,
+                  a peer of verify/dispatch, not a secondary afterthought). */}
+              {dispatcherTransitions.map((t) => {
+                  const stockGated = t.action === "dispatch" && stockBlocksDispatch;
+                  return (
+                    <ActionButton
+                      key={t.action}
+                      danger={t.kind === "destructive"}
+                      icon={t.action === "reject" ? "reject" : "checkmark"}
+                      onClick={() => openTransition(t)}
+                      disabled={Boolean(busyAction) || stockGated}
+                    >
+                      {stockGated ? "Stock blocked" : ACTION_VERB[t.action]}
+                    </ActionButton>
+                  );
+                })}
             </div>
           }
         />
 
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <OwnerChip order={order} role="DISPATCHER" />
           <StatusBadge status={order.status} />
+          <CelebrationLine
+            celebration={orderTransition.celebration}
+            holdOpen={orderTransition.holdOpen}
+            resumeCountdown={orderTransition.resumeCountdown}
+          />
         </div>
 
         <div
@@ -363,7 +386,7 @@ export default function DispatcherOrderDetailPage() {
             border: "1px solid rgba(29,29,31,.06)",
           }}
         >
-          <OrderMilestoneStepper order={order} />
+          <OrderStatusRail order={order} size="lg" />
         </div>
 
         {actionError ? (
@@ -382,6 +405,15 @@ export default function DispatcherOrderDetailPage() {
           </div>
         ) : null}
       </Surface>
+
+      <OpsRefetchHairline visible={orderQuery.isFetching && !(orderQuery.isLoading && !order)} />
+
+      <GlassCard style={{ padding: 18 }}>
+        <CardLabel icon="history">Activity</CardLabel>
+        <div style={{ marginTop: 10 }}>
+          <OrderEventFeed order={order} limit={6} />
+        </div>
+      </GlassCard>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(300px,.85fr)", gap: 16 }}>
         <GlassCard style={{ padding: 18 }}>
@@ -444,53 +476,35 @@ export default function DispatcherOrderDetailPage() {
         onSave={handleSaveAmendment}
       />
 
-      <AdminDecisionModal
-        open={verifyModalOpen}
-        title="Verify this order?"
-        subtitle="The order becomes ready to dispatch. You can leave a note for the record — it's optional."
-        confirmLabel="Verify Order"
-        busy={busyAction === `verify-${order._id}`}
-        details={[
-          { label: "Order", value: order?.orderNumber },
-          { label: "Dealer", value: dealer?.companyName },
-          { label: "Total", value: money(order?.totals?.total, order?.totals?.currency || "NPR") },
-        ]}
+      <TransitionConfirmSheet
+        open={Boolean(confirmTransition)}
         onClose={() => {
           if (!busyAction) {
-            setVerifyModalOpen(false);
-            setVerifyNote("");
+            setConfirmTransition(null);
+            setActionError("");
           }
         }}
-        onConfirm={handleVerify}
+        order={order}
+        action={confirmTransition?.action}
+        target={confirmTransition?.target}
+        onConfirm={handleConfirmTransition}
+        busy={Boolean(busyAction)}
+        error={actionError}
       >
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>
-            Verification note (optional)
-          </span>
-          <textarea
-            value={verifyNote}
-            onChange={(event) => setVerifyNote(event.target.value)}
-            placeholder="e.g. Payment receipt confirmed, stock checked manually…"
-            rows={3}
-            disabled={busyAction === `verify-${order._id}`}
-            style={{
-              width: "100%",
-              borderRadius: 14,
-              border: "none",
-              background: "var(--color-fog, #f5f5f7)",
-              padding: 12,
-              fontSize: 13.5,
-              fontWeight: 500,
-              color: "var(--color-ink, #1d1d1f)",
-              outline: "none",
-              resize: "vertical",
-              fontFamily: "inherit",
-            }}
-          />
-        </label>
-      </AdminDecisionModal>
+        <TransitionNoteField
+          action={confirmTransition?.action}
+          value={reviewNote}
+          onChange={setReviewNote}
+          disabled={Boolean(busyAction)}
+        />
+      </TransitionConfirmSheet>
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <OrderFlowRailStyles />
+      <OwnerChipStyles />
+      <OrderEventFeedStyles />
+      <TransitionConfirmSheetStyles />
+      <OrderTransitionStyles />
 
       <OrderDetailStyles />
     </div>

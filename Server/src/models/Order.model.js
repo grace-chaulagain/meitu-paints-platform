@@ -487,6 +487,17 @@ const OrderSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    // Audit pair for the one reversible transition in the system (Phase 6
+    // of the order-state-handling redesign) - set by revertOrderVerification,
+    // never cleared, so an order's full "was verified, then un-verified"
+    // history stays visible even after it's re-verified later.
+    unverifiedAt: { type: Date, default: null },
+    unverifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     amendments: {
       type: [OrderAmendmentSchema],
       default: [],

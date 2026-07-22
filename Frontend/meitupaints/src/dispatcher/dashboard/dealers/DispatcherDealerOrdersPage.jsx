@@ -164,7 +164,7 @@ function OrderDetailModal({ open, order, dealer, onClose, onGoToGlobalOrders, on
   if (!open || !order) return null;
 
   const normalizedStatus = normalizeStatus(order.status);
-  const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED";
+  const canDownloadPdf = normalizedStatus === "VERIFIED" || normalizedStatus === "DISPATCHED" || normalizedStatus === "COMPLETED";
 
   return (
     <div

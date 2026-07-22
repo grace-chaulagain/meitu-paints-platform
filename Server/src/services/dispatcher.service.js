@@ -7,6 +7,7 @@ import Product from "../models/Product.model.js";
 import DispatcherProductPrice from "../models/DispatcherProductPrice.model.js";
 import { listMyReplenishmentCatalog as fetchMyReplenishmentCatalog } from "./dispatcherPricing.service.js";
 import ApiError from "../utils/apiError.js";
+import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
 import {
   notifyDispatcherApplicationSubmitted,
   notifyFactoryOrderSubmitted,
@@ -505,7 +506,7 @@ export async function verifyAssignedOrder({
   const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
 
   if (normalizeStatus(order.status) !== "SUBMITTED") {
-    throw new Error("Only submitted orders can be verified");
+    throw buildOrderConflictError(order, { status: 400, message: "Only submitted orders can be verified" });
   }
 
   const reviewNote =
@@ -564,9 +565,9 @@ export async function verifyAssignedOrder({
       );
 
       if (!updated) {
-        throw new Error(
-          "This order was already reviewed by someone else. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(order._id, {
+          message: "This order was already reviewed by someone else. Please refresh and try again.",
+        });
       }
 
       await reserveDispatcherStockForOrder({
@@ -620,7 +621,7 @@ export async function rejectAssignedOrder({
   const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
 
   if (normalizeStatus(order.status) !== "SUBMITTED") {
-    throw new Error("Only submitted orders can be rejected");
+    throw buildOrderConflictError(order, { status: 400, message: "Only submitted orders can be rejected" });
   }
 
   const reviewNote =
@@ -662,9 +663,9 @@ export async function rejectAssignedOrder({
   );
 
   if (!updated) {
-    throw new Error(
-      "This order was already reviewed by someone else. Please refresh and try again.",
-    );
+    throw await buildOrderConflictErrorFresh(order._id, {
+      message: "This order was already reviewed by someone else. Please refresh and try again.",
+    });
   }
 
   return updated;
@@ -911,12 +912,12 @@ export async function getMyDispatcherStockHistory({
 }
 
 // ----------------------------
-// Single-step fulfillment for a dispatcher's assigned dealer orders:
+// Fulfillment for a dispatcher's assigned dealer orders:
 // Verified -> Dispatched (goods leave the dispatcher's warehouse - deducts
 // the dispatcher's own stock and credits the dealer's received-quantity
-// counter). Dispatched is terminal for these orders - there is no separate
-// delivery confirmation, since the dispatcher is the local final-mile
-// handoff.
+// counter) -> Completed (see completeAssignedOrder below - the dispatcher
+// separately confirms final-mile delivery, mirroring Factory's own
+// dispatch/deliver split; Dispatched is no longer treated as terminal).
 // ----------------------------
 
 export async function dispatchAssignedOrder({
@@ -929,7 +930,7 @@ export async function dispatchAssignedOrder({
 
   const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
   if (normalizeStatus(order.status) !== "VERIFIED") {
-    throw new Error("Order must be verified before it can be dispatched");
+    throw buildOrderConflictError(order, { status: 400, message: "Order must be verified before it can be dispatched" });
   }
 
   const note = normalizeText(payload.note);
@@ -982,9 +983,9 @@ export async function dispatchAssignedOrder({
       );
 
       if (!updated) {
-        throw new Error(
-          "Order status changed before it could be dispatched. Please refresh and try again.",
-        );
+        throw await buildOrderConflictErrorFresh(order._id, {
+          message: "Order status changed before it could be dispatched. Please refresh and try again.",
+        });
       }
 
       // Both stock movements share this transaction with the status
@@ -1035,7 +1036,7 @@ export async function completeAssignedOrder({
 
   const order = await getAssignedOrderOrThrow({ dispatcherId, orderId });
   if (normalizeStatus(order.status) !== "DISPATCHED") {
-    throw new Error("Order must be dispatched before it can be completed");
+    throw buildOrderConflictError(order, { status: 400, message: "Order must be dispatched before it can be completed" });
   }
 
   const note = normalizeText(payload.note);
@@ -1081,9 +1082,9 @@ export async function completeAssignedOrder({
   );
 
   if (!updated) {
-    throw new Error(
-      "Order status changed before it could be completed. Please refresh and try again.",
-    );
+    throw await buildOrderConflictErrorFresh(order._id, {
+      message: "Order status changed before it could be completed. Please refresh and try again.",
+    });
   }
 
   return updated;

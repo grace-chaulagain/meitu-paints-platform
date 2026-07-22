@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
 import {
   useAmendDispatcherOrderMutation,
+  useCompleteDispatcherOrderMutation,
   useDispatchDispatcherOrderMutation,
   useGetDispatcherDealersQuery,
   useGetDispatcherOrderQuery,
@@ -14,6 +15,8 @@ import {
   useVerifyDispatcherOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
+import { ACTION_VERB, getTransitions } from "../../../shared/orderStateMachine.js";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import {
   DashboardUIStyles,
@@ -26,9 +29,16 @@ import {
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
+import OpsRefetchHairline from "../../../components/dashboard/OpsRefetchHairline.jsx";
+import { Toast } from "../../../components/dashboard/Toast.jsx";
 import { ORDER_STATUS_META, normalizeStatus, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
 import { formatOrderDate, money } from "../../../admin/dashboard/orders/orderFormatting.js";
 import { groupOrdersByDay } from "../../../utils/orderDayGrouping.js";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
+import { OwnerChip, OwnerChipStyles } from "../../../components/orderflow/OwnerChip.jsx";
+import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
+import { useQueueArrivals } from "../../../components/orderflow/arrivals.js";
+import { ArrivalStyles, SoundMuteToggle } from "../../../components/orderflow/ArrivalIndicators.jsx";
 
 // Every tab maps to exactly one real order status - simpler than the
 // earlier "Archive merges three statuses" scheme, and each tab now means
@@ -214,14 +224,6 @@ export function CloseButton({ onClick }) {
   );
 }
 
-// Rich order "card" - dealer name, order number + status pill, amount,
-// item-thumbnail strip, and a live/settled status footer - matching Admin's
-// Order Register card language exactly (see AdminOrdersPage.jsx) rather than
-// the flat one-line rows this page used before.
-function DispatcherOrderSpinner({ size = 22, color }) {
-  return <span aria-hidden="true" className="dispatcher-order-spinner" style={{ width: size, height: size, "--spinner-color": color }} />;
-}
-
 function DispatcherOrderTabs({ options, value, onChange }) {
   return (
     <div className="dispatcher-order-tabs" role="tablist">
@@ -245,14 +247,6 @@ function DispatcherOrderTabs({ options, value, onChange }) {
     </div>
   );
 }
-
-const TONE_MARKER = {
-  positive: { color: "#2fb344", bg: "rgba(47,179,68,.14)", icon: "checkmark" },
-  caution: { color: "#b45309", bg: "rgba(180,131,9,.14)", icon: "info" },
-  accent: { color: "var(--color-azure, #0071e3)", bg: "rgba(0,113,227,.12)", icon: "refresh" },
-  critical: { color: "#b42318", bg: "rgba(180,35,24,.12)", icon: "reject" },
-  neutral: { color: "var(--color-graphite, #707070)", bg: "rgba(29,29,31,.08)", icon: "package" },
-};
 
 function OrderThumbnails({ items, productsMap, familyMap }) {
   const visible = items.slice(0, 4);
@@ -279,74 +273,63 @@ function OrderThumbnails({ items, productsMap, familyMap }) {
   );
 }
 
-function DispatcherOrderTimelineRow({ item, onOpen, productsMap, familyMap }) {
+// Matches AdminOrdersPage.jsx's Order Register card exactly - status used
+// to be repeated four ways here too (a colored marker icon, this Pill, the
+// rail, and a bottom row repeating the label with its own spinner); trimmed
+// to just the Pill + rail, which already say everything the other two said.
+// The inline primary-action button is new here (Admin's list only ever has
+// one primary transition - verify; this list has three depending on tab -
+// verify/dispatch/confirm-handover) - getTransitions is the single source
+// for which one applies, so the button never disagrees with the detail page.
+function DispatcherOrderTimelineRow({ item, onOpen, onQuickAction, isArrived, productsMap, familyMap }) {
   const status = normalizeStatus(item.status);
   const meta = orderStatusMeta(status);
-  const marker = TONE_MARKER[meta.tone] || TONE_MARKER.neutral;
   const items = Array.isArray(item.items) ? item.items : [];
   const dealer = item?.dealerId || item?.dealerSnapshot || {};
   const dealerName = dealer?.companyName || dealer?.contactName || "Unassigned dealer";
+  const primaryTransition = getTransitions(item, "DISPATCHER").find((t) => t.kind === "primary");
 
   return (
-    <div className="dispatcher-order-timeline-row">
-      <span
-        className="dispatcher-order-marker"
-        style={{ "--marker-color": marker.color, "--marker-bg": marker.bg }}
-        aria-hidden="true"
-      >
-        <DashboardIcon name={marker.icon} size={13} strokeWidth={2.4} />
-      </span>
-
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpen(item)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onOpen(item);
-          }
-        }}
-        className="dash-selectable-row dispatcher-order-card"
-      >
-        <div className="dispatcher-order-card-top">
-          <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
-            <span className="dispatcher-order-dealer">{dealerName}</span>
-            <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className="dispatcher-order-number">{item.orderNumber || "Unnamed Order"}</span>
-              <Pill tone={meta.tone} size="small">{meta.label}</Pill>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span className="dispatcher-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
-            <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(item)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(item);
+        }
+      }}
+      className={`dash-selectable-row dispatcher-order-card ${isArrived ? "orderflow-arrival-highlight" : ""}`}
+    >
+      <div className="dispatcher-order-card-top">
+        <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
+          <span className="dispatcher-order-dealer">{dealerName}</span>
+          <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span className="dispatcher-order-number">{item.orderNumber || "Unnamed Order"}</span>
+            <Pill tone={meta.tone} size="small">{meta.label}</Pill>
+            <OwnerChip order={item} role="DISPATCHER" />
           </div>
         </div>
-
-        <div className="dispatcher-order-meta">
-          {formatOrderDate(item.createdAt)} · {items.length} {items.length === 1 ? "item" : "items"}
-        </div>
-
-        <div className="dispatcher-order-card-bottom">
-          <OrderThumbnails items={items} productsMap={productsMap} familyMap={familyMap} />
-          <div className="dispatcher-order-state-copy">
-            {meta.live ? (
-              <>
-                <DispatcherOrderSpinner size={26} color={marker.color} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: marker.color }}>{meta.label}</span>
-              </>
-            ) : (
-              <>
-                <DashboardIcon name={marker.icon} size={12} strokeWidth={2.4} style={{ color: marker.color }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: marker.color }}>{meta.label}</span>
-                <span style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>
-                  {formatOrderDate(item.updatedAt || item.createdAt)}
-                </span>
-              </>
-            )}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {primaryTransition ? (
+            <ActionButton icon="checkmark" onClick={() => onQuickAction(item, primaryTransition)}>
+              {ACTION_VERB[primaryTransition.action]}
+            </ActionButton>
+          ) : null}
+          <span className="dispatcher-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
+          <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
         </div>
       </div>
+
+      <div className="dispatcher-order-card-meta-row">
+        <OrderThumbnails items={items} productsMap={productsMap} familyMap={familyMap} />
+        <span className="dispatcher-order-meta">
+          {formatOrderDate(item.createdAt)} · {items.length} {items.length === 1 ? "item" : "items"}
+        </span>
+      </div>
+
+      <OrderStatusRail order={item} size="sm" />
     </div>
   );
 }
@@ -705,6 +688,7 @@ export default function DispatcherOrdersPage() {
   const navigate = useNavigate();
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
+  const [toast, setToast] = useState(null);
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
   const [viewMode, setViewMode] = useState("PENDING");
@@ -714,6 +698,13 @@ export default function DispatcherOrdersPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [amendOrder, setAmendOrder] = useState(null);
+  // Inline quick-action from the list (Admin's Order Register pattern) -
+  // covers whichever primary transition applies to the row's current status
+  // (verify/dispatch/confirm-handover), always through the same
+  // TransitionConfirmSheet every detail page uses, never a bare-confirm.
+  const [confirmAction, setConfirmAction] = useState(null); // { order, action, target }
+  const [listActionBusy, setListActionBusy] = useState(false);
+  const [listActionError, setListActionError] = useState("");
 
   const queryOrderId = useMemo(() => new URLSearchParams(location.search || "").get("orderId") || "", [location.search]);
 
@@ -765,8 +756,8 @@ export default function DispatcherOrdersPage() {
     return params;
   }, [committedSearch, dealerFilter, page, pageSize, viewMode]);
 
-  const ordersQuery = useGetDispatcherOrdersQuery(orderParams);
-  const orderDetailQuery = useGetDispatcherOrderQuery(queryOrderId, { skip: !queryOrderId });
+  const ordersQuery = useGetDispatcherOrdersQuery(orderParams, { pollingInterval: 20000 });
+  const orderDetailQuery = useGetDispatcherOrderQuery(queryOrderId, { skip: !queryOrderId, pollingInterval: 15000 });
   const dealersQuery = useGetDispatcherDealersQuery({ limit: 100 });
   const productsQuery = useGetProductsQuery();
   const familiesQuery = useGetProductFamiliesQuery();
@@ -774,6 +765,7 @@ export default function DispatcherOrdersPage() {
   const [rejectDispatcherOrder] = useRejectDispatcherOrderMutation();
   const [amendDispatcherOrder] = useAmendDispatcherOrderMutation();
   const [dispatchDispatcherOrder] = useDispatchDispatcherOrderMutation();
+  const [completeDispatcherOrder] = useCompleteDispatcherOrderMutation();
 
   const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
   const totalOrders = ordersQuery.data?.total ?? orders.length;
@@ -833,6 +825,13 @@ export default function DispatcherOrdersPage() {
 
   const groupedOrders = useMemo(() => groupOrdersByDay(orders), [orders]);
 
+  // Pending (SUBMITTED) is already the "needs you" view for a dispatcher -
+  // reviewerParty owns every SUBMITTED order here, no separate toggle
+  // needed the way Admin's list needed one (where Pending mixes both
+  // fulfillment modes). Arrivals treatment is scoped to it the same way
+  // Factory's Inbox lane is scoped (§2.6/Phase 5).
+  const arrivedIds = useQueueArrivals(viewMode === "PENDING" ? orders : [], viewMode, { laneLabel: "Pending" });
+
   function refetchOrders() {
     ordersQuery.refetch();
     if (queryOrderId) orderDetailQuery.refetch();
@@ -877,7 +876,14 @@ export default function DispatcherOrdersPage() {
       await request();
       return true;
     } catch (err) {
-      setActionError(getQueryErrorMessage(err, "Action failed."));
+      const wasConflict = await handleTransitionError(err, {
+        refetchOrder: () => (queryOrderId ? orderDetailQuery.refetch() : null),
+        invalidateList: () => ordersQuery.refetch(),
+        showToast: (t) => setToast({ tone: t.tone, title: t.message }),
+      });
+      if (!wasConflict) {
+        setActionError(getQueryErrorMessage(err, GENERIC_ACTION_ERROR));
+      }
       return false;
     } finally {
       setBusyAction("");
@@ -911,6 +917,43 @@ export default function DispatcherOrdersPage() {
     if (success) {
       setSelectedOrder(null);
       clearOrderQuery();
+    }
+  }
+
+  // Backs the inline quick-action button on each list card - one handler
+  // for all three primary transitions (verify/dispatch/confirm-handover),
+  // matching AdminOrdersPage.jsx's handleInlineVerify shape.
+  async function handleInlineConfirm() {
+    if (!confirmAction?.order) return false;
+    const { order, action } = confirmAction;
+    const mutation =
+      action === "verify"
+        ? () => verifyDispatcherOrder({ orderId: order._id, payload: {} }).unwrap()
+        : action === "dispatch"
+          ? () => dispatchDispatcherOrder({ orderId: order._id, payload: {} }).unwrap()
+          : action === "confirm-handover"
+            ? () => completeDispatcherOrder({ orderId: order._id, payload: {} }).unwrap()
+            : null;
+    if (!mutation) return false;
+
+    setListActionBusy(true);
+    setListActionError("");
+    try {
+      await mutation();
+      return true;
+    } catch (err) {
+      const wasConflict = await handleTransitionError(err, {
+        invalidateList: () => ordersQuery.refetch(),
+        showToast: (t) => setToast({ tone: t.tone, title: t.message }),
+      });
+      if (wasConflict) {
+        setConfirmAction(null);
+      } else {
+        setListActionError(getQueryErrorMessage(err, GENERIC_ACTION_ERROR));
+      }
+      return false;
+    } finally {
+      setListActionBusy(false);
     }
   }
 
@@ -962,9 +1005,14 @@ export default function DispatcherOrdersPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <SectionHeader
             icon="orders"
-            title="Dispatcher Orders"
+            title="Dealer orders you fulfill"
             subtitle="Review, amend, process, and download summaries for your assigned dealer orders."
-            action={isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+            action={
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+                <SoundMuteToggle />
+              </div>
+            }
           />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
             <div style={{ width: 240 }}>
@@ -1005,6 +1053,8 @@ export default function DispatcherOrdersPage() {
         ) : null}
       </Surface>
 
+      <OpsRefetchHairline visible={isRefreshing} />
+
       {loading ? (
         <Surface padding={18}>
           <div style={{ height: 260, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
@@ -1022,7 +1072,6 @@ export default function DispatcherOrdersPage() {
             {groupedOrders.map((group) => (
               <div key={group.key} className="dispatcher-order-timeline-day">
                 <div className="dispatcher-order-timeline-day-header">
-                  <span className="dispatcher-order-timeline-day-marker" aria-hidden="true" />
                   <div className="dispatcher-order-timeline-day-label">
                     {group.relativeLabel ? (
                       <>
@@ -1035,9 +1084,20 @@ export default function DispatcherOrdersPage() {
                     )}
                   </div>
                 </div>
-                <div style={{ display: "grid", gap: 14 }}>
+                <div style={{ display: "grid", gap: 8 }}>
                   {group.orders.map((item) => (
-                    <DispatcherOrderTimelineRow key={item._id} item={item} onOpen={openOrderPreview} productsMap={productsMap} familyMap={familyMap} />
+                    <DispatcherOrderTimelineRow
+                      key={item._id}
+                      item={item}
+                      onOpen={openOrderPreview}
+                      onQuickAction={(order, transition) => {
+                        setListActionError("");
+                        setConfirmAction({ order, action: transition.action, target: transition.target });
+                      }}
+                      isArrived={arrivedIds.has(item._id)}
+                      productsMap={productsMap}
+                      familyMap={familyMap}
+                    />
                   ))}
                 </div>
               </div>
@@ -1105,6 +1165,22 @@ export default function DispatcherOrdersPage() {
         onDownloadPdf={handleDownloadPdf}
       />
 
+      <TransitionConfirmSheet
+        open={Boolean(confirmAction)}
+        onClose={() => {
+          if (!listActionBusy) {
+            setConfirmAction(null);
+            setListActionError("");
+          }
+        }}
+        order={confirmAction?.order}
+        action={confirmAction?.action}
+        target={confirmAction?.target}
+        onConfirm={handleInlineConfirm}
+        busy={listActionBusy}
+        error={listActionError}
+      />
+
       <AmendOrderModal
         key={amendOrder?._id || "amend-modal-closed"}
         open={Boolean(amendOrder)}
@@ -1133,48 +1209,42 @@ export default function DispatcherOrdersPage() {
         .dispatcher-order-tab.is-active span:first-child{ color:var(--tab-accent); font-weight:700; }
         .dispatcher-order-tab.is-active .dispatcher-order-tab-count{ background:color-mix(in srgb, var(--tab-accent) 12%, transparent); color:var(--tab-accent); }
 
-        .dispatcher-order-timeline{ position:relative; display:grid; gap:26px; }
-        .dispatcher-order-timeline-day{ position:relative; display:grid; gap:14px; }
-        .dispatcher-order-timeline-day-header{ position:relative; display:grid; grid-template-columns:32px 1fr; align-items:center; column-gap:14px; }
-        .dispatcher-order-timeline-day-label{ grid-column:2; display:flex; align-items:center; font-size:12.5px; color:var(--color-graphite, #707070); white-space:nowrap; }
-        .dispatcher-order-timeline-day-label strong{ font-size:13px; font-weight:700; color:var(--color-ink, #1d1d1f); }
+        .dispatcher-order-timeline{ position:relative; display:grid; gap:18px; }
+        .dispatcher-order-timeline-day{ position:relative; display:grid; gap:8px; }
+        .dispatcher-order-timeline-day-header{ display:flex; align-items:center; padding:0 2px; }
+        .dispatcher-order-timeline-day-label{ display:flex; align-items:center; font-size:12px; color:var(--color-graphite, #707070); white-space:nowrap; }
+        .dispatcher-order-timeline-day-label strong{ font-size:12.5px; font-weight:700; color:var(--color-ink, #1d1d1f); }
         .dispatcher-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
-        .dispatcher-order-timeline-day-marker{ display:none; }
 
-        .dispatcher-order-timeline-row{ position:relative; display:grid; grid-template-columns:32px 1fr; column-gap:14px; align-items:center; }
-        .dispatcher-order-marker{ position:relative; z-index:1; justify-self:center; width:24px; height:24px; border-radius:999px; display:grid; place-items:center; background:var(--marker-bg); color:var(--marker-color); border:2px solid #fff; box-shadow:0 0 0 1px rgba(29,29,31,.08); flex-shrink:0; }
-
-        .dispatcher-order-card{ border-radius:16px; border:1px solid rgba(29,29,31,.08); background:#fff; padding:20px 22px; cursor:pointer; box-shadow:0 12px 32px rgba(29,29,31,.06); transition:box-shadow .18s ease, transform .16s ease, border-color .16s ease, background .18s ease; }
-        .dispatcher-order-card:hover{ transform:translateY(-1px); box-shadow:0 16px 42px rgba(29,29,31,.09); border-color:rgba(0,113,227,.18); }
-        .dispatcher-order-card:active{ transform:translateY(0) scale(.996); box-shadow:0 8px 22px rgba(29,29,31,.07); background:rgba(255,255,255,.96); }
-        .dispatcher-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:3px; }
-        .dispatcher-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-        .dispatcher-order-dealer{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
-        .dispatcher-order-number{ font-size:12px; font-weight:600; color:var(--color-graphite, #707070); }
-        .dispatcher-order-amount{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
-        .dispatcher-order-meta{ margin-top:5px; font-size:12px; color:var(--color-graphite, #707070); }
-        .dispatcher-order-card-bottom{ margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-        .dispatcher-order-state-copy{ display:flex; align-items:center; gap:7px; flex-shrink:0; }
-
-        .dispatcher-order-thumb{ width:46px; height:46px; border-radius:10px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
-        .dispatcher-order-thumb-more{ font-size:12px; font-weight:700; color:var(--color-graphite, #707070); }
-
-        .dispatcher-order-spinner{
-          display:inline-block;
-          border-radius:999px;
-          background:
-            radial-gradient(circle at 50% 9%, var(--spinner-color) 0 8%, transparent 9%),
-            radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--spinner-color) 88%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 91% 50%, color-mix(in srgb, var(--spinner-color) 76%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 78% 80%, color-mix(in srgb, var(--spinner-color) 64%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 50% 91%, color-mix(in srgb, var(--spinner-color) 52%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 22% 80%, color-mix(in srgb, var(--spinner-color) 40%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 9% 50%, color-mix(in srgb, var(--spinner-color) 30%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 22% 20%, color-mix(in srgb, var(--spinner-color) 20%, transparent) 0 7%, transparent 8%);
-          animation:dispatcherOrderSpin .78s linear infinite;
-          filter:drop-shadow(0 0 4px color-mix(in srgb, var(--spinner-color) 24%, transparent));
+        /* Matches AdminOrdersPage.jsx's Order Register card exactly - status
+           used to live in four places here too (a colored marker icon, this
+           Pill, the rail, and a bottom row repeating the label with its own
+           spinner) - trimmed to just the Pill + rail. Flatter elevation
+           (hairline border, near-flush shadow) matches DESIGN.md's
+           restrained-shadow guidance instead of the floating-card look this
+           previously had. */
+        .dispatcher-order-card{
+          border-radius:14px;
+          border:1px solid rgba(29,29,31,.08);
+          background:#fff;
+          padding:14px 16px;
+          cursor:pointer;
+          box-shadow:0 1px 2px rgba(29,29,31,.03);
+          transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
         }
-        @keyframes dispatcherOrderSpin{ to{ transform:rotate(360deg); } }
+        .dispatcher-order-card:hover{ border-color:rgba(0,113,227,.22); box-shadow:0 2px 8px rgba(29,29,31,.05); }
+        .dispatcher-order-card:active{ background:rgba(0,113,227,.025); }
+        .dispatcher-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:2px; }
+        .dispatcher-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .dispatcher-order-dealer{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+        .dispatcher-order-number{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); }
+        .dispatcher-order-amount{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
+        .dispatcher-order-card-meta-row{ margin-top:10px; display:flex; align-items:center; gap:10px; }
+        .dispatcher-order-meta{ font-size:11.5px; color:var(--color-graphite, #707070); }
+        .dispatcher-order-card > .orderflow-rail{ margin-top:10px; }
+
+        .dispatcher-order-thumb{ width:28px; height:28px; border-radius:7px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
+        .dispatcher-order-thumb-more{ font-size:10px; font-weight:700; color:var(--color-graphite, #707070); }
 
         .dispatcher-order-page-btn{ min-width:32px; height:32px; padding:0 8px; border-radius:10px; border:none; background:transparent; font-size:12.5px; font-weight:700; color:var(--color-ink, #1d1d1f); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; transition:background .16s ease, transform .14s ease; }
         .dispatcher-order-page-btn:disabled{ opacity:.35; cursor:not-allowed; }
@@ -1185,7 +1255,6 @@ export default function DispatcherOrdersPage() {
         .dispatcher-order-page-btn.is-active:not(:disabled):active{ background:#006edb; transform:translateY(0) scale(.965); }
 
         @media (prefers-reduced-motion: reduce){
-          .dispatcher-order-spinner{ animation:none; }
           .dispatcher-order-card,
           .dispatcher-order-page-btn{ transition:none!important; }
           .dispatcher-order-card:hover,
@@ -1194,23 +1263,20 @@ export default function DispatcherOrdersPage() {
 
         @media (max-width:760px){
           .dispatcher-order-tab{ padding-left:10px; padding-right:10px; }
-          .dispatcher-order-card{ padding:16px; }
+          .dispatcher-order-card{ padding:12px 14px; }
           .dispatcher-order-card-top{ align-items:flex-start; }
-          .dispatcher-order-thumb{ width:42px; height:42px; }
         }
 
         @media (max-width:560px){
-          .dispatcher-order-timeline-row,
-          .dispatcher-order-timeline-day-header{
-            grid-template-columns:24px 1fr;
-            column-gap:10px;
-          }
-          .dispatcher-order-marker{ width:22px; height:22px; }
           .dispatcher-order-card-top{ flex-direction:column; }
-          .dispatcher-order-card-bottom{ align-items:flex-start; }
-          .dispatcher-order-state-copy{ width:100%; justify-content:flex-start; }
         }
       `}</style>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
+      <OrderFlowRailStyles />
+      <OwnerChipStyles />
+      <ArrivalStyles />
+      <TransitionConfirmSheetStyles />
     </div>
   );
 }

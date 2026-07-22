@@ -169,6 +169,26 @@ export const verifyOrderController = asyncHandler(async (req, res) => {
 });
 
 // ----------------------------
+// Revert verification (Phase 6 - the one reversible transition, Admin only)
+// ----------------------------
+
+export const revertOrderVerificationController = asyncHandler(async (req, res) => {
+  const { orderId } = req.params || {};
+  if (!orderId) throw new ApiError(400, "Missing orderId");
+
+  const item = await orderService.revertOrderVerification({
+    orderId,
+    actorUser: req.user,
+  });
+
+  res.status(200).json({
+    ok: true,
+    message: "Verification reverted.",
+    item,
+  });
+});
+
+// ----------------------------
 // Ensure Proforma Invoice metadata - serialNumber + generatedAt (Admin /
 // Factory, PI generation)
 // ----------------------------

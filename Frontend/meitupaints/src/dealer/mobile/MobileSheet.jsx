@@ -37,7 +37,11 @@ const DRAG_EXIT_DURATION_MS = 200;
 // handle should dip (a first-open hint), only that it should. Only
 // ProductSheet.jsx passes it, gated by its own once-ever localStorage
 // check; every other MobileSheet consumer leaves it at the default false.
-export function MobileSheet({ open, onClose, ariaLabel, height = "auto", children, footer, handleCoachMark = false }) {
+//
+// `dragDisabled` (default false, additive - no existing caller passes it,
+// so behavior is unchanged for all of them) blocks drag-to-dismiss, e.g.
+// TransitionConfirmSheet while its confirm mutation is in flight.
+export function MobileSheet({ open, onClose, ariaLabel, height = "auto", children, footer, handleCoachMark = false, dragDisabled = false }) {
   const [phase, setPhase] = useState(open ? "open" : "closed");
   const sheetRef = useRef(null);
   const scrimRef = useRef(null);
@@ -97,6 +101,7 @@ export function MobileSheet({ open, onClose, ariaLabel, height = "auto", childre
     sheetRef,
     scrimRef,
     scrollRef,
+    disabled: dragDisabled,
     onDismiss: () => {
       setPhase("closing-drag");
       scheduleUnmount(DRAG_EXIT_DURATION_MS);

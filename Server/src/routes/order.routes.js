@@ -7,6 +7,7 @@ import {
   getOrderStockCheckController,
   amendOrderController,
   verifyOrderController,
+  revertOrderVerificationController,
   ensureProformaInvoiceMetadataController,
   rejectOrderController,
 } from "../controllers/order.controller.js";
@@ -96,6 +97,17 @@ router.post(
   validateParams(orderIdParamsSchema),
   validateBody(orderReviewBodySchema),
   rejectOrderController,
+);
+
+// Revert a verification back to Submitted (Phase 6 - the one reversible
+// transition; Admin only, dispatcher revert of their own verify is out of
+// scope per the spec).
+router.post(
+  "/:orderId/revert-verification",
+  auth,
+  requireRole("ADMIN"),
+  validateParams(orderIdParamsSchema),
+  revertOrderVerificationController,
 );
 
 // Assign (or return the already-assigned/already-frozen) Proforma Invoice

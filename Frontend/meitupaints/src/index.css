@@ -122,6 +122,13 @@
      dropdowns, modals) — the built-in CSS easings read as sluggish. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* Same curves under the names the order-flow animation constitution uses
+     (ORDER_STATE_HANDLING_REPORT.md / dealer mobile's V2 §3) - aliased
+     rather than duplicated so there's one source of truth per value. Only
+     --ease-sheet is a genuinely new curve (iOS-style drawer easing). */
+  --ease-out-strong: var(--ease-out);
+  --ease-in-out-strong: var(--ease-in-out);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* Legacy compat — so dashboard pages don't break */
   --red: #1d1d1f;

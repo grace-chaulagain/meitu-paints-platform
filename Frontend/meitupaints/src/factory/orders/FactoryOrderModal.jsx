@@ -8,6 +8,8 @@ import {
   useUpdateFactoryDispatchPrepMutation,
 } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
+import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../shared/orderConflict.js";
+import { getTransitions } from "../../shared/orderStateMachine.js";
 import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import { GhostButton, Pill, PrimaryButton, SectionHeader, Spinner, ToggleSwitch } from "../../components/dashboard/DashboardUI.jsx";
 import { Toast } from "../../components/dashboard/Toast.jsx";
@@ -16,9 +18,6 @@ import { downloadProformaPdf } from "../invoices/downloadProformaPdf.jsx";
 import { downloadOrderSummaryPdf } from "../../utils/downloadOrderSummaryPdf.jsx";
 import {
   fieldInputStyle,
-  isOrderAwaitingFactory,
-  isOrderDone,
-  isOrderInShipment,
   money,
   productCount,
   productDisplayName,
@@ -28,6 +27,12 @@ import {
   titleCaseLabel,
   priorityForOrder,
 } from "../factoryHelpers.js";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../components/orderflow/OrderStatusRail.jsx";
+import { OwnerChip, OwnerChipStyles } from "../../components/orderflow/OwnerChip.jsx";
+import { OrderEventFeed, OrderEventFeedStyles } from "../../components/orderflow/OrderEventFeed.jsx";
+import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../components/orderflow/TransitionConfirmSheet.jsx";
+import { useOrderTransition } from "../../components/orderflow/useOrderTransition.js";
+import { CelebrationLine, OrderTransitionStyles } from "../../components/orderflow/CelebrationLine.jsx";
 
 const CHECKLIST_ITEMS = [
   ["stock", "Stock Available"],
@@ -66,7 +71,7 @@ function TableWrap({ headers, cellPadding = "9px 12px", children }) {
   );
 }
 
-export default function FactoryOrderModal({ orderId, orders, onClose, onDispatched, onDelivered }) {
+export default function FactoryOrderModal({ orderId, orders, onClose, onDispatched, onDelivered, onRefetchList }) {
   const order = useMemo(() => (orders || []).find((item) => item._id === orderId) || null, [orders, orderId]);
 
   // Hydrated from order.dispatchPrep (persisted server-side) rather than
@@ -86,6 +91,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   const [piGenerated, setPiGenerated] = useState(() => Boolean(order?.dispatchPrep?.proformaGeneratedAt));
   const [invoiceHint, setInvoiceHint] = useState(false);
   const [confirmingDispatch, setConfirmingDispatch] = useState(false);
+  const [confirmingDeliver, setConfirmingDeliver] = useState(false);
   const [generatingProforma, setGeneratingProforma] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [savingDispatchPrep, setSavingDispatchPrep] = useState(false);
@@ -93,6 +99,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const invoiceHintTimeout = useRef(null);
+  const orderTransition = useOrderTransition();
 
   useEffect(() => () => clearTimeout(invoiceHintTimeout.current), []);
 
@@ -106,9 +113,14 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
 
   if (!order) return null;
 
-  const canDispatch = isOrderAwaitingFactory(order);
-  const canDeliver = isOrderInShipment(order);
-  const canReject = !isOrderDone(order);
+  // getTransitions (not the old isOrderAwaitingFactory/isOrderInShipment/
+  // isOrderDone booleans) decides what's legal - same names kept so every
+  // existing `canDispatch`/`canDeliver`/`canReject` usage below is
+  // unaffected by the source change (§Phase 1 "Deletions").
+  const factoryTransitions = getTransitions(order, "FACTORY");
+  const canDispatch = factoryTransitions.some((t) => t.action === "dispatch");
+  const canDeliver = factoryTransitions.some((t) => t.action === "deliver");
+  const canReject = factoryTransitions.some((t) => t.action === "reject");
   const driverReady = Boolean(driverName.trim() && driverPhone.trim());
   // The PI is a physical document handed to whoever's driving - the vehicle
   // number has to be on it before it can be generated, even though Dispatch
@@ -124,10 +136,11 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
   const stockRows = order.stockCheck?.items || [];
   const reservationStatus = reservationLabel(order);
   const hasDeductedStock = Boolean(order.stockDeduction?.deductedAt);
-  // Both flows need the same driver info (who's carrying the order out) - so
-  // starting either one reveals the same input section rather than each
-  // maintaining its own copy.
-  const showDriverDetails = confirmingDispatch || generatingProforma;
+  // The PI-generation flow still shows the inline driver form here (it can
+  // run independently of dispatching); the dispatch flow's own copy of the
+  // same fields now lives inside TransitionConfirmSheet's children instead
+  // (§Phase 4: "driver details + PI controls injected as children").
+  const showDriverDetails = generatingProforma;
 
   async function run(fn) {
     setError("");
@@ -135,7 +148,13 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
       await fn();
       return true;
     } catch (err) {
-      setError(getQueryErrorMessage(err, "Action failed."));
+      const wasConflict = await handleTransitionError(err, {
+        refetchOrder: onRefetchList,
+        showToast: (t) => setToast({ tone: t.tone, title: t.message }),
+      });
+      if (!wasConflict) {
+        setError(getQueryErrorMessage(err, GENERIC_ACTION_ERROR));
+      }
       return false;
     }
   }
@@ -222,8 +241,43 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
     setSummaryBusy(false);
   }
 
+  // §Phase 4: "stop ejecting the operator" - success no longer closes the
+  // modal or switches lanes by itself. It celebrates in place (rail
+  // advances via the order prop naturally updating once markOut/
+  // markDelivered's cache invalidation refetches); the actual close+switch+
+  // toast (onDispatched/onDelivered, still owned by FactoryOrdersPage)
+  // fires only when the operator deliberately chooses to leave, via the
+  // ghost button or the modal's own close button.
+  async function handleConfirmDispatch() {
+    const success = await run(() =>
+      markOut({ orderId: order._id, payload: { driverName, driverPhone, vehicleNumber } }).unwrap(),
+    );
+    if (success) {
+      orderTransition.celebrate({ action: "dispatch", kind: "primary", irreversible: true });
+    }
+    return success;
+  }
+
+  async function handleConfirmDeliver() {
+    const success = await run(() => markDelivered({ orderId: order._id }).unwrap());
+    if (success) {
+      orderTransition.celebrate({ action: "deliver", kind: "primary", irreversible: true });
+    }
+    return success;
+  }
+
+  function handleModalClose() {
+    if (orderTransition.celebration?.action === "dispatch") {
+      onDispatched?.(order);
+    } else if (orderTransition.celebration?.action === "deliver") {
+      onDelivered?.(order);
+    } else {
+      onClose();
+    }
+  }
+
   return (
-    <ModalOverlay open={Boolean(order)} onClose={onClose} maxWidth={900}>
+    <ModalOverlay open={Boolean(order)} onClose={handleModalClose} maxWidth={900}>
       <div style={{ display: "grid", gap: 18 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <SectionHeader
@@ -231,12 +285,12 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
             icon="orders"
             title={order.orderNumber}
           />
-          <CloseButton onClick={onClose} />
+          <CloseButton onClick={handleModalClose} />
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {canDispatch && !confirmingDispatch && !generatingProforma ? (
+            {canDispatch && !generatingProforma ? (
               <PrimaryButton
                 icon="truck"
                 disabled={busy || !readyForShipment}
@@ -245,28 +299,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
                 Dispatch
               </PrimaryButton>
             ) : null}
-            {canDispatch && confirmingDispatch ? (
-              <>
-                <GhostButton onClick={() => setConfirmingDispatch(false)} disabled={busy}>Cancel</GhostButton>
-                <PrimaryButton
-                  disabled={busy}
-                  onClick={async () => {
-                    const success = await run(() =>
-                      markOut({ orderId: order._id, payload: { driverName, driverPhone, vehicleNumber } }).unwrap(),
-                    );
-                    if (success) {
-                      onDispatched?.(order);
-                    } else {
-                      setConfirmingDispatch(false);
-                    }
-                  }}
-                >
-                  {markOutState.isLoading ? <Spinner size={14} /> : <DashboardIcon name="checkmark" size={15} strokeWidth={2} />}
-                  {markOutState.isLoading ? "Dispatching…" : "Confirm Dispatch — consumes reserved stock"}
-                </PrimaryButton>
-              </>
-            ) : null}
-            {canDispatch && !confirmingDispatch ? (
+            {canDispatch ? (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <GhostButton
                   disabled={busy || (generatingProforma && !proformaReady)}
@@ -312,13 +345,7 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
               </div>
             ) : null}
             {canDeliver ? (
-              <PrimaryButton
-                disabled={busy}
-                onClick={async () => {
-                  const success = await run(() => markDelivered({ orderId: order._id }).unwrap());
-                  if (success) onDelivered?.(order);
-                }}
-              >
+              <PrimaryButton disabled={busy} onClick={() => setConfirmingDeliver(true)}>
                 {deliveredState.isLoading ? <Spinner size={14} /> : <DashboardIcon name="checkmark" size={15} strokeWidth={2} />}
                 {deliveredState.isLoading ? "Completing…" : "Mark Delivered"}
               </PrimaryButton>
@@ -344,6 +371,35 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
         </div>
 
         {error ? <Banner tone="error">{error}</Banner> : null}
+
+        {orderTransition.celebration ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              padding: "10px 14px",
+              borderRadius: 12,
+              background: "rgba(0,113,227,.06)",
+            }}
+          >
+            <CelebrationLine
+              celebration={orderTransition.celebration}
+              holdOpen={orderTransition.holdOpen}
+              resumeCountdown={orderTransition.resumeCountdown}
+            />
+            <GhostButton onClick={handleModalClose}>
+              Done — view {orderTransition.celebration.action === "dispatch" ? "Shipment" : "Completed"} lane
+            </GhostButton>
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <OrderStatusRail order={order} size="lg" />
+          <OwnerChip order={order} role="FACTORY" />
+        </div>
 
         {canDispatch ? (
           <section style={{ display: "grid", gap: 12 }}>
@@ -512,6 +568,10 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
           </TableWrap>
         </Disclosure>
 
+        <Disclosure label="Activity" defaultOpen>
+          <OrderEventFeed order={order} />
+        </Disclosure>
+
         <Disclosure label={`Product List (${(order.items || []).length})`}>
           <TableWrap headers={["Product", "Qty", "Rate", "Total"]} cellPadding="13px 18px">
             {(order.items || []).map((item, index) => (
@@ -564,30 +624,52 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
             )}
           </section>
         ) : null}
-
-        <section style={{ display: "grid", gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>History</span>
-          {(order.statusHistory || []).length === 0 ? (
-            <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>No status history recorded.</span>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {order.statusHistory.slice().reverse().map((item, index) => (
-                <div key={`${item.toStatus}-${index}`} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <DashboardIcon name="history" size={13} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)", marginTop: 3, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink, #1d1d1f)" }}>{titleCaseLabel(item.toStatus)}</div>
-                    <div style={{ marginTop: 1, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-                      {item.note || item.reason || "Status changed"} · {compactDate(item.changedAt)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+      <TransitionConfirmSheet
+        open={confirmingDispatch}
+        onClose={() => setConfirmingDispatch(false)}
+        order={order}
+        action="dispatch"
+        target="DISPATCHED"
+        onConfirm={handleConfirmDispatch}
+        busy={busy}
+        error={error}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Driver Name</span>
+            <input value={driverName} onChange={(event) => setDriverName(event.target.value)} style={fieldInputStyle()} autoFocus />
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Driver Phone</span>
+            <input value={driverPhone} onChange={(event) => setDriverPhone(event.target.value)} style={fieldInputStyle()} />
+          </label>
+          <label style={{ display: "grid", gap: 5 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-graphite, #707070)" }}>Vehicle Number</span>
+            <input value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} style={fieldInputStyle()} />
+          </label>
+        </div>
+      </TransitionConfirmSheet>
+
+      <TransitionConfirmSheet
+        open={confirmingDeliver}
+        onClose={() => setConfirmingDeliver(false)}
+        order={order}
+        action="deliver"
+        target="COMPLETED"
+        onConfirm={handleConfirmDeliver}
+        busy={busy}
+        error={error}
+      />
+
+      <OrderFlowRailStyles />
+      <OwnerChipStyles />
+      <OrderEventFeedStyles />
+      <TransitionConfirmSheetStyles />
+      <OrderTransitionStyles />
 
       <style>{`
         .factory-order-mini-close{

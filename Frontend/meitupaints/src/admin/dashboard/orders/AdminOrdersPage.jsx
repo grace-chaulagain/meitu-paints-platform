@@ -5,10 +5,13 @@ import {
   useGetProductFamiliesQuery,
   useGetProductsQuery,
   useGetVerifiedDispatchersQuery,
+  useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
+import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { formatOrderDate, money } from "./orderFormatting.js";
+import { money } from "./orderFormatting.js";
 import { normalizeStatus, ORDER_STATUS_META, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
 import {
   EmptyState as DashboardEmptyState,
@@ -21,6 +24,12 @@ import {
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 import { AppleDateField, AppleDropdown, PopoverListMenu } from "../../../components/dashboard/ApplePickers.jsx";
+import OpsRefetchHairline from "../../../components/dashboard/OpsRefetchHairline.jsx";
+import { getTransitions, isWaitingOn } from "../../../shared/orderStateMachine.js";
+import { OwnerChip, OwnerChipStyles } from "../../../components/orderflow/OwnerChip.jsx";
+import { OrderStatusRail, OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
+import { useQueueArrivals } from "../../../components/orderflow/arrivals.js";
+import { ArrivalStyles, SoundMuteToggle } from "../../../components/orderflow/ArrivalIndicators.jsx";
 
 const PAGE_SIZE_OPTIONS = [
   { key: "25", label: "25 per page" },
@@ -55,11 +64,15 @@ const ARCHIVE_STATUS_FILTERS = ORDER_STATUS_FILTERS.filter(
 // dispatcher's own replenishment orders; "Dispatcher Routed" means dealer
 // orders whose fulfillmentMode routes them through a dispatcher rather than
 // the factory - the specific-dispatcher picker below only applies to that one.
+// "Dispatcher" vs "Dispatcher Routed" used to be the only distinction
+// between these two - two different concepts (a dispatcher's own
+// restock order vs. a dealer's order fulfilled through a dispatcher) with
+// near-identical names. Spelled out so the label alone disambiguates them.
 const ROUTE_MODES = [
   { key: "ALL", label: "All" },
   { key: "FACTORY", label: "Factory" },
-  { key: "DISPATCHER_REPLENISHMENT", label: "Dispatcher" },
-  { key: "DISPATCHER_ALL", label: "Dispatcher Routed" },
+  { key: "DISPATCHER_REPLENISHMENT", label: "Dispatcher's Own Orders" },
+  { key: "DISPATCHER_ALL", label: "Dealer Orders via Dispatcher" },
 ];
 
 // Collapses the fine-grained routeMode value (which includes DISPATCHER:<id>
@@ -71,6 +84,51 @@ function routeModeGroup(routeMode) {
   if (routeMode === "DISPATCHER_REPLENISHMENT") return "DISPATCHER_REPLENISHMENT";
   if (routeMode === "DISPATCHER_ALL" || String(routeMode || "").startsWith("DISPATCHER:")) return "DISPATCHER_ALL";
   return "ALL";
+}
+
+// "Factory" is the only routing scope that never surprises anyone - it's
+// what every dealer order looks like by default, and it's what every status
+// tab defaults to except "All" (which deliberately starts broad). Anything
+// else silently narrows or redirects the list toward dealers/orders an
+// admin scoped to Factory work has never touched - that's exactly the gap
+// that reads as "I don't recognize any of these dealers." The scope banner
+// and the route-menu trigger's own color both key off this single check.
+function isDefaultRouteScope(routeMode, filterMode) {
+  const group = routeModeGroup(routeMode);
+  return filterMode === "ALL" ? group === "ALL" : group === "FACTORY";
+}
+
+// Plain-English description of the active routing scope, for the banner
+// that replaces "check the dropdown" with "read one sentence." Only called
+// when isDefaultRouteScope is false, so every branch here describes a
+// deviation worth explaining, not the default state.
+function describeRouteScope(routeMode, dispatchers) {
+  const group = routeModeGroup(routeMode);
+  if (group === "DISPATCHER_REPLENISHMENT") {
+    return {
+      tone: "caution",
+      text: "Showing dispatchers' own stock-replenishment orders - not dealer orders.",
+    };
+  }
+  if (group === "DISPATCHER_ALL") {
+    if (String(routeMode).startsWith("DISPATCHER:")) {
+      const id = String(routeMode).split(":")[1];
+      const dispatcher = dispatchers.find((d) => String(d._id) === id);
+      const name = dispatcher?.companyName || dispatcher?.name || "a dispatcher";
+      return {
+        tone: "caution",
+        text: `Showing dealer orders routed through ${name} - these dealers aren't part of your Factory queue.`,
+      };
+    }
+    return {
+      tone: "caution",
+      text: "Showing dealer orders routed through dispatchers - these dealers aren't part of your Factory queue.",
+    };
+  }
+  if (group === "FACTORY") {
+    return { tone: "info", text: "Showing Factory orders only - dispatcher-routed orders are hidden." };
+  }
+  return { tone: "info", text: "Showing every routing path - Factory, dispatcher-routed, and dispatchers' own orders." };
 }
 
 const DATE_PRESETS = [
@@ -207,7 +265,7 @@ const dateFieldLabelStyle = {
 // Apple Maps "mode of transport" picker style: generously spaced rows, no
 // dividers, the selected row gets a soft gray rounded-rect fill instead of
 // a checkmark.
-function RouteModeMenu({ options, value, onChange }) {
+function RouteModeMenu({ options, value, onChange, isNonDefault = false }) {
   const selectedOption = options.find((option) => option.key === value) || options[0];
 
   return (
@@ -224,7 +282,7 @@ function RouteModeMenu({ options, value, onChange }) {
           onClick={onClick}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="admin-route-menu-trigger"
+          className={`admin-route-menu-trigger ${isNonDefault ? "is-non-default" : ""}`}
         >
           <span>{selectedOption?.label || "Select"}</span>
           <DashboardIcon name="chevron" size={11} strokeWidth={2} style={{ transform: "rotate(90deg)" }} />
@@ -244,6 +302,24 @@ function RouteModeMenu({ options, value, onChange }) {
         </button>
       )}
     />
+  );
+}
+
+// The single fix for "I didn't even know the filter was applied" - a
+// sentence, not a dropdown's current value, sitting directly above the
+// results so it can't be scrolled past unread. "caution" (amber) is for
+// scopes that put unfamiliar dealers on screen (anything dispatcher-related
+// - the actual case that caused the confusion); "info" (blue) is for scopes
+// that are still her own dealers, just broader or narrower than usual.
+function RouteScopeBanner({ scope, resetLabel, onReset }) {
+  return (
+    <div className={`admin-route-scope-banner tone-${scope.tone}`}>
+      <DashboardIcon name={scope.tone === "caution" ? "warning" : "info"} size={15} strokeWidth={2.2} />
+      <span className="admin-route-scope-banner-text">{scope.text}</span>
+      <button type="button" className="admin-route-scope-banner-reset" onClick={onReset}>
+        {resetLabel}
+      </button>
+    </div>
   );
 }
 
@@ -348,6 +424,62 @@ function groupOrdersByDay(orders) {
   return groups;
 }
 
+// The "All routes" scope is the one place Factory orders and dispatcher-
+// related orders legitimately land in the same list together (it's the
+// tab-level default there, not a mistake) - so it's also the one place a
+// flat day-grouped list can genuinely read as "whose order is this?" A
+// route section per routing type, each with its own day-grouped list
+// inside, keeps the day-grouping everyone's used to while making the type
+// boundary a real heading instead of a badge you have to read per card.
+// Returns a single ungrouped section when `active` is false, so callers
+// that don't need this (the normal single-route scopes) pay no extra cost.
+function groupOrdersByRoute(orders, { active }) {
+  if (!active) {
+    return [{ routeKey: null, routeLabel: null, dayGroups: groupOrdersByDay(orders) }];
+  }
+
+  const buckets = new Map();
+  orders.forEach((order) => {
+    const dealer = order?.dealerSnapshot || order?.dealerId || {};
+    const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
+    const isReplenishment = order?.orderOrigin === "DISPATCHER_REPLENISHMENT";
+    const isDispatcherRouted = !isReplenishment && (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER";
+
+    let routeKey;
+    let routeLabel;
+    if (isReplenishment) {
+      routeKey = "dispatcher-replenishment";
+      routeLabel = "Dispatchers' Own Orders";
+    } else if (isDispatcherRouted) {
+      const name = dispatcher?.companyName || dispatcher?.name || "Unknown Dispatcher";
+      // Keyed on the actual dispatcherId (populated-or-not), not the
+      // display name - two dispatchers sharing a company name would
+      // otherwise merge into one section/count here, exactly the "wrong
+      // dealers grouped together" failure this feature exists to prevent.
+      const dispatcherIdValue = order?.dispatcherId?._id || order?.dispatcherId || name;
+      routeKey = `dispatcher:${String(dispatcherIdValue)}`;
+      routeLabel = `Routed via ${name}`;
+    } else {
+      routeKey = "factory";
+      routeLabel = "Factory Orders";
+    }
+
+    if (!buckets.has(routeKey)) {
+      buckets.set(routeKey, { routeKey, routeLabel, isDispatcherRelated: routeKey !== "factory", orders: [] });
+    }
+    buckets.get(routeKey).orders.push(order);
+  });
+
+  // Factory first (it's home base), then dispatcher-related groups
+  // alphabetically by label so the list order is stable across reloads.
+  return [...buckets.values()]
+    .sort((a, b) => {
+      if (a.isDispatcherRelated !== b.isDispatcherRelated) return a.isDispatcherRelated ? 1 : -1;
+      return a.routeLabel.localeCompare(b.routeLabel);
+    })
+    .map((bucket) => ({ ...bucket, dayGroups: groupOrdersByDay(bucket.orders) }));
+}
+
 function buildPageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
@@ -364,10 +496,6 @@ function buildPageList(current, total) {
 
 function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
-}
-
-function AdminOrderSpinner({ size = 22, color }) {
-  return <span aria-hidden="true" className="admin-order-spinner" style={{ width: size, height: size, "--spinner-color": color }} />;
 }
 
 function AdminOrderTabs({ options, value, onChange }) {
@@ -535,18 +663,6 @@ function deriveLineTotal(quantity, unitPrice) {
   return toSafeNumber(quantity) * toSafeNumber(unitPrice);
 }
 
-// Marker/spinner color per status tone (positive/caution/accent/critical/
-// neutral - the same tone vocabulary ORDER_STATUS_META already uses),
-// generalizing the dealer timeline's two-state (pending/completed) marker
-// into one that reads correctly across the full admin status set.
-const TONE_MARKER = {
-  positive: { color: "#2fb344", bg: "rgba(47,179,68,.14)", icon: "checkmark" },
-  caution: { color: "#b45309", bg: "rgba(180,131,9,.14)", icon: "info" },
-  accent: { color: "var(--color-azure, #0071e3)", bg: "rgba(0,113,227,.12)", icon: "refresh" },
-  critical: { color: "#b42318", bg: "rgba(180,35,24,.12)", icon: "reject" },
-  neutral: { color: "var(--color-graphite, #707070)", bg: "rgba(29,29,31,.08)", icon: "package" },
-};
-
 function adminOrderStatusMeta(status) {
   const normalized = normalizeStatus(status);
   const base = ORDER_STATUS_META[normalized] || { label: normalized || "—", tone: "neutral", live: false };
@@ -581,80 +697,76 @@ function OrderThumbnails({ items, productsMap, familyMap }) {
   );
 }
 
-function AdminOrderTimelineRow({ item, onOpen, productsMap, familyMap }) {
+function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap, familyMap }) {
   const status = normalizeStatus(item.status);
   const meta = adminOrderStatusMeta(status);
-  const marker = TONE_MARKER[meta.tone] || TONE_MARKER.neutral;
   const items = Array.isArray(item.items) ? item.items : [];
   const dealer = item?.dealerSnapshot || item?.dealerId || {};
   const dealerName = dealer?.companyName || dealer?.contactName || "Unassigned dealer";
   const dispatcher = item?.dispatcherSnapshot || item?.dispatcherId || {};
+  // getTransitions already knows admin can never verify a dispatcher-mode
+  // order - reusing it here means the inline button and the detail page's
+  // action area can never disagree about what's actually offered.
+  const verifyTransition = getTransitions(item, "ADMIN").find((t) => t.action === "verify");
+  // The one binary distinction that actually matters at a glance: is this
+  // Factory's normal work, or is it routed through a dispatcher in some way
+  // (a dealer order fulfilled via dispatcher, or a dispatcher's own restock
+  // order)? A colored left edge in the app's one accent color (DESIGN.md:
+  // azure is the sole accent, so this reuses it rather than adding a new
+  // hue) reads before any text does - the exact signal that was missing.
+  const isDispatcherRelated =
+    (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER" || item?.orderOrigin === "DISPATCHER_REPLENISHMENT";
 
+  // Status used to be repeated four ways on one card (a colored marker icon,
+  // this Pill, the rail, and a bottom "state copy" row with its own spinner)
+  // - the Pill + rail together already say everything those extra two said,
+  // so this card keeps exactly those two and drops the rest.
   return (
-    <div className="admin-order-timeline-row">
-      <span
-        className="admin-order-marker"
-        style={{ "--marker-color": marker.color, "--marker-bg": marker.bg }}
-        aria-hidden="true"
-      >
-        <DashboardIcon name={marker.icon} size={13} strokeWidth={2.4} />
-      </span>
-
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpen(item)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onOpen(item);
-          }
-        }}
-        className="dash-selectable-row admin-order-card"
-      >
-        <div className="admin-order-card-top">
-          <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
-            <span className="admin-order-dealer">{dealerName}</span>
-            <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className="admin-order-number">{item.orderNumber || "Unnamed Order"}</span>
-              <Pill tone={meta.tone} size="small">{meta.label}</Pill>
-              <RoutingBadge
-                mode={dealer?.fulfillmentMode || "FACTORY"}
-                dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
-              />
-              <OriginBadge origin={item?.orderOrigin} />
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span className="admin-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
-            <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(item)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(item);
+        }
+      }}
+      className={`dash-selectable-row admin-order-card ${isDispatcherRelated ? "is-dispatcher-related" : ""} ${isArrived ? "orderflow-arrival-highlight" : ""}`}
+    >
+      <div className="admin-order-card-top">
+        <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
+          <span className="admin-order-dealer">{dealerName}</span>
+          <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span className="admin-order-number">{item.orderNumber || "Unnamed Order"}</span>
+            <Pill tone={meta.tone} size="small">{meta.label}</Pill>
+            <RoutingBadge
+              mode={dealer?.fulfillmentMode || "FACTORY"}
+              dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
+            />
+            <OriginBadge origin={item?.orderOrigin} />
+            <OwnerChip order={item} role="ADMIN" />
           </div>
         </div>
-
-        <div className="admin-order-meta">
-          {formatTime(item.createdAt)} · {items.length} {items.length === 1 ? "item" : "items"}
-        </div>
-
-        <div className="admin-order-card-bottom">
-          <OrderThumbnails items={items} productsMap={productsMap} familyMap={familyMap} />
-          <div className="admin-order-state-copy">
-            {meta.live ? (
-              <>
-                <AdminOrderSpinner size={26} color={marker.color} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: marker.color }}>{meta.label}</span>
-              </>
-            ) : (
-              <>
-                <DashboardIcon name={marker.icon} size={12} strokeWidth={2.4} style={{ color: marker.color }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: marker.color }}>{meta.label}</span>
-                <span style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>
-                  {formatOrderDate(item.updatedAt || item.createdAt)}
-                </span>
-              </>
-            )}
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {verifyTransition ? (
+            <ActionButton icon="checkmark" onClick={() => onVerify(item, verifyTransition)}>
+              Verify
+            </ActionButton>
+          ) : null}
+          <span className="admin-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
+          <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
         </div>
       </div>
+
+      <div className="admin-order-card-meta-row">
+        <OrderThumbnails items={items} productsMap={productsMap} familyMap={familyMap} />
+        <span className="admin-order-meta">
+          {formatTime(item.createdAt)} · {items.length} {items.length === 1 ? "item" : "items"}
+        </span>
+      </div>
+
+      <OrderStatusRail order={item} size="sm" />
     </div>
   );
 }
@@ -1314,6 +1426,19 @@ export default function AdminOrdersPage() {
   const location = useLocation();
   const resultsRef = useRef(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // "Needs you" isn't a real order status (isWaitingOn is derived client-side
+  // from orderStateMachine.js), so it layers on top of the Pending tab
+  // rather than becoming a new server-side status value - the only status
+  // bucket ADMIN can ever own is factory-mode SUBMITTED, so Pending is
+  // already the exact superset this needs. Defaults on; remembered per
+  // session once the admin explicitly toggles it off.
+  const [needsYouOverride, setNeedsYouOverride] = useState(() => {
+    try {
+      return sessionStorage.getItem("meitu.admin.orders.needsYouOff") === "1" ? false : null;
+    } catch {
+      return null;
+    }
+  });
 
   const listState = useMemo(
     () => parseOrderListState(location.search),
@@ -1354,6 +1479,36 @@ export default function AdminOrdersPage() {
     },
     [navigate],
   );
+
+  // Inline verify from the list (Phase 3) - never a bare-confirm, always
+  // through the same TransitionConfirmSheet the detail page uses.
+  const [confirmVerify, setConfirmVerify] = useState(null); // { order, action, target }
+  const [listActionBusy, setListActionBusy] = useState(false);
+  const [listActionError, setListActionError] = useState("");
+  const [verifyAdminOrder] = useVerifyAdminOrderMutation();
+
+  async function handleInlineVerify() {
+    if (!confirmVerify) return false;
+    setListActionBusy(true);
+    setListActionError("");
+    try {
+      await verifyAdminOrder({ orderId: confirmVerify.order._id, payload: {} }).unwrap();
+      return true;
+    } catch (err) {
+      const wasConflict = await handleTransitionError(err, {
+        invalidateList: () => ordersQuery.refetch(),
+        showToast: () => {}, // the sheet closes on conflict below; no separate page-level toast surface here
+      });
+      if (wasConflict) {
+        setConfirmVerify(null);
+      } else {
+        setListActionError(getQueryErrorMessage(err, GENERIC_ACTION_ERROR));
+      }
+      return false;
+    } finally {
+      setListActionBusy(false);
+    }
+  }
 
   const orderParams = useMemo(() => {
     const params = {};
@@ -1405,7 +1560,7 @@ export default function AdminOrdersPage() {
     pageSize,
   ]);
 
-  const ordersQuery = useGetAdminOrdersQuery(orderParams);
+  const ordersQuery = useGetAdminOrdersQuery(orderParams, { pollingInterval: 20000 });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
   const productsQuery = useGetProductsQuery();
   const familiesQuery = useGetProductFamiliesQuery();
@@ -1434,7 +1589,36 @@ export default function AdminOrdersPage() {
     return map;
   }, [familiesQuery.data]);
 
-  const groupedOrders = useMemo(() => groupOrdersByDay(orders), [orders]);
+  // Only meaningful on the Pending tab (the only status bucket ADMIN can
+  // ever own) - elsewhere the toggle has nothing to filter and stays hidden.
+  const needsYouEligible = filterMode === "PENDING";
+  const needsYouCount = useMemo(
+    () => (needsYouEligible ? orders.filter((order) => isWaitingOn(order, "ADMIN")).length : 0),
+    [orders, needsYouEligible],
+  );
+  const needsYouActive = needsYouEligible && (needsYouOverride ?? needsYouCount > 0);
+  const visibleOrders = needsYouActive ? orders.filter((order) => isWaitingOn(order, "ADMIN")) : orders;
+
+  // Same lane-diff pattern as Dispatcher's Pending queue and Factory's
+  // Inbox lane (§2.6/Phase 4-5) - scoped to the Pending tab, the only
+  // status bucket ADMIN can ever own.
+  const arrivedIds = useQueueArrivals(filterMode === "PENDING" ? orders : [], filterMode, { laneLabel: "Pending" });
+
+  function toggleNeedsYou() {
+    const next = !needsYouActive;
+    setNeedsYouOverride(next);
+    try {
+      sessionStorage.setItem("meitu.admin.orders.needsYouOff", next ? "0" : "1");
+    } catch {
+      // sessionStorage unavailable - the toggle just won't persist, not fatal
+    }
+  }
+
+  const showRouteGroups = routeModeGroup(routeMode) === "ALL";
+  const routeGroups = useMemo(
+    () => groupOrdersByRoute(visibleOrders, { active: showRouteGroups }),
+    [visibleOrders, showRouteGroups],
+  );
   const pageList = useMemo(() => buildPageList(page, totalPages), [page, totalPages]);
 
   const loading = ordersQuery.isLoading && orders.length === 0;
@@ -1502,6 +1686,11 @@ export default function AdminOrdersPage() {
       page: 1,
     });
   const changeRouteMode = (next) => updateListState({ routeMode: next, page: 1 });
+  // Deliberately narrower than resetFilters() - only snaps the routing scope
+  // back to whatever this tab's own default is, leaving search/date/status
+  // filters untouched. This is the banner's "wrong dealers on screen" fix,
+  // not a full "start over."
+  const resetRouteScope = () => updateListState({ routeMode: filterMode === "ALL" ? "ALL" : "FACTORY", page: 1 });
   const changeDatePreset = (next) => updateListState({ datePreset: next, page: 1 });
   const changeCustomFrom = (next) => updateListState({ customFrom: next, page: 1 });
   const changeCustomTo = (next) => updateListState({ customTo: next, page: 1 });
@@ -1522,7 +1711,12 @@ export default function AdminOrdersPage() {
             icon="orders"
             title="Order Register"
             subtitle="Track and manage every dealer's order."
-            action={isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+            action={
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+                <SoundMuteToggle />
+              </div>
+            }
           />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
             <div style={{ width: 240 }}>
@@ -1536,16 +1730,26 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <AdminOrderTabs
             options={STATUS_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }))}
             value={filterMode}
             onChange={changeFilterMode}
           />
+          {needsYouEligible ? (
+            <button type="button" className={`admin-needs-you-toggle ${needsYouActive ? "active" : ""}`} onClick={toggleNeedsYou}>
+              Needs you {needsYouCount > 0 ? `(${needsYouCount})` : ""}
+            </button>
+          ) : null}
         </div>
 
         <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <RouteModeMenu options={ROUTE_MODES} value={routeModeGroup(routeMode)} onChange={changeRouteMode} />
+          <RouteModeMenu
+            options={ROUTE_MODES}
+            value={routeModeGroup(routeMode)}
+            onChange={changeRouteMode}
+            isNonDefault={!isDefaultRouteScope(routeMode, filterMode)}
+          />
           {routeModeGroup(routeMode) === "DISPATCHER_ALL" ? (
             <div className="admin-dispatcher-picker dash-fade-up">
               <AppleDropdown
@@ -1574,6 +1778,14 @@ export default function AdminOrdersPage() {
             Filters
           </GhostButton>
         </div>
+
+        {!isDefaultRouteScope(routeMode, filterMode) ? (
+          <RouteScopeBanner
+            scope={describeRouteScope(routeMode, dispatchers)}
+            resetLabel={filterMode === "ALL" ? "Show every route" : "Back to my Factory queue"}
+            onReset={resetRouteScope}
+          />
+        ) : null}
 
         {filtersOpen ? (
           <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1610,6 +1822,8 @@ export default function AdminOrdersPage() {
         ) : null}
       </Surface>
 
+      <OpsRefetchHairline visible={isRefreshing} />
+
       <div ref={resultsRef} style={{ scrollMarginTop: 16, display: "grid", gap: 16 }}>
         {loading ? (
           <LoadingState />
@@ -1633,27 +1847,48 @@ export default function AdminOrdersPage() {
         ) : (
           <>
             <div className="admin-order-timeline">
-              {groupedOrders.map((group) => (
-                <div key={group.key} className="admin-order-timeline-day">
-                  <div className="admin-order-timeline-day-header">
-                    <span className="admin-order-timeline-day-marker" aria-hidden="true" />
-                    <div className="admin-order-timeline-day-label">
-                      {group.relativeLabel ? (
-                        <>
-                          <strong>{group.relativeLabel}</strong>
-                          <span className="admin-order-timeline-day-sep">•</span>
-                          <span>{group.dateText}</span>
-                        </>
-                      ) : (
-                        <strong>{group.dateText}</strong>
-                      )}
+              {routeGroups.map((routeGroup) => (
+                <div key={routeGroup.routeKey || "flat"} className="admin-order-route-group">
+                  {routeGroup.routeLabel ? (
+                    <div className={`admin-order-route-heading ${routeGroup.isDispatcherRelated ? "is-dispatcher-related" : ""}`}>
+                      <span className="admin-order-route-heading-dot" aria-hidden="true" />
+                      {routeGroup.routeLabel}
+                      <span className="admin-order-route-heading-count">{routeGroup.orders.length}</span>
                     </div>
-                  </div>
-                  <div style={{ display: "grid", gap: 14 }}>
-                    {group.orders.map((item) => (
-                      <AdminOrderTimelineRow key={item._id} item={item} onOpen={openOrder} productsMap={productsMap} familyMap={familyMap} />
-                    ))}
-                  </div>
+                  ) : null}
+                  {routeGroup.dayGroups.map((group) => (
+                    <div key={group.key} className="admin-order-timeline-day">
+                      <div className="admin-order-timeline-day-header">
+                        <div className="admin-order-timeline-day-label">
+                          {group.relativeLabel ? (
+                            <>
+                              <strong>{group.relativeLabel}</strong>
+                              <span className="admin-order-timeline-day-sep">•</span>
+                              <span>{group.dateText}</span>
+                            </>
+                          ) : (
+                            <strong>{group.dateText}</strong>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {group.orders.map((item) => (
+                          <AdminOrderTimelineRow
+                            key={item._id}
+                            item={item}
+                            onOpen={openOrder}
+                            onVerify={(order, transition) => {
+                              setListActionError("");
+                              setConfirmVerify({ order, action: transition.action, target: transition.target });
+                            }}
+                            isArrived={arrivedIds.has(item._id)}
+                            productsMap={productsMap}
+                            familyMap={familyMap}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -1703,6 +1938,26 @@ export default function AdminOrdersPage() {
         )}
       </div>
 
+      <TransitionConfirmSheet
+        open={Boolean(confirmVerify)}
+        onClose={() => {
+          if (!listActionBusy) {
+            setConfirmVerify(null);
+            setListActionError("");
+          }
+        }}
+        order={confirmVerify?.order}
+        action={confirmVerify?.action}
+        target={confirmVerify?.target}
+        onConfirm={handleInlineVerify}
+        busy={listActionBusy}
+        error={listActionError}
+      />
+      <TransitionConfirmSheetStyles />
+      <OwnerChipStyles />
+      <OrderFlowRailStyles />
+      <ArrivalStyles />
+
       <style>{`
         .admin-orders-page{
           --admin-button-ease:cubic-bezier(.23,1,.32,1);
@@ -1726,6 +1981,21 @@ export default function AdminOrdersPage() {
         .admin-orders-page button:focus-visible{
           outline:2px solid rgba(0,113,227,.42);
           outline-offset:3px;
+        }
+        .admin-needs-you-toggle{
+          height:32px;
+          padding:0 14px;
+          border-radius:999px;
+          border:1px solid rgba(0,113,227,.22);
+          background:#fff;
+          color:var(--color-azure, #0071e3);
+          font-size:12.5px;
+          font-weight:700;
+          cursor:pointer;
+        }
+        .admin-needs-you-toggle.active{
+          background:rgba(0,113,227,.1);
+          border-color:transparent;
         }
         .admin-orders-page .admin-ui-ghost-btn:not(:disabled):hover{
           background:rgba(255,255,255,.98)!important;
@@ -1806,6 +2076,55 @@ export default function AdminOrdersPage() {
           outline:2px solid rgba(0,113,227,.36);
           outline-offset:2px;
         }
+        /* Same "this control is doing something notable" treatment the
+           "Needs you" toggle already uses when active - the route filter
+           previously looked identical whether it was showing everything or
+           a narrowed slice, which was half of why a narrowed view went
+           unnoticed. */
+        .admin-route-menu-trigger.is-non-default{
+          background:rgba(0,113,227,.1);
+          color:var(--color-azure, #0071e3);
+        }
+        .admin-route-menu-trigger.is-non-default:hover{
+          background:rgba(0,113,227,.16);
+        }
+
+        .admin-route-scope-banner{
+          margin-top:12px;
+          display:flex;
+          align-items:center;
+          gap:9px;
+          padding:11px 14px;
+          border-radius:12px;
+          font-size:12.5px;
+          font-weight:600;
+          animation:dashFadeUp .18s var(--ease-out, cubic-bezier(.23,1,.32,1)) both;
+        }
+        .admin-route-scope-banner.tone-caution{
+          background:rgba(180,131,9,.1);
+          color:#8a6300;
+          border:1px solid rgba(180,131,9,.18);
+        }
+        .admin-route-scope-banner.tone-info{
+          background:rgba(0,113,227,.07);
+          color:#0058b8;
+          border:1px solid rgba(0,113,227,.16);
+        }
+        .admin-route-scope-banner-text{ flex:1 1 auto; min-width:0; }
+        .admin-route-scope-banner-reset{
+          flex-shrink:0;
+          border:none;
+          background:rgba(255,255,255,.6);
+          color:inherit;
+          font-size:12px;
+          font-weight:700;
+          padding:6px 12px;
+          border-radius:999px;
+          cursor:pointer;
+          transition:background .14s ease;
+        }
+        .admin-route-scope-banner.tone-caution .admin-route-scope-banner-reset:hover{ background:rgba(255,255,255,.9); }
+        .admin-route-scope-banner.tone-info .admin-route-scope-banner-reset:hover{ background:rgba(255,255,255,.9); }
 
         .admin-route-menu{
           z-index:1401;
@@ -1860,49 +2179,80 @@ export default function AdminOrdersPage() {
 
         .admin-dispatcher-picker{ display:inline-flex; }
 
-        .admin-order-timeline{ position:relative; display:grid; gap:26px; }
-        .admin-order-timeline-day{ position:relative; display:grid; gap:14px; }
-        .admin-order-timeline-day-header{ position:relative; display:grid; grid-template-columns:32px 1fr; align-items:center; column-gap:14px; }
-        .admin-order-timeline-day-label{ grid-column:2; display:flex; align-items:center; font-size:12.5px; color:var(--color-graphite, #707070); white-space:nowrap; }
-        .admin-order-timeline-day-label strong{ font-size:13px; font-weight:700; color:var(--color-ink, #1d1d1f); }
-        .admin-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
-        .admin-order-timeline-day-marker{ display:none; }
-
-        .admin-order-timeline-row{ position:relative; display:grid; grid-template-columns:32px 1fr; column-gap:14px; align-items:center; }
-        .admin-order-marker{ position:relative; z-index:1; justify-self:center; width:24px; height:24px; border-radius:999px; display:grid; place-items:center; background:var(--marker-bg); color:var(--marker-color); border:2px solid #fff; box-shadow:0 0 0 1px rgba(29,29,31,.08); flex-shrink:0; }
-
-        .admin-order-card{ border-radius:16px; border:1px solid rgba(29,29,31,.08); background:#fff; padding:20px 22px; cursor:pointer; box-shadow:0 12px 32px rgba(29,29,31,.06); transition:box-shadow .18s ease, transform .16s ease, border-color .16s ease, background .18s ease; }
-        .admin-order-card:hover{ transform:translateY(-1px); box-shadow:0 16px 42px rgba(29,29,31,.09); border-color:rgba(0,113,227,.18); }
-        .admin-order-card:active{ transform:translateY(0) scale(.996); box-shadow:0 8px 22px rgba(29,29,31,.07); background:rgba(255,255,255,.96); }
-        .admin-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:3px; }
-        .admin-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-        .admin-order-dealer{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
-        .admin-order-number{ font-size:12px; font-weight:600; color:var(--color-graphite, #707070); }
-        .admin-order-amount{ font-size:15px; font-weight:760; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
-        .admin-order-meta{ margin-top:5px; font-size:12px; color:var(--color-graphite, #707070); }
-        .admin-order-card-bottom{ margin-top:16px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-        .admin-order-state-copy{ display:flex; align-items:center; gap:7px; flex-shrink:0; }
-
-        .admin-order-thumb{ width:46px; height:46px; border-radius:10px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
-        .admin-order-thumb-more{ font-size:12px; font-weight:700; color:var(--color-graphite, #707070); }
-
-        .admin-order-spinner{
-          display:inline-block;
-          border-radius:999px;
-          background:
-            radial-gradient(circle at 50% 9%, var(--spinner-color) 0 8%, transparent 9%),
-            radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--spinner-color) 88%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 91% 50%, color-mix(in srgb, var(--spinner-color) 76%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 78% 80%, color-mix(in srgb, var(--spinner-color) 64%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 50% 91%, color-mix(in srgb, var(--spinner-color) 52%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 22% 80%, color-mix(in srgb, var(--spinner-color) 40%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 9% 50%, color-mix(in srgb, var(--spinner-color) 30%, transparent) 0 7%, transparent 8%),
-            radial-gradient(circle at 22% 20%, color-mix(in srgb, var(--spinner-color) 20%, transparent) 0 7%, transparent 8%);
-          animation:adminOrderSpin .78s linear infinite;
-          filter:drop-shadow(0 0 4px color-mix(in srgb, var(--spinner-color) 24%, transparent));
+        .admin-order-timeline{ position:relative; display:grid; gap:18px; }
+        .admin-order-route-group{ display:grid; gap:14px; }
+        /* Only rendered when the "All routes" scope could genuinely mix
+           Factory and dispatcher-related orders in one list - a real
+           heading per routing type instead of a per-card badge you have to
+           read every time, so "whose order is this" is answered once per
+           group instead of once per card. */
+        .admin-order-route-heading{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          padding:0 2px;
+          font-size:12.5px;
+          font-weight:700;
+          color:var(--color-graphite, #707070);
+          text-transform:uppercase;
+          letter-spacing:.03em;
         }
-        @keyframes adminOrderSpin{ to{ transform:rotate(360deg); } }
-        @media (prefers-reduced-motion: reduce){ .admin-order-spinner{ animation:none; } }
+        .admin-order-route-heading.is-dispatcher-related{ color:var(--color-azure, #0071e3); }
+        .admin-order-route-heading-dot{
+          width:7px;
+          height:7px;
+          border-radius:999px;
+          background:rgba(29,29,31,.25);
+          flex-shrink:0;
+        }
+        .admin-order-route-heading.is-dispatcher-related .admin-order-route-heading-dot{ background:var(--color-azure, #0071e3); }
+        .admin-order-route-heading-count{
+          font-weight:600;
+          color:var(--color-graphite, #707070);
+          text-transform:none;
+          letter-spacing:normal;
+        }
+        .admin-order-timeline-day{ position:relative; display:grid; gap:8px; }
+        .admin-order-timeline-day-header{ display:flex; align-items:center; padding:0 2px; }
+        .admin-order-timeline-day-label{ display:flex; align-items:center; font-size:12px; color:var(--color-graphite, #707070); white-space:nowrap; }
+        .admin-order-timeline-day-label strong{ font-size:12.5px; font-weight:700; color:var(--color-ink, #1d1d1f); }
+        .admin-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
+
+        /* Status used to live in four places on one card (a colored marker
+           icon, this Pill, the rail, and a bottom row repeating the label
+           with its own spinner) - trimmed to just the Pill + rail, which
+           already say everything the other two said. Flatter elevation
+           (hairline border, near-flush shadow) matches DESIGN.md's
+           restrained-shadow guidance instead of the floating-card look this
+           previously had. */
+        .admin-order-card{
+          border-radius:14px;
+          border:1px solid rgba(29,29,31,.08);
+          border-left-width:3px;
+          background:#fff;
+          padding:14px 16px 14px 14px;
+          cursor:pointer;
+          box-shadow:0 1px 2px rgba(29,29,31,.03);
+          transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+        }
+        .admin-order-card:hover{ border-color:rgba(0,113,227,.22); box-shadow:0 2px 8px rgba(29,29,31,.05); }
+        .admin-order-card.is-dispatcher-related:hover{ border-left-color:var(--color-azure, #0071e3); }
+        .admin-order-card:active{ background:rgba(0,113,227,.025); }
+        .admin-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:2px; }
+        /* The one binary "is this mine or a dispatcher's" signal, readable
+           before any text is - reuses the app's sole accent color rather
+           than introducing a new hue per routing type. */
+        .admin-order-card.is-dispatcher-related{ border-left-color:var(--color-azure, #0071e3); }
+        .admin-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .admin-order-dealer{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+        .admin-order-number{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); }
+        .admin-order-amount{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
+        .admin-order-card-meta-row{ margin-top:10px; display:flex; align-items:center; gap:10px; }
+        .admin-order-meta{ font-size:11.5px; color:var(--color-graphite, #707070); }
+        .admin-order-card > .orderflow-rail{ margin-top:10px; }
+
+        .admin-order-thumb{ width:28px; height:28px; border-radius:7px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
+        .admin-order-thumb-more{ font-size:10px; font-weight:700; color:var(--color-graphite, #707070); }
         @media (prefers-reduced-motion: reduce){
           .admin-orders-page button,
           .admin-orders-page .admin-order-card{
@@ -1932,21 +2282,12 @@ export default function AdminOrdersPage() {
 
         @media (max-width:760px){
           .admin-order-tab{ padding-left:10px; padding-right:10px; }
-          .admin-order-card{ padding:16px; }
+          .admin-order-card{ padding:12px 14px; }
           .admin-order-card-top{ align-items:flex-start; }
-          .admin-order-thumb{ width:42px; height:42px; }
         }
 
         @media (max-width:560px){
-          .admin-order-timeline-row,
-          .admin-order-timeline-day-header{
-            grid-template-columns:24px 1fr;
-            column-gap:10px;
-          }
-          .admin-order-marker{ width:22px; height:22px; }
           .admin-order-card-top{ flex-direction:column; }
-          .admin-order-card-bottom{ align-items:flex-start; }
-          .admin-order-state-copy{ width:100%; justify-content:flex-start; }
         }
       `}</style>
     </div>
