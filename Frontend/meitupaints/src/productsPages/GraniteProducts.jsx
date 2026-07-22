@@ -33,7 +33,7 @@ export default function GraniteProducts() {
     const jumpTop = () => {
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
       topRef.current?.scrollIntoView?.({ block: "start" });
     };
 

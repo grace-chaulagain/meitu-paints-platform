@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import NavBar from "../components/NavBar";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import productCategories from "../ProductsList/productCategories.json";
 import productsConfig from "../ProductsList/productsConfig.json";
 
@@ -81,8 +81,6 @@ const SPOTLIGHTS = [
 ];
 
 function Products() {
-  const location = useLocation();
-
   const [view, setView] = useState(() => {
     try {
       const saved = localStorage.getItem("meitu_products_view");
@@ -109,10 +107,6 @@ function Products() {
     }, 5200);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.key]);
 
   const ROUTE_BASE = useMemo(() => {
     const rb = productsConfig?.routeBase || {};

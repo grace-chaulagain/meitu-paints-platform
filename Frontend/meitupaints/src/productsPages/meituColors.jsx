@@ -1,11 +1,10 @@
 import React, {
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { AutoSizer, Grid, WindowScroller } from "react-virtualized";
 import "react-virtualized/styles.css";
@@ -132,7 +131,6 @@ function safeType(t) {
 }
 
 export default function MeituColors() {
-  const location = useLocation();
   const dispatch = useDispatch();
   const cachedColors = useSelector(selectPreparedColors);
   const colorsCacheInitialized = useSelector(selectColorsCacheInitialized);
@@ -212,38 +210,6 @@ export default function MeituColors() {
     activeTone,
     query,
   ]);
-
-  // Always jump to the top on route entry + reload (disable browser scroll restoration)
-  useLayoutEffect(() => {
-    const prev = window.history.scrollRestoration;
-    try {
-      window.history.scrollRestoration = "manual";
-    } catch {
-      // ignore
-    }
-
-    const jumpTop = () => {
-      // set both to defeat Safari / mobile quirks
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      window.scrollTo(0, 0);
-    };
-
-    // Run immediately, then again after the next frame to override any late restoration
-    jumpTop();
-    const raf = requestAnimationFrame(jumpTop);
-    const t = window.setTimeout(jumpTop, 0);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t);
-      try {
-        window.history.scrollRestoration = prev;
-      } catch {
-        // ignore
-      }
-    };
-  }, [location.key]);
 
   // Reveal polish (matches your home page behavior)
   useEffect(() => {

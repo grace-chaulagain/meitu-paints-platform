@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import NavBar from "../components/NavBar";
 import paintRates from "../ProductsList/ratesData.json";
 import SYSTEMS from "../ProductsList/ratecalculatorSystems.json";
@@ -45,7 +45,6 @@ function normalizeAreaValue(value) {
 }
 
 export default function RateCalculator() {
-  const location = useLocation();
   const pageRef = useRef(null);
   const builderRef = useRef(null);
   const resultRef = useRef(null);
@@ -99,10 +98,6 @@ export default function RateCalculator() {
       })),
     [],
   );
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.key]);
 
   useEffect(() => {
     const root = pageRef.current;

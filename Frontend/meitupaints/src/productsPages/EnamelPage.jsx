@@ -1,45 +1,10 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import NavBar from "../components/NavBar";
 import ProductOrderLink from "../components/ProductOrderLink.jsx";
 import paintsSpecialty from "../ProductsList/paintsSpecialty.json";
 
 export default function Enamel() {
-  const location = useLocation();
-  const topRef = useRef(null);
-
-  // Prevent the browser from restoring previous scroll position on SPA navigation
-  useLayoutEffect(() => {
-    try {
-      window.history.scrollRestoration = "manual";
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Always jump to the top on route entry + reload (no animation)
-  useLayoutEffect(() => {
-    const jumpTop = () => {
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-      window.scrollTo(0, 0);
-      topRef.current?.scrollIntoView?.({ block: "start" });
-    };
-
-    jumpTop();
-    const raf = requestAnimationFrame(jumpTop);
-    const t0 = window.setTimeout(jumpTop, 0);
-    const t50 = window.setTimeout(jumpTop, 50);
-    const t150 = window.setTimeout(jumpTop, 150);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t0);
-      window.clearTimeout(t50);
-      window.clearTimeout(t150);
-    };
-  }, [location.pathname]);
-
   const ENAMEL_COLORS = [
     { name: "White", rgb: "rgb(248, 250, 251)" },
     { name: "Chocolate", rgb: "rgb(93, 51, 23)" },
@@ -127,7 +92,6 @@ export default function Enamel() {
 
   return (
     <>
-      <div ref={topRef} style={{ height: 0, overflow: "hidden" }} />
       <NavBar />
       {/* HERO */}
       <section className="product-hero">

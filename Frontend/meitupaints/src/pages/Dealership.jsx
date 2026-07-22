@@ -182,7 +182,6 @@ export default function DealershipPage() {
           background: var(--color-fog, #f5f5f7);
           color: var(--color-ink, #1d1d1f);
           font-family: var(--font-sf-pro-text, Inter, system-ui, sans-serif);
-          overflow: hidden;
         }
         .apple-dealer-page svg {
           width: 20px;

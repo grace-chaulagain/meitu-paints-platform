@@ -27,7 +27,7 @@ export function useBodyScrollLock(active) {
         document.body.style.position = "";
         document.body.style.top = "";
         document.body.style.width = "";
-        window.scrollTo(0, savedScrollY);
+        window.scrollTo({ top: savedScrollY, left: 0, behavior: "instant" });
       }
     };
   }, [active]);

@@ -53,7 +53,7 @@ export default function DispatcherRegisterPage() {
   const [visibleOptional, setVisibleOptional] = useState({});
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, []);
 
   const hiddenOptionalFields = useMemo(

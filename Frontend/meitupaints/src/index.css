@@ -147,7 +147,6 @@
 
 html {
   width: 100%;
-  overflow-x: hidden;
   /* Stops the browser's native vertical rubber-band/pull-to-refresh bounce
      at the document root - without this, dragging down at the top of any
      page (Chrome/Safari's pull-to-refresh gesture) visually stretches
@@ -156,7 +155,13 @@ html {
      freshly reloaded page before layout settles. `contain` (not `none`)
      matches the same fix already used for individual scroll containers in
      DashboardShell.jsx/DealerMobileStyles.pages.jsx - it stops the bounce
-     without blocking normal scrolling. */
+     without blocking normal scrolling.
+     Deliberately NOT pairing this with `overflow-x: hidden` here (or on
+     body below) - that combination on html/body makes Chromium drop wheel/
+     trackpad-driven scrolling for the entire document (confirmed with a
+     zero-dependency repro: the two rules alone on a blank page are enough
+     to reproduce it, and removing either one restores scrolling). Horizontal
+     overflow is already clipped on #root below, so this isn't needed here. */
   overscroll-behavior-y: contain;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -166,7 +171,6 @@ html {
 body {
   width: 100%;
   min-width: 0;
-  overflow-x: hidden;
   overscroll-behavior-y: contain;
   font-family: var(--font-text);
   font-size: var(--text-body);
