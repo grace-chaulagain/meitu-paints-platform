@@ -31,24 +31,9 @@ import {
 import { scrollResultsToTop } from "../utils/scrollResultsToTop.js";
 import { useIsMobileDealer } from "./mobile/useIsMobileDealer.js";
 import { DealerCatalogMobileView } from "./mobile/DealerCatalogMobileView.jsx";
-
-const CATEGORIES_PER_PAGE = 4;
+import CatalogCarouselRow from "../components/dashboard/CatalogCarouselRow.jsx";
 
 const ALL_CATEGORY_OPTION = { key: "ALL", label: "All Products" };
-
-function buildPageList(current, total) {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
-  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
-  const result = [];
-  let prev = 0;
-  sorted.forEach((p) => {
-    if (prev && p - prev > 1) result.push("ellipsis-" + p);
-    result.push(p);
-    prev = p;
-  });
-  return result;
-}
 
 function categoryLabel(value) {
   if (!value) return "";
@@ -484,56 +469,6 @@ function BagIcon({ size = 18 }) {
   );
 }
 
-function CatalogPagination({ page, totalPages, totalCount, startIndex, endIndex, onChange }) {
-  if (totalCount === 0) return null;
-
-  const pages = buildPageList(page, totalPages);
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "6px 4px" }}>
-      <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
-        Showing {startIndex} to {endIndex} of {totalCount} products
-      </span>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(1, page - 1))}
-          disabled={page <= 1}
-          aria-label="Previous page"
-          className="dealer-catalog-page-btn"
-        >
-          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} style={{ transform: "rotate(180deg)" }} />
-        </button>
-        {pages.map((p) =>
-          typeof p === "number" ? (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onChange(p)}
-              className={`dealer-catalog-page-btn ${p === page ? "is-active" : ""}`}
-            >
-              {p}
-            </button>
-          ) : (
-            <span key={p} style={{ padding: "0 4px", color: "var(--color-graphite, #707070)", fontSize: 12.5 }}>
-              …
-            </span>
-          ),
-        )}
-        <button
-          type="button"
-          onClick={() => onChange(Math.min(totalPages, page + 1))}
-          disabled={page >= totalPages}
-          aria-label="Next page"
-          className="dealer-catalog-page-btn"
-        >
-          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function LoadingGrid() {
   const shimmer = "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))";
   return (
@@ -597,7 +532,6 @@ export default function DealerCatalogPage() {
   const [search, setSearch] = useState(orderSearchParam);
   const [category, setCategory] = useState("ALL");
   const [viewMode, setViewMode] = useState("card");
-  const [page, setPage] = useState(1);
   const [draftOpen, setDraftOpen] = useState(false);
   const [badgeBump, setBadgeBump] = useState(false);
   const previousQtyRef = useRef(0);
@@ -666,10 +600,11 @@ export default function DealerCatalogPage() {
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }, [filteredProducts, familyImageMap]);
 
-  // Paginated by whole category, CATEGORIES_PER_PAGE per page — a category's
-  // products always stay together (never split across a page boundary),
-  // regardless of how many products that category has.
-  const allGroups = useMemo(() => {
+  // Every category groups into its own horizontal carousel row - no
+  // pagination, the whole catalog is shown at once (a row's own scroll
+  // handles browsing within a category, matching Apple's own product
+  // listing pages).
+  const familyGroups = useMemo(() => {
     const map = new Map();
     for (const family of families) {
       const key = family.category || "";
@@ -681,27 +616,6 @@ export default function DealerCatalogPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [families]);
 
-  const catalogPages = useMemo(() => {
-    const pages = [];
-    for (let i = 0; i < allGroups.length; i += CATEGORIES_PER_PAGE) {
-      const groups = allGroups.slice(i, i + CATEGORIES_PER_PAGE);
-      pages.push({ groups, count: groups.reduce((sum, group) => sum + group.items.length, 0) });
-    }
-    return pages;
-  }, [allGroups]);
-
-  const totalPages = Math.max(1, catalogPages.length);
-  const currentPage = Math.min(page, totalPages);
-  const activePage = catalogPages[currentPage - 1] || { groups: [], count: 0 };
-  const familyGroups = activePage.groups;
-
-  const pageStartIndex = useMemo(() => {
-    let start = 1;
-    for (let i = 0; i < currentPage - 1; i += 1) start += catalogPages[i].count;
-    return start;
-  }, [catalogPages, currentPage]);
-  const pageEndIndex = pageStartIndex + Math.max(0, activePage.count - 1);
-
   function handleQtyChange(sku, nextValue) {
     setQuantities((prev) => sanitizeDraft({ ...prev, [sku]: nextValue }));
   }
@@ -711,17 +625,11 @@ export default function DealerCatalogPage() {
     navigate("/dealer/cart");
   }
 
-  function goToPage(nextPage) {
-    setPage(nextPage);
-    scrollResultsToTop();
-  }
-
   // Search and category are mutually exclusive rather than combinable -
   // activating one clears the other, keeping filter state simple and
   // predictable instead of a combinatorial search+category mix.
   function changeCategory(nextCategory) {
     setCategory(nextCategory);
-    setPage(1);
     scrollResultsToTop();
     if (nextCategory !== "ALL" && search) {
       setSearch("");
@@ -735,7 +643,6 @@ export default function DealerCatalogPage() {
 
   function updateSearch(value) {
     setSearch(value);
-    setPage(1);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -816,39 +723,34 @@ export default function DealerCatalogPage() {
         ) : families.length === 0 ? (
           <EmptyState icon="store" title="No products found" subtitle="Try broadening your search or clearing the current filters." />
         ) : (
-          <>
-            <div style={{ display: "grid", gap: 40 }}>
-              {familyGroups.map((group) => (
+          <div style={{ display: "grid", gap: 40 }}>
+            {familyGroups.map((group) => {
+              const cards = group.items.map((family) => (
+                <ProductFamilyCard
+                  key={family.code}
+                  family={family}
+                  quantities={quantities}
+                  cartBySku={cartBySku}
+                  onQtyChange={handleQtyChange}
+                  layout={viewMode === "list" ? "list" : "card"}
+                />
+              ));
+
+              return (
                 <div key={group.key || "uncategorized"}>
                   <div className="dealer-category-heading">
                     <span>{group.label}</span>
                     <span className="dealer-category-count">{group.items.length}</span>
                   </div>
-                  <div className={viewMode === "list" ? "dealer-catalog-list" : "dealer-catalog-grid"}>
-                    {group.items.map((family) => (
-                      <ProductFamilyCard
-                        key={family.code}
-                        family={family}
-                        quantities={quantities}
-                        cartBySku={cartBySku}
-                        onQtyChange={handleQtyChange}
-                        layout={viewMode === "list" ? "list" : "card"}
-                      />
-                    ))}
-                  </div>
+                  {viewMode === "list" ? (
+                    <div className="dealer-catalog-list">{cards}</div>
+                  ) : (
+                    <CatalogCarouselRow>{cards}</CatalogCarouselRow>
+                  )}
                 </div>
-              ))}
-            </div>
-
-            <CatalogPagination
-              page={currentPage}
-              totalPages={totalPages}
-              totalCount={families.length}
-              startIndex={pageStartIndex}
-              endIndex={pageEndIndex}
-              onChange={goToPage}
-            />
-          </>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -1100,26 +1002,6 @@ export default function DealerCatalogPage() {
           flex:0 0 auto;
           width:230px;
         }
-
-        .dealer-catalog-page-btn{
-          min-width:32px;
-          height:32px;
-          padding:0 8px;
-          border-radius:8px;
-          border:none;
-          background:transparent;
-          font-size:12.5px;
-          font-weight:700;
-          color:var(--color-ink, #1d1d1f);
-          cursor:pointer;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-        }
-
-        .dealer-catalog-page-btn:disabled{ opacity:.35; cursor:not-allowed; }
-        .dealer-catalog-page-btn.is-active{ background:var(--color-azure, #0071e3); color:#fff; }
-        .dealer-catalog-page-btn:not(.is-active):not(:disabled):hover{ background:rgba(29,29,31,.06); }
 
         .dealer-category-heading{
           display:flex;
