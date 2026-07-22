@@ -1,3 +1,6 @@
+import crypto from "crypto";
+import nodemailer from "nodemailer";
+
 import ApiError from "../utils/apiError.js";
 
 import { ROLES } from "../constants/roles.js";
@@ -15,6 +18,8 @@ import Order from "../models/Order.model.js";
 import Payment from "../models/Payment.model.js";
 import Product from "../models/Product.model.js";
 import { priceProductLine } from "../utils/pricing.js";
+import { buildPublicAppUrl } from "../utils/publicUrl.js";
+import { IS_PRODUCTION } from "../config/env.js";
 import {
   notifyAssignedDealerOrderSubmitted,
   notifyDealerApplicationSubmitted,
@@ -213,6 +218,217 @@ function normalizeOrderForReport(order, dealer = null) {
 }
 
 // ----------------------------
+// Email confirmation (dealer application)
+// ----------------------------
+// A DealerApplication has no User yet, so this can't reuse PasswordResetToken
+// (which is keyed by userId) - the token instead lives directly on the
+// application doc (see DealerApplication.model.js). Same nodemailer-per-
+// service convention as auth.service.js / adminNotification.service.js /
+// order.service.js / factory.service.js (no shared mailer util exists in
+// this codebase), and the same crypto-hash-token-with-expiry shape already
+// proven for password-setup links.
+
+const EMAIL_VERIFICATION_TTL_MS = 48 * 60 * 60 * 1000; // 48h
+const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+let _smtpTransport = null;
+
+function smtpConfigured() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
+}
+
+function getSmtpTransport() {
+  if (_smtpTransport) return _smtpTransport;
+
+  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = process.env;
+  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
+    throw new ApiError(500, "SMTP is not configured (missing env vars)");
+  }
+
+  _smtpTransport = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: Number(SMTP_PORT),
+    secure: String(SMTP_SECURE) === "true",
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
+  });
+
+  return _smtpTransport;
+}
+
+async function sendMail({ to, subject, text, html }) {
+  const { SMTP_USER, MAIL_FROM } = process.env;
+  const transporter = getSmtpTransport();
+
+  await transporter.sendMail({
+    from: MAIL_FROM || SMTP_USER,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+function buildDealerEmailVerificationLink(token) {
+  return buildPublicAppUrl(`/confirm-dealer-email?token=${encodeURIComponent(String(token))}`);
+}
+
+function dealerEmailConfirmationTemplate({ token, companyName }) {
+  const link = buildDealerEmailVerificationLink(token);
+  const safeCompanyName = escapeHtml(companyName || "your company");
+  const safeLink = escapeHtml(link);
+
+  const subject = "Confirm your email for your Meitu Paints dealer application";
+
+  const text = [
+    `Hello ${companyName || "there"},`,
+    "",
+    "Thanks for applying to become a Meitu Paints dealer.",
+    "Please confirm this email address so we can review your application. This link is valid for 48 hours.",
+    link,
+    "",
+    "If you didn't submit a dealer application, you can safely ignore this email.",
+  ].join("\n");
+
+  const html = `
+    <div style="margin:0;padding:0;background-color:#f3f4f6;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f4f6;margin:0;padding:24px 0;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
+              <tr>
+                <td style="padding:0 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
+                    <tr>
+                      <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
+                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.82);margin:0;">
+                          Meitu Paints
+                        </div>
+                        <div style="font-family:Arial,sans-serif;font-size:28px;line-height:1.15;font-weight:700;color:#ffffff;margin:10px 0 0 0;">
+                          Confirm Your Email
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:28px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td>
+                              <div style="display:inline-block;font-family:Arial,sans-serif;font-size:11px;line-height:1.2;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#b42318;background:#fef2f2;border:1px solid #fecaca;border-radius:999px;padding:8px 12px;">
+                                Confirm Your Email
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:18px;font-family:Arial,sans-serif;font-size:16px;line-height:1.7;color:#111827;">
+                              Hello <strong>${safeCompanyName}</strong>,
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:14px;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#4b5563;">
+                              Thanks for applying to become a Meitu Paints dealer. Please confirm this email address so we can review your application. This link will remain valid for <strong>48 hours</strong>.
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:26px;">
+                              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                  <td align="center" bgcolor="#c40000" style="border-radius:12px;">
+                                    <a href="${safeLink}" style="display:inline-block;padding:14px 22px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:12px;background:linear-gradient(135deg,#c40000 0%,#ff5b2e 100%);">
+                                      Confirm Email
+                                    </a>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:24px;">
+                              <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
+                                Backup Link
+                              </div>
+                              <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;word-break:break-all;">
+                                <a href="${safeLink}" style="color:#b42318;text-decoration:none;">${safeLink}</a>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:20px;">
+                              <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f9fafb;border-left:4px solid #f97316;border-radius:10px;padding:14px 16px;">
+                                If you didn't submit a dealer application, you can safely ignore this email.
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
+                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#6b7280;">
+                          This is an automated message from Meitu Paints. Please do not reply directly to this email.
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
+// Persists a fresh token before attempting the send, so a failed send still
+// leaves the application in a resendable state (no transaction needed - the
+// worst case is a resubmit/resend re-triggers this from scratch).
+async function issueAndSendDealerEmailVerification(app) {
+  const rawToken = crypto.randomBytes(32).toString("hex");
+
+  app.emailVerification = {
+    tokenHash: hashToken(rawToken),
+    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+    sentAt: new Date(),
+  };
+  app.emailVerifiedAt = null;
+  await app.save();
+
+  if (IS_PRODUCTION && !smtpConfigured()) {
+    throw new ApiError(500, "SMTP is not configured");
+  }
+  if (smtpConfigured()) {
+    const { subject, text, html } = dealerEmailConfirmationTemplate({
+      token: rawToken,
+      companyName: app.companyName,
+    });
+    await sendMail({ to: app.email, subject, text, html });
+  }
+
+  return rawToken;
+}
+
+// ----------------------------
 // Public: dealer application
 // ----------------------------
 
@@ -229,13 +445,35 @@ export async function applyForDealership(payload = {}) {
     );
   }
 
-  // Prevent spamming duplicate applications for the same email that are still pending/review
-  const existing = await DealerApplication.findOne({
-    email,
-  }).lean();
+  // Prevent spamming duplicate applications for the same email that are still pending/review.
+  // Hydrated (not .lean()) since a still-unconfirmed existing application needs
+  // to be re-saved below to reissue/resend its confirmation token.
+  const existing = await DealerApplication.findOne({ email });
 
   if (existing) {
-    return { ok: true, applicationId: existing._id, status: existing.status };
+    const isTerminal =
+      existing.status === DEALER_APPLICATION_STATUS.VERIFIED ||
+      existing.status === DEALER_APPLICATION_STATUS.REJECTED;
+
+    let resentToken;
+    if (!isTerminal && !existing.emailVerifiedAt) {
+      // Applicant likely never got the first email (typo, spam filter) and is
+      // retrying - reissue and resend rather than silently no-op'ing, which is
+      // the whole point of this feature. Small cooldown guards against a
+      // double-submit double-firing the send; applicationRateLimit (12/hr/IP
+      // at the route level) is the primary throttle.
+      const sentAt = existing.emailVerification?.sentAt?.getTime?.() || 0;
+      if (Date.now() - sentAt > EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+        resentToken = await issueAndSendDealerEmailVerification(existing);
+      }
+    }
+
+    return {
+      ok: true,
+      applicationId: existing._id,
+      status: existing.status,
+      token: IS_PRODUCTION ? undefined : resentToken,
+    };
   }
 
   const app = await DealerApplication.create({
@@ -249,11 +487,70 @@ export async function applyForDealership(payload = {}) {
     status: DEALER_APPLICATION_STATUS.PENDING,
   });
 
+  const rawToken = await issueAndSendDealerEmailVerification(app);
+
+  return {
+    ok: true,
+    applicationId: app._id,
+    status: app.status,
+    token: IS_PRODUCTION ? undefined : rawToken,
+  };
+}
+
+// Called from the /confirm-dealer-email landing page. The admin-facing
+// "new application submitted" notification fires from here (not from
+// applyForDealership above) so admins only ever see applications from a
+// confirmed, reachable email - not noise from typos or spam that never
+// confirm.
+export async function verifyDealerApplicationEmail({ token }) {
+  const app = await DealerApplication.findOne({
+    "emailVerification.tokenHash": hashToken(token),
+  });
+  if (!app) throw new ApiError(400, "Invalid confirmation link", { code: "INVALID" });
+
+  if (app.emailVerifiedAt) {
+    return { ok: true, applicationId: app._id, alreadyVerified: true };
+  }
+
+  if (!app.emailVerification?.expiresAt || app.emailVerification.expiresAt.getTime() <= Date.now()) {
+    throw new ApiError(400, "This confirmation link has expired", { code: "EXPIRED" });
+  }
+
+  app.emailVerifiedAt = new Date();
+  app.emailVerification.tokenHash = null; // single-use
+  await app.save();
+
   notifyDealerApplicationSubmitted(app).catch((error) => {
     console.warn("[admin-notification] dealer application:", error.message);
   });
 
-  return { ok: true, applicationId: app._id, status: app.status };
+  return { ok: true, applicationId: app._id, companyName: app.companyName };
+}
+
+// Neutral response regardless of whether an eligible application was found -
+// this is a fresh public, unauthenticated surface, so it shouldn't be usable
+// to enumerate which emails have a pending application (same posture as
+// auth.service.js's NEUTRAL_AUTH_RESPONSE for forgot-password).
+const NEUTRAL_RESEND_RESPONSE = {
+  ok: true,
+  message: "If an eligible application exists, a confirmation link has been sent.",
+};
+
+export async function resendDealerApplicationVerification({ email }) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return NEUTRAL_RESEND_RESPONSE;
+
+  const app = await DealerApplication.findOne({
+    email: normalizedEmail,
+    status: { $in: [DEALER_APPLICATION_STATUS.PENDING, DEALER_APPLICATION_STATUS.IN_REVIEW] },
+    emailVerifiedAt: null,
+  }).sort({ createdAt: -1 });
+
+  if (app) {
+    await issueAndSendDealerEmailVerification(app);
+  }
+
+  return NEUTRAL_RESEND_RESPONSE;
 }
 
 // ----------------------------

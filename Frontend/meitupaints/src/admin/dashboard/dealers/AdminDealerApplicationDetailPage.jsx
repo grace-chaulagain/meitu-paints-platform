@@ -404,7 +404,11 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               {application.status === "PENDING" ? (
                 <>
-                  <PrimaryButton icon="checkmark" onClick={() => setApproving(true)}>
+                  <PrimaryButton
+                    icon="checkmark"
+                    disabled={!application.emailConfirmed}
+                    onClick={() => setApproving(true)}
+                  >
                     Verify
                   </PrimaryButton>
                   <GhostButton
@@ -433,11 +437,22 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
           }
         />
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <Pill tone={statusTone(application.status)} size="small">
             {application.status || "PENDING"}
           </Pill>
+          {application.status === "PENDING" && !application.emailConfirmed ? (
+            <Pill tone="caution" size="small">
+              Email not confirmed
+            </Pill>
+          ) : null}
         </div>
+
+        {application.status === "PENDING" && !application.emailConfirmed ? (
+          <div style={{ marginTop: 10, fontSize: 13, color: "var(--color-graphite, #707070)" }}>
+            Waiting for the applicant to confirm their email before this application can be verified.
+          </div>
+        ) : null}
 
         {actionError ? (
           <div

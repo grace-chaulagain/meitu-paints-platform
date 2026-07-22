@@ -587,6 +587,18 @@ export async function testNotificationSettings() {
 // Dealer Applications
 // ----------------------------
 
+// A DealerApplication with no emailVerification.tokenHash at all predates
+// the email-confirmation feature and is treated as already-confirmed - pure
+// UI convenience so the frontend doesn't need to reimplement this legacy
+// check; the actual enforcement is the guard inside verifyDealerApplication
+// below.
+function withEmailConfirmedFlag(app) {
+  return {
+    ...app,
+    emailConfirmed: Boolean(app.emailVerifiedAt) || !app.emailVerification?.tokenHash,
+  };
+}
+
 export async function listDealerApplications({
   status,
   page = 1,
@@ -607,7 +619,7 @@ export async function listDealerApplications({
     DealerApplication.countDocuments(q),
   ]);
 
-  return { items, total, page: Math.max(1, Number(page)), limit: perPage };
+  return { items: items.map(withEmailConfirmedFlag), total, page: Math.max(1, Number(page)), limit: perPage };
 }
 
 export async function getDealerApplication({ applicationId } = {}) {
@@ -615,7 +627,7 @@ export async function getDealerApplication({ applicationId } = {}) {
   const app = await DealerApplication.findById(applicationId).lean();
   if (!app) throw new ApiError(404, "Dealer application not found");
   if (app.deletion?.pending) throw new ApiError(404, "Dealer application not found");
-  return app;
+  return withEmailConfirmedFlag(app);
 }
 
 export async function verifyDealerApplication({
@@ -642,6 +654,14 @@ export async function verifyDealerApplication({
     }
     if (app.status === DEALER_APPLICATION_STATUS.REJECTED) {
       throw new ApiError(400, "Cannot verify a rejected application");
+    }
+
+    // Applications from before the email-confirmation feature shipped never
+    // had a token issued (tokenHash absent) - treated as grandfathered/
+    // already-confirmed rather than permanently unverifiable.
+    const legacyApplication = !app.emailVerification?.tokenHash;
+    if (!legacyApplication && !app.emailVerifiedAt) {
+      throw new ApiError(400, "Applicant has not confirmed their email yet");
     }
 
     const existingProfile = await DealerProfile.findOne({

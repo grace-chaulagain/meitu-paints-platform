@@ -53,6 +53,7 @@ import {
   ForgotPasswordPage,
   ResetPasswordPage,
   ResendSetupLinkPage,
+  ConfirmDealerEmailPage,
 } from "./pages/AuthRecoveryPages.jsx";
 import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
 
@@ -456,6 +457,10 @@ const router = createBrowserRouter([
       {
         path: "/resend-setup-link",
         element: withFooter(<ResendSetupLinkPage />),
+      },
+      {
+        path: "/confirm-dealer-email",
+        element: withFooter(<ConfirmDealerEmailPage />),
       },
 
       // Admin

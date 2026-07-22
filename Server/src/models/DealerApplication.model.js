@@ -51,6 +51,20 @@ const DealerApplicationSchema = new mongoose.Schema(
       },
       reason: { type: String, default: "", trim: true },
     },
+
+    // Set once the applicant clicks the confirmation link sent to `email` at
+    // submission time. Admins can't act on an application until this is set
+    // (enforced in admin.service.js's verifyDealerApplication) - this is
+    // what actually catches a typo'd/nonexistent email, since the applicant
+    // simply never receives a link to click. A DealerApplication with no
+    // emailVerification.tokenHash at all predates this feature and is
+    // treated as already-verified (no backfill needed).
+    emailVerifiedAt: { type: Date, default: null, index: true },
+    emailVerification: {
+      tokenHash: { type: String, default: null, index: true },
+      expiresAt: { type: Date, default: null },
+      sentAt: { type: Date, default: null },
+    },
   },
   { timestamps: true },
 );

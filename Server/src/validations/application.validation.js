@@ -28,3 +28,13 @@ export const dispatcherApplicationBodySchema = z
     notes: optionalTrimmedString(500),
   })
   .strict();
+
+const tokenSchema = z.string().trim().min(32).max(256);
+
+export const dealerEmailVerificationBodySchema = z
+  .object({ token: tokenSchema })
+  .strict();
+
+export const dealerResendVerificationBodySchema = z
+  .object({ email: emailSchema })
+  .strict();

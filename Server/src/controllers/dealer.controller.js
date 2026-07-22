@@ -34,6 +34,16 @@ export const applyForDealershipController = asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true, ...out });
 });
 
+export const verifyDealerEmailController = asyncHandler(async (req, res) => {
+  const out = await dealerService.verifyDealerApplicationEmail({ token: req.body.token });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const resendDealerVerificationController = asyncHandler(async (req, res) => {
+  const out = await dealerService.resendDealerApplicationVerification({ email: req.body.email });
+  res.status(200).json(out);
+});
+
 // Dealer: profile
 export const getMyProfileController = asyncHandler(async (req, res) => {
   const out = await dealerService.getMyProfile({ user: req.user });

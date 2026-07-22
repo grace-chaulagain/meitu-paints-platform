@@ -13,13 +13,21 @@ import notificationRoutes from "./notification.routes.js";
 import pushRoutes from "./push.routes.js";
 import stockRoutes from "./stock.routes.js";
 import factoryRoutes from "./factory.routes.js";
-import { applyForDealershipController } from "../controllers/dealer.controller.js";
+import {
+  applyForDealershipController,
+  verifyDealerEmailController,
+  resendDealerVerificationController,
+} from "../controllers/dealer.controller.js";
 
 import { auth } from "../middlewares/auth.middleware.js";
-import { applicationRateLimit } from "../middlewares/rateLimit.middleware.js";
+import { applicationRateLimit, passwordResetRateLimit } from "../middlewares/rateLimit.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
 import { validateBody } from "../middlewares/validate.middleware.js";
-import { dealerApplicationBodySchema } from "../validations/application.validation.js";
+import {
+  dealerApplicationBodySchema,
+  dealerEmailVerificationBodySchema,
+  dealerResendVerificationBodySchema,
+} from "../validations/application.validation.js";
 
 const router = Router();
 
@@ -36,6 +44,18 @@ router.post(
   applicationRateLimit,
   validateBody(dealerApplicationBodySchema),
   applyForDealershipController,
+);
+router.post(
+  "/dealer/verify-email",
+  passwordResetRateLimit,
+  validateBody(dealerEmailVerificationBodySchema),
+  verifyDealerEmailController,
+);
+router.post(
+  "/dealer/resend-verification-email",
+  passwordResetRateLimit,
+  validateBody(dealerResendVerificationBodySchema),
+  resendDealerVerificationController,
 );
 router.use("/dealer", auth, requireRole("DEALER"), dealerRoutes);
 

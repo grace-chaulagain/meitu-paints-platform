@@ -686,3 +686,124 @@ export function SetupPasswordPage() {
     />
   );
 }
+
+// Landing page for the confirmation link sent by POST /api/dealer/apply -
+// unlike SetNewPasswordPage, this auto-confirms on mount (no form to submit,
+// clicking the emailed link is the whole action) and, on an expired token,
+// offers an inline resend rather than sending the applicant back through the
+// full application form again.
+export function ConfirmDealerEmailPage() {
+  const [params] = useSearchParams();
+  const token = useMemo(() => params.get("token") || "", [params]);
+  const [state, setState] = useState({ loading: true, ok: false, expired: false, err: "" });
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendState, setResendState] = useState({ loading: false, sent: false, err: "", message: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function confirm() {
+      if (!token) {
+        setState({ loading: false, ok: false, expired: false, err: "Missing token in link." });
+        return;
+      }
+
+      try {
+        await api.post("/api/dealer/verify-email", { token });
+        if (!cancelled) setState({ loading: false, ok: true, expired: false, err: "" });
+      } catch (error) {
+        if (!cancelled) {
+          const code = error?.response?.data?.code;
+          setState({
+            loading: false,
+            ok: false,
+            expired: code === "EXPIRED",
+            err: getApiErrorMessage(error, "Unable to confirm this link."),
+          });
+        }
+      }
+    }
+
+    confirm();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const onResend = async (event) => {
+    event.preventDefault();
+    setResendState({ loading: true, sent: false, err: "", message: "" });
+
+    try {
+      const { data } = await api.post("/api/dealer/resend-verification-email", { email: resendEmail });
+      setResendState({ loading: false, sent: true, err: "", message: data?.message || "" });
+    } catch (error) {
+      setResendState({
+        loading: false,
+        sent: false,
+        err: getApiErrorMessage(error, "Unable to resend confirmation link."),
+        message: "",
+      });
+    }
+  };
+
+  return (
+    <RecoveryShell
+      eyebrow="Dealer Application"
+      title="Confirm your email."
+      description="Confirming your email lets us review your Meitu Paints dealer application."
+    >
+      <div className="apple-recovery-form">
+        {state.loading ? <StatusAlert tone="notice">Confirming your email…</StatusAlert> : null}
+        {state.ok ? (
+          <StatusAlert tone="success">
+            Email confirmed. Your application is now under review — we'll be in touch soon.
+          </StatusAlert>
+        ) : null}
+        {!state.loading && !state.ok ? <StatusAlert>{state.err}</StatusAlert> : null}
+
+        {!state.loading && !state.ok && state.expired ? (
+          <>
+            {resendState.sent ? (
+              <StatusAlert tone="success">
+                {resendState.message || "If an eligible application exists, a confirmation link has been sent."}
+              </StatusAlert>
+            ) : (
+              <form onSubmit={onResend}>
+                {resendState.err ? <StatusAlert>{resendState.err}</StatusAlert> : null}
+                <div className="apple-recovery-input-card">
+                  <div className="apple-recovery-field">
+                    <label htmlFor="resend-email">Email</label>
+                    <div className="apple-recovery-single-row">
+                      <input
+                        id="resend-email"
+                        type="email"
+                        value={resendEmail}
+                        onChange={(event) => setResendEmail(event.target.value)}
+                        placeholder="name@example.com"
+                        autoComplete="email"
+                        required
+                      />
+                      <button
+                        type="submit"
+                        className="apple-recovery-icon-submit"
+                        disabled={resendState.loading}
+                        aria-label="Resend confirmation link"
+                      >
+                        {resendState.loading ? "…" : <ArrowRightIcon />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            )}
+          </>
+        ) : null}
+
+        <div className="apple-recovery-links centered">
+          <Link to="/">Back to home</Link>
+        </div>
+      </div>
+    </RecoveryShell>
+  );
+}

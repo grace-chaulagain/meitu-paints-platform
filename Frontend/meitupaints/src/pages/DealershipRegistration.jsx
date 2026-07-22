@@ -65,6 +65,35 @@ const optionalFields = [
   },
 ];
 
+// Stricter than the browser's native type="email" check (which accepts
+// things like "a@b" or "a@b..c") - catches the concrete malformed patterns
+// that indicate a corrupt/mistyped address rather than a real one: missing
+// TLD, consecutive/leading/trailing dots, stray whitespace, multiple @
+// signs, invalid characters. This is still just a format check (matching
+// what the backend's Zod emailSchema enforces) - it can't confirm the
+// mailbox actually exists, that's what the post-submit confirmation-link
+// email is for (see /confirm-dealer-email) - but it stops obviously corrupt
+// input before it ever leaves the browser.
+function isValidEmail(value) {
+  const email = String(value || "").trim();
+  if (!email || /\s/.test(email) || /\.\./.test(email)) return false;
+
+  const match = email.match(/^([^@]+)@([^@]+)$/);
+  if (!match) return false;
+  const [, local, domain] = match;
+
+  if (!local || local.startsWith(".") || local.endsWith(".")) return false;
+  if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)) return false;
+
+  if (!domain || domain.startsWith(".") || domain.endsWith(".") || domain.startsWith("-") || domain.endsWith("-")) {
+    return false;
+  }
+  if (!/^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$/.test(domain)) return false;
+
+  const tld = domain.split(".").pop();
+  return /^[a-zA-Z]{2,}$/.test(tld);
+}
+
 function BackArrowIcon() {
   return (
     <svg
@@ -89,9 +118,13 @@ export default function DealershipRegistrationPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
+  const [emailTouched, setEmailTouched] = useState(false);
+
+  const emailValid = useMemo(() => isValidEmail(formData.email), [formData.email]);
+  const showEmailError = emailTouched && formData.email.trim().length > 0 && !emailValid;
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, []);
 
   const hiddenOptionalFields = useMemo(
@@ -110,6 +143,8 @@ export default function DealershipRegistrationPage() {
       [event.target.name]: event.target.value,
     }));
   };
+
+  const handleEmailBlur = () => setEmailTouched(true);
 
   const showOptional = (key) => {
     setVisibleOptional((current) => ({ ...current, [key]: true }));
@@ -133,6 +168,15 @@ export default function DealershipRegistrationPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitting) return;
+
+    // Belt-and-suspenders: catches a bad address even if the field was never
+    // blurred (paste-then-submit) or the browser's native type="email" check
+    // let something looser through.
+    if (!isValidEmail(formData.email)) {
+      setEmailTouched(true);
+      setError("Please enter a valid email address before submitting.");
+      return;
+    }
 
     setSubmitting(true);
     setSubmitted(false);
@@ -269,7 +313,8 @@ export default function DealershipRegistrationPage() {
               </span>
               {submitted ? (
                 <span className="apple-dealer-success">
-                  Application received. Check your email after admin review.
+                  Application received. Check your inbox for a confirmation email — click the link
+                  to confirm your email before we can review your application.
                 </span>
               ) : null}
             </div>
@@ -300,17 +345,24 @@ export default function DealershipRegistrationPage() {
                 />
               </label>
 
-              <label className="apple-dealer-field">
+              <label className={`apple-dealer-field ${showEmailError ? "invalid" : ""}`}>
                 <span>Email Address</span>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onBlur={handleEmailBlur}
                   required
                   placeholder="you@example.com"
                   autoComplete="email"
+                  aria-invalid={showEmailError}
                 />
+                {showEmailError ? (
+                  <span className="apple-dealer-field-error">
+                    Enter a valid email address, e.g. name@example.com
+                  </span>
+                ) : null}
               </label>
 
               <label className="apple-dealer-field">
@@ -639,6 +691,22 @@ export default function DealershipRegistrationPage() {
         .apple-dealer-field textarea:focus{
           border-color:#86868b !important;
           box-shadow:none !important;
+        }
+
+        .apple-dealer-field.invalid input{
+          border-color:#b64400 !important;
+        }
+
+        .apple-dealer-field.invalid input:focus{
+          border-color:#b64400 !important;
+        }
+
+        .apple-dealer-field-error{
+          color:#b64400;
+          font-size:12px;
+          line-height:1.4;
+          font-weight:500;
+          letter-spacing:-.003em;
         }
 
         .apple-dealer-field input:-webkit-autofill,
