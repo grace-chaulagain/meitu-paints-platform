@@ -19,6 +19,14 @@ export async function downloadProformaPdf(invoice) {
   const link = document.createElement("a");
   link.href = url;
   link.download = `${deriveProformaId(invoice)}.pdf`;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(link);
+  // Revoking synchronously right after click() races the browser's own
+  // (async, off-main-thread) read of the blob to save it to disk - on some
+  // Windows browser/disk-speed combinations the revoke wins the race and the
+  // download silently fails with no JS error (click() and revokeObjectURL()
+  // both "succeed" either way, so nothing here throws). Deferring the revoke
+  // gives that read time to finish first.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
