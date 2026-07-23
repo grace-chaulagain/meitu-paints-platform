@@ -330,6 +330,149 @@ function passwordSetupEmailTemplate({
   return { subject, text, html };
 }
 
+// Mirrors passwordSetupEmailTemplate's exact visual style (same brand
+// header gradient, same badge-pill/callout language) so an applicant's
+// approval and rejection emails read as the same professional
+// correspondence, not two different systems. No link/button here - a
+// rejection has nothing to click through to.
+function applicationRejectionEmailTemplate({
+  contactName = "",
+  companyName = "",
+  applicationType = "dealer",
+  reason = "",
+}) {
+  const normalizedType = String(applicationType || "dealer").trim().toLowerCase();
+  const isDispatcher = normalizedType === "dispatcher";
+  const accountLabel = isDispatcher ? "dispatcher" : "dealer";
+  const accountLabelTitle = isDispatcher ? "Dispatcher" : "Dealer";
+  const recipientName = contactName || companyName || `Meitu ${accountLabelTitle} applicant`;
+  const safeRecipientName = escapeHtml(recipientName);
+  const safeCompanyName = escapeHtml(companyName || "");
+  const safeReason = escapeHtml(reason || "");
+
+  const subject = `Update on your Meitu Paints ${accountLabel} application`;
+
+  const text = [
+    `Hello ${recipientName},`,
+    "",
+    `Thank you for your interest in becoming a Meitu Paints ${accountLabel} partner${companyName ? ` (${companyName})` : ""}.`,
+    "After reviewing your application, we're not able to move forward with it at this time.",
+    reason ? `\nReason provided by our team:\n${reason}\n` : "",
+    "If you believe this was a mistake, or if your circumstances change, you're welcome to submit a new application in the future.",
+    "",
+    "Thank you again for your interest in Meitu Paints.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const html = `
+    <div style="margin:0;padding:0;background-color:#f3f4f6;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f4f6;margin:0;padding:24px 0;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
+              <tr>
+                <td style="padding:0 16px;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
+                    <tr>
+                      <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
+                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.82);margin:0;">
+                          Meitu Paints
+                        </div>
+                        <div style="font-family:Arial,sans-serif;font-size:28px;line-height:1.15;font-weight:700;color:#ffffff;margin:10px 0 0 0;">
+                          Application Update
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:28px;">
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td>
+                              <div style="display:inline-block;font-family:Arial,sans-serif;font-size:11px;line-height:1.2;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:8px 12px;">
+                                ${accountLabelTitle} Application
+                              </div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:18px;font-family:Arial,sans-serif;font-size:16px;line-height:1.7;color:#111827;">
+                              Hello <strong>${safeRecipientName}</strong>,
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-top:14px;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#4b5563;">
+                              Thank you for your interest in becoming a Meitu Paints ${accountLabel} partner${safeCompanyName ? ` (<strong>${safeCompanyName}</strong>)` : ""}. After reviewing your application, we're not able to move forward with it at this time.
+                            </td>
+                          </tr>
+                          ${
+                            safeReason
+                              ? `<tr>
+                            <td style="padding-top:20px;">
+                              <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
+                                Reason
+                              </div>
+                              <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#374151;background:#f9fafb;border-left:4px solid #b91c1c;border-radius:10px;padding:14px 16px;white-space:pre-wrap;">
+                                ${safeReason}
+                              </div>
+                            </td>
+                          </tr>`
+                              : ""
+                          }
+                          <tr>
+                            <td style="padding-top:20px;font-family:Arial,sans-serif;font-size:14px;line-height:1.8;color:#4b5563;">
+                              If you believe this was a mistake, or if your circumstances change, you're welcome to submit a new application in the future.
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+
+                    <tr>
+                      <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
+                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#6b7280;">
+                          This is an automated message from Meitu Paints. Please do not reply directly to this email.
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  return { subject, text, html };
+}
+
+// Best-effort: caller must not let a slow/failed send block the rejection
+// action itself (same fire-and-forget contract as every other post-action
+// email in this codebase). Silently no-ops if SMTP isn't configured or the
+// applicant has no email on file, rather than throwing into the caller.
+export async function sendApplicationRejectionEmail({
+  email,
+  contactName = "",
+  companyName = "",
+  applicationType = "dealer",
+  reason = "",
+}) {
+  if (!email) return;
+  if (!smtpConfigured()) {
+    console.warn(`[application-rejection-email] SMTP is not configured; skipped ${applicationType} rejection email to ${email}.`);
+    return;
+  }
+  const { subject, text, html } = applicationRejectionEmailTemplate({
+    contactName,
+    companyName,
+    applicationType,
+    reason,
+  });
+  await sendMail({ to: email, subject, text, html });
+}
+
 function passwordResetEmailTemplate({ token, displayName = "Meitu User" }) {
   const link = buildPasswordResetLink(token);
   const safeDisplayName = escapeHtml(displayName || "Meitu User");

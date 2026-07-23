@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   getAdminInsightsController,
   getNotificationSettingsController,
+  clearTrashController,
   listTrashItemsController,
   restoreAllTrashItemsController,
   restoreTrashItemController,
@@ -172,6 +173,7 @@ router.patch("/settings/notifications", updateNotificationSettingsController);
 router.post("/settings/notifications/test", testNotificationSettingsController);
 router.get("/settings/trash", listTrashItemsController);
 router.post("/settings/trash/restore-all", restoreAllTrashItemsController);
+router.post("/settings/trash/clear", clearTrashController);
 router.post("/settings/trash/:type/:id/restore", restoreTrashItemController);
 
 // Insights

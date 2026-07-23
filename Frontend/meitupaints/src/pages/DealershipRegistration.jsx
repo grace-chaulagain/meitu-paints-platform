@@ -702,7 +702,12 @@ export default function DealershipRegistrationPage() {
         }
 
         .apple-dealer-field-error{
-          color:#b64400;
+          /* !important: ".apple-dealer-field span" (the grey label style
+             above) is a class+element selector, which beats this
+             single-class one on specificity alone - without it the error
+             text would silently render in the same grey as a normal field
+             label instead of reading as a warning. */
+          color:#b64400 !important;
           font-size:12px;
           line-height:1.4;
           font-weight:500;

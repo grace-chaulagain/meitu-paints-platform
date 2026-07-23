@@ -22,7 +22,7 @@ import Notification from "../models/Notification.model.js";
 import Product from "../models/Product.model.js";
 import DispatcherProductStock from "../models/DispatcherProductStock.model.js";
 
-import { createPasswordSetupTokenForUser } from "./auth.service.js";
+import { createPasswordSetupTokenForUser, sendApplicationRejectionEmail } from "./auth.service.js";
 import {
   getAdminNotificationSettings,
   notifyDispatcherDealerAssigned,
@@ -567,6 +567,100 @@ export async function restoreAllTrashItems({ type = "ALL", adminUser } = {}) {
   };
 }
 
+// Permanently deletes everything currently sitting in trash, bypassing the
+// 30-day `deletion.deleteAfter` wait that `purgeExpiredAccountDeletions`
+// normally enforces. Reuses that function's exact per-record deletion logic
+// (stock reservations are already released at move-to-trash time, see the
+// comment in `deleteOrder`, so a hard delete here is safe) - the only
+// difference is the query matches every pending-deletion record instead of
+// only ones whose deadline has passed, and results can be scoped by trash
+// type to match the "Clear Trash" UI's active filter tab.
+const CLEAR_TRASH_CONFIRMATION_PHRASE = "CLEAR TRASH";
+
+export async function purgeAllTrashItems({
+  type = "ALL",
+  confirmation,
+  adminUser,
+} = {}) {
+  void adminUser; // reserved for future audit logging, unused for now
+
+  requireExactConfirmation({
+    expected: CLEAR_TRASH_CONFIRMATION_PHRASE,
+    actual: confirmation,
+    label: "clear trash",
+  });
+
+  const normalizedType = normalizeTrashType(type);
+  const includeDealer = shouldIncludeTrashType("DEALER", normalizedType);
+  const includeDispatcher =
+    shouldIncludeTrashType("DISPATCHER", normalizedType) ||
+    shouldIncludeTrashType("DISPATCHER_APPLICATION", normalizedType);
+  const includeDealerApplication = shouldIncludeTrashType(
+    "DEALER_APPLICATION",
+    normalizedType,
+  );
+  const includeOrder = shouldIncludeTrashType("ORDER", normalizedType);
+
+  const [dealers, dispatchers, dealerApplications, orders] = await Promise.all([
+    includeDealer
+      ? DealerProfile.find({ "deletion.pending": true }).select("_id").lean()
+      : [],
+    includeDispatcher
+      ? Dispatcher.find({ "deletion.pending": true }).select("_id").lean()
+      : [],
+    includeDealerApplication
+      ? DealerApplication.find({ "deletion.pending": true }).select("_id").lean()
+      : [],
+    includeOrder
+      ? Order.find({ "deletion.pending": true }).select("_id").lean()
+      : [],
+  ]);
+
+  for (const dealer of dealers) {
+    await runInTxn(async (session) => {
+      await User.deleteMany({
+        dealerId: dealer._id,
+        role: ROLES.DEALER,
+      }).session(session);
+      await DealerProfile.deleteOne({ _id: dealer._id }).session(session);
+    });
+  }
+
+  for (const dispatcher of dispatchers) {
+    await runInTxn(async (session) => {
+      await User.deleteMany({
+        dispatcherId: dispatcher._id,
+        role: ROLES.DISPATCHER,
+      }).session(session);
+      await Dispatcher.deleteOne({ _id: dispatcher._id }).session(session);
+    });
+  }
+
+  for (const application of dealerApplications) {
+    await DealerApplication.deleteOne({ _id: application._id });
+  }
+
+  for (const order of orders) {
+    await runInTxn(async (session) => {
+      await Payment.deleteMany({ orderId: order._id }).session(session);
+      await OrderRevision.deleteMany({ orderId: order._id }).session(session);
+      await Invoice.deleteMany({ orderId: order._id }).session(session);
+      await Notification.deleteMany({ orderId: order._id }).session(session);
+      await Order.deleteOne({ _id: order._id }).session(session);
+    });
+  }
+
+  return {
+    ok: true,
+    purgedCount:
+      dealers.length + dispatchers.length + dealerApplications.length + orders.length,
+    dealersPurged: dealers.length,
+    dispatchersPurged: dispatchers.length,
+    dealerApplicationsPurged: dealerApplications.length,
+    ordersPurged: orders.length,
+  };
+}
+
 // ----------------------------
 // Settings
 // ----------------------------
@@ -766,12 +860,23 @@ export async function rejectDealerApplication({
   app.reviewNote = reviewNote;
   await app.save();
 
+  // Best-effort, not part of the save above - a slow/failing SMTP send
+  // must never block the rejection itself from completing.
+  sendApplicationRejectionEmail({
+    email: app.email,
+    contactName: app.contactName,
+    companyName: app.companyName,
+    applicationType: "dealer",
+    reason: app.reviewNote,
+  }).catch((error) => {
+    console.warn("[dealer-rejection-email] failed to send:", error?.message);
+  });
+
   return { ok: true };
 }
 
 export async function deleteDealerApplication({
   applicationId,
-  confirmation = "",
   reason = "",
   adminUser,
 }) {
@@ -783,13 +888,12 @@ export async function deleteDealerApplication({
     throw new ApiError(409, "Dealer application deletion is already pending");
   }
 
-  const expected = app.companyName || app.email || String(app._id);
-  requireExactConfirmation({
-    expected,
-    actual: confirmation,
-    label: "dealer application deletion",
-  });
-
+  // Deliberately no typed "confirm the company name" requirement here - a
+  // DealerApplication is never the live account (that's a separate
+  // DealerProfile, only ever created post-approval), and this only moves
+  // the record to a 30-day-recoverable trash, not a permanent delete - the
+  // friction that requireExactConfirmation is worth for an active account
+  // was making a routine, reversible cleanup action needlessly tedious.
   const deleteAfter = deletionDeadline();
   app.deletion = {
     pending: true,
@@ -2039,7 +2143,7 @@ export async function verifyDispatcherApplication({
 
 export async function rejectDispatcherApplication({
   dispatcherId,
-  notes = "",
+  reviewNote = "",
   adminUser,
 }) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
@@ -2050,13 +2154,23 @@ export async function rejectDispatcherApplication({
 
   dispatcher.status = DISPATCHER_STATUS.REJECTED;
   dispatcher.isActive = false;
+  dispatcher.rejectedAt = new Date();
   dispatcher.rejectedByUserId = adminUser?.id || adminUser?._id || null;
-
-  if (notes !== undefined) {
-    dispatcher.notes = normalizeText(notes);
-  }
+  dispatcher.reviewNote = normalizeText(reviewNote);
 
   await dispatcher.save();
+
+  // Best-effort, not part of the save above - a slow/failing SMTP send
+  // must never block the rejection itself from completing.
+  sendApplicationRejectionEmail({
+    email: dispatcher.email,
+    contactName: dispatcher.name,
+    companyName: dispatcher.companyName,
+    applicationType: "dispatcher",
+    reason: dispatcher.reviewNote,
+  }).catch((error) => {
+    console.warn("[dispatcher-rejection-email] failed to send:", error?.message);
+  });
 
   await User.updateMany(
     { dispatcherId: dispatcher._id, role: ROLES.DISPATCHER },
@@ -2188,12 +2302,20 @@ export async function deleteDispatcher({
     throw new ApiError(409, "Dispatcher deletion is already pending");
   }
 
-  const expected = dispatcher.name || dispatcher.email || String(dispatcher._id);
-  requireExactConfirmation({
-    expected,
-    actual: confirmation,
-    label: "dispatcher deletion",
-  });
+  // Typed confirmation is only worth the friction for an active (VERIFIED)
+  // dispatcher business - real dealers, stock, and order history attached.
+  // A still-PENDING or already-REJECTED record is just an application (no
+  // live account ever existed), and this only moves it to a 30-day-
+  // recoverable trash, not a permanent delete - requiring it there made a
+  // routine, reversible cleanup action needlessly tedious.
+  if (dispatcher.status === DISPATCHER_STATUS.VERIFIED) {
+    const expected = dispatcher.name || dispatcher.email || String(dispatcher._id);
+    requireExactConfirmation({
+      expected,
+      actual: confirmation,
+      label: "dispatcher deletion",
+    });
+  }
 
   const linkedDealers = await DealerProfile.find({
     dispatcherId: dispatcher._id,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   useGetAdminOrdersQuery,
@@ -11,8 +12,8 @@ import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
 import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
-import { money } from "./orderFormatting.js";
-import { normalizeStatus, ORDER_STATUS_META, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
+import { adminOrderStatusMeta, formatTime, groupOrdersByDay, money } from "./orderFormatting.js";
+import { normalizeStatus, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
 import {
   EmptyState as DashboardEmptyState,
   GhostButton,
@@ -87,15 +88,16 @@ function routeModeGroup(routeMode) {
 }
 
 // "Factory" is the only routing scope that never surprises anyone - it's
-// what every dealer order looks like by default, and it's what every status
-// tab defaults to except "All" (which deliberately starts broad). Anything
-// else silently narrows or redirects the list toward dealers/orders an
+// what every dealer order looks like by default, and it's the universal
+// default across every status tab, including "All" (an admin who's picked
+// "All" in the routing dropdown is deliberately asking to see everything,
+// so that's the state worth calling out, not Factory). Anything other than
+// Factory silently narrows or redirects the list toward dealers/orders an
 // admin scoped to Factory work has never touched - that's exactly the gap
 // that reads as "I don't recognize any of these dealers." The scope banner
 // and the route-menu trigger's own color both key off this single check.
-function isDefaultRouteScope(routeMode, filterMode) {
-  const group = routeModeGroup(routeMode);
-  return filterMode === "ALL" ? group === "ALL" : group === "FACTORY";
+function isDefaultRouteScope(routeMode) {
+  return routeModeGroup(routeMode) === "FACTORY";
 }
 
 // Plain-English description of the active routing scope, for the banner
@@ -124,9 +126,6 @@ function describeRouteScope(routeMode, dispatchers) {
       tone: "caution",
       text: "Showing dealer orders routed through dispatchers - these dealers aren't part of your Factory queue.",
     };
-  }
-  if (group === "FACTORY") {
-    return { tone: "info", text: "Showing Factory orders only - dispatcher-routed orders are hidden." };
   }
   return { tone: "info", text: "Showing every routing path - Factory, dispatcher-routed, and dispatchers' own orders." };
 }
@@ -198,6 +197,21 @@ function normalizeOrderStatus(value, filterMode) {
   return status;
 }
 
+// routeMode's "no need to write this to the URL" default isn't a flat
+// constant - it's "FACTORY" on every tab except "All" (which starts broad,
+// at "ALL"). Both parseOrderListState's fallback (for a missing `route`
+// param) and buildOrderListSearch's omission check (deciding whether
+// `route` needs writing at all) must agree on this SAME contextual default,
+// or a value that happens to equal the default for its tab round-trips
+// through the URL as itself, then gets misread back under a different tab's
+// default. Concretely: picking "Factory" while on the All tab used to get
+// silently written as "no route param" (FACTORY is the flat default), then
+// read back as "ALL" (All tab's own fallback) - resetting the scope the
+// admin had just picked and quietly re-including dispatcher-routed orders.
+function defaultRouteModeFor(filterMode) {
+  return filterMode === "ALL" ? "ALL" : ORDER_LIST_DEFAULTS.routeMode;
+}
+
 // The list's filters/pagination live entirely in the URL (rather than plain
 // component state) so that navigating into an order's detail page and back
 // restores the exact same view - same filters, same page, same scroll spot -
@@ -215,7 +229,7 @@ function parseOrderListState(search) {
 
   return {
     filterMode,
-    routeMode: params.get("route") || (filterMode === "ALL" ? "ALL" : ORDER_LIST_DEFAULTS.routeMode),
+    routeMode: params.get("route") || defaultRouteModeFor(filterMode),
     datePreset: params.get("date") || ORDER_LIST_DEFAULTS.datePreset,
     customFrom: params.get("from") || "",
     customTo: params.get("to") || "",
@@ -231,7 +245,7 @@ function buildOrderListSearch(state) {
   if (state.filterMode && state.filterMode !== ORDER_LIST_DEFAULTS.filterMode) {
     params.set("view", state.filterMode);
   }
-  if (state.routeMode && state.routeMode !== ORDER_LIST_DEFAULTS.routeMode) {
+  if (state.routeMode && state.routeMode !== defaultRouteModeFor(state.filterMode)) {
     params.set("route", state.routeMode);
   }
   if (state.datePreset && state.datePreset !== ORDER_LIST_DEFAULTS.datePreset) {
@@ -323,6 +337,113 @@ function RouteScopeBanner({ scope, resetLabel, onReset }) {
   );
 }
 
+// A trigger-anchored popover for the secondary, less-often-touched filters
+// (date range, status, page size) - replaces the old approach of an inline
+// GhostButton whose "active" state was a plain style-object swap (an
+// instant, unanimated flash to a black pill) toggling a block of controls
+// that shoved the rest of the page down with zero transition. This is a
+// real floating panel instead: portaled, positioned off the trigger's own
+// rect, and animated in/out (scale + opacity, custom ease, transform-origin
+// pinned to the trigger since it's a popover, not a centered modal - see
+// dash-modal-surface-in's own comment for why modals differ). Closes on
+// outside click or Escape, mirroring PopoverListMenu's mechanics in
+// ApplePickers.jsx, but hosts arbitrary filter controls as children instead
+// of a single-select option list.
+function FiltersPopover({ activeCount = 0, children }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const [closing, setClosing] = useState(false);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const closeTimerRef = useRef(null);
+
+  const updatePosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 300;
+    const viewportPadding = 12;
+    const right = Math.max(viewportPadding, window.innerWidth - rect.right);
+    const top = rect.bottom + 8;
+    setPosition({ right, top, width });
+  }, []);
+
+  const startClose = useCallback(() => {
+    setClosing(true);
+    clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, 160);
+  }, []);
+
+  function toggle() {
+    if (open) {
+      startClose();
+    } else {
+      updatePosition();
+      setOpen(true);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        startClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition, startClose]);
+
+  useEffect(() => () => clearTimeout(closeTimerRef.current), []);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        ref={triggerRef}
+        onClick={toggle}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`admin-filters-trigger ${open && !closing ? "is-open" : ""}`}
+      >
+        <DashboardIcon name="filter" size={14} strokeWidth={2} />
+        <span>Filters</span>
+        {activeCount > 0 ? <span className="admin-filters-badge">{activeCount}</span> : null}
+      </button>
+
+      {open && position && typeof document !== "undefined"
+        ? createPortal(
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={startClose} />
+              <div
+                ref={panelRef}
+                role="dialog"
+                aria-label="Order filters"
+                className={`admin-filters-panel ${closing ? "is-closing" : ""}`}
+                style={{ position: "fixed", top: position.top, right: position.right, width: position.width }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {children}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 export function GlassCard({ children, style = {}, ...rest }) {
   return (
     <Surface {...rest} padding={0} style={style}>
@@ -372,57 +493,6 @@ export function SectionHeader({ title, subtitle, action = null }) {
   );
 }
 
-// Day-grouping + tab/timeline visual pieces below mirror
-// src/dealer/DealerOrdersPage.jsx's design exactly (same class-naming
-// convention, "admin-order-*" instead of "dealer-order-*") - this list is
-// fleet-wide (many dealers, server-paginated) rather than one dealer's own
-// history, so grouping-by-day only groups within the current page of
-// results, same as the flat list this replaces already did.
-function formatDayKey(value) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "unknown";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function formatDayDate(value) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return "Unknown date";
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
-function formatRelativeDayLabel(value) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return null;
-
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-
-  if (formatDayKey(date) === formatDayKey(today)) return "Today";
-  if (formatDayKey(date) === formatDayKey(yesterday)) return "Yesterday";
-  return null;
-}
-
-function groupOrdersByDay(orders) {
-  const groups = [];
-  const indexByKey = new Map();
-
-  orders.forEach((order) => {
-    const key = formatDayKey(order.createdAt);
-    if (!indexByKey.has(key)) {
-      indexByKey.set(key, groups.length);
-      groups.push({
-        key,
-        relativeLabel: formatRelativeDayLabel(order.createdAt),
-        dateText: formatDayDate(order.createdAt),
-        orders: [],
-      });
-    }
-    groups[indexByKey.get(key)].orders.push(order);
-  });
-
-  return groups;
-}
 
 // The "All routes" scope is the one place Factory orders and dispatcher-
 // related orders legitimately land in the same list together (it's the
@@ -492,10 +562,6 @@ function buildPageList(current, total) {
     prev = p;
   });
   return result;
-}
-
-function formatTime(value) {
-  return value ? new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
 }
 
 function AdminOrderTabs({ options, value, onChange }) {
@@ -663,16 +729,7 @@ function deriveLineTotal(quantity, unitPrice) {
   return toSafeNumber(quantity) * toSafeNumber(unitPrice);
 }
 
-function adminOrderStatusMeta(status) {
-  const normalized = normalizeStatus(status);
-  const base = ORDER_STATUS_META[normalized] || { label: normalized || "—", tone: "neutral", live: false };
-  if (normalized === "VERIFIED" || normalized === "DISPATCHED") {
-    return { ...base, tone: "accent", live: true };
-  }
-  return base;
-}
-
-function OrderThumbnails({ items, productsMap, familyMap }) {
+export function OrderThumbnails({ items, productsMap, familyMap }) {
   const visible = items.slice(0, 4);
   const overflow = items.length - visible.length;
 
@@ -697,7 +754,7 @@ function OrderThumbnails({ items, productsMap, familyMap }) {
   );
 }
 
-function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap, familyMap }) {
+export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap, familyMap }) {
   const status = normalizeStatus(item.status);
   const meta = adminOrderStatusMeta(status);
   const items = Array.isArray(item.items) ? item.items : [];
@@ -768,6 +825,62 @@ function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap,
 
       <OrderStatusRail order={item} size="sm" />
     </div>
+  );
+}
+
+// The .admin-order-card* CSS lives inline in this page's own big <style>
+// block below (unchanged, left as-is to avoid surgery on a huge, already-
+// working template literal) - this is a standalone copy of exactly those
+// rules so AdminOrderTimelineRow can be reused verbatim from pages that
+// don't render AdminOrdersPage's own JSX tree at all (e.g.
+// AdminDealerOrdersPage.jsx), and therefore never get that inline <style>
+// injected. Only ever render one or the other on a given page, not both -
+// they're identical, so it's harmless but pointless to double them up.
+export function AdminOrderCardStyles() {
+  return (
+    <style>{`
+      .admin-order-timeline{ position:relative; display:grid; gap:18px; }
+      .admin-order-timeline-day{ position:relative; display:grid; gap:8px; }
+      .admin-order-timeline-day-header{ display:flex; align-items:center; padding:0 2px; }
+      .admin-order-timeline-day-label{ display:flex; align-items:center; font-size:12px; color:var(--color-graphite, #707070); white-space:nowrap; }
+      .admin-order-timeline-day-label strong{ font-size:12.5px; font-weight:700; color:var(--color-ink, #1d1d1f); }
+      .admin-order-timeline-day-sep{ margin:0 8px; opacity:.5; }
+      .admin-order-card{
+        border-radius:14px;
+        border:1px solid rgba(29,29,31,.08);
+        border-left-width:3px;
+        background:#fff;
+        padding:14px 16px 14px 14px;
+        cursor:pointer;
+        box-shadow:0 1px 2px rgba(29,29,31,.03);
+        transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+      }
+      .admin-order-card:hover{ border-color:rgba(0,113,227,.22); box-shadow:0 2px 8px rgba(29,29,31,.05); }
+      .admin-order-card.is-dispatcher-related:hover{ border-left-color:var(--color-azure, #0071e3); }
+      .admin-order-card:active{ background:rgba(0,113,227,.025); }
+      .admin-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:2px; }
+      .admin-order-card.is-dispatcher-related{ border-left-color:var(--color-azure, #0071e3); }
+      .admin-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+      .admin-order-dealer{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+      .admin-order-number{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); }
+      .admin-order-amount{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
+      .admin-order-card-meta-row{ margin-top:10px; display:flex; align-items:center; gap:10px; }
+      .admin-order-meta{ font-size:11.5px; color:var(--color-graphite, #707070); }
+      .admin-order-card > .orderflow-rail{ margin-top:10px; }
+      .admin-order-thumb{ width:28px; height:28px; border-radius:7px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
+      .admin-order-thumb-more{ font-size:10px; font-weight:700; color:var(--color-graphite, #707070); }
+      @media (prefers-reduced-motion: reduce){
+        .admin-order-card{ transition:none!important; }
+        .admin-order-card:hover{ transform:none!important; }
+      }
+      @media (max-width:760px){
+        .admin-order-card{ padding:12px 14px; }
+        .admin-order-card-top{ align-items:flex-start; }
+      }
+      @media (max-width:560px){
+        .admin-order-card-top{ flex-direction:column; }
+      }
+    `}</style>
   );
 }
 
@@ -1425,7 +1538,6 @@ export default function AdminOrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const resultsRef = useRef(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   // "Needs you" isn't a real order status (isWaitingOn is derived client-side
   // from orderStateMachine.js), so it layers on top of the Pending tab
   // rather than becoming a new server-side status value - the only status
@@ -1653,6 +1765,10 @@ export default function AdminOrdersPage() {
 
   const orderStatusOptions = filterMode === "ARCHIVE" ? ARCHIVE_STATUS_FILTERS : ORDER_STATUS_FILTERS;
   const showStatusFilter = filterMode !== "PENDING";
+  const activeFilterCount =
+    (datePreset !== ORDER_LIST_DEFAULTS.datePreset ? 1 : 0) +
+    (showStatusFilter && orderStatus !== ORDER_LIST_DEFAULTS.orderStatus ? 1 : 0) +
+    (pageSize !== ORDER_LIST_DEFAULTS.pageSize ? 1 : 0);
 
   const applySearch = (nextSearch = search) => {
     updateListState({ committedSearch: nextSearch, page: 1 });
@@ -1678,19 +1794,38 @@ export default function AdminOrdersPage() {
     });
   };
 
+  // Narrower than resetFilters() - only clears the secondary filters that
+  // live inside the Filters popover (date/status/page size), leaving the
+  // status tab, route scope, and search untouched. This is what the
+  // popover's own "Clear filters" footer link does; the empty-state's
+  // "Clear filters" button still uses the full resetFilters() above.
+  const resetSecondaryFilters = () =>
+    updateListState({
+      datePreset: "ALL",
+      customFrom: "",
+      customTo: "",
+      orderStatus: "ALL",
+      page: 1,
+    });
+
+  // routeMode is deliberately left untouched here - it used to force-reset to
+  // "ALL" every time the All tab was selected, which discarded whatever route
+  // scope the admin had already picked (e.g. Factory) the moment they left and
+  // came back to this tab. The "All tab starts broad" default still applies on
+  // a fresh page load with no route in the URL yet (see defaultRouteModeFor),
+  // this only stops re-forcing that default over an explicit choice.
   const changeFilterMode = (next) =>
     updateListState({
       filterMode: next,
-      routeMode: next === "ALL" ? "ALL" : routeMode,
       orderStatus: "ALL",
       page: 1,
     });
   const changeRouteMode = (next) => updateListState({ routeMode: next, page: 1 });
   // Deliberately narrower than resetFilters() - only snaps the routing scope
-  // back to whatever this tab's own default is, leaving search/date/status
-  // filters untouched. This is the banner's "wrong dealers on screen" fix,
-  // not a full "start over."
-  const resetRouteScope = () => updateListState({ routeMode: filterMode === "ALL" ? "ALL" : "FACTORY", page: 1 });
+  // back to Factory (the universal default, see isDefaultRouteScope), leaving
+  // search/date/status filters untouched. This is the banner's "wrong
+  // dealers on screen" fix, not a full "start over."
+  const resetRouteScope = () => updateListState({ routeMode: "FACTORY", page: 1 });
   const changeDatePreset = (next) => updateListState({ datePreset: next, page: 1 });
   const changeCustomFrom = (next) => updateListState({ customFrom: next, page: 1 });
   const changeCustomTo = (next) => updateListState({ customTo: next, page: 1 });
@@ -1705,12 +1840,13 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="admin-orders-page" style={{ display: "grid", gap: 16 }}>
-      <Surface padding={18} className="dash-fade-up">
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+      <Surface padding={16} className="dash-fade-up">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <DashboardSectionHeader
             icon="orders"
             title="Order Register"
             subtitle="Track and manage every dealer's order."
+            size="small"
             action={
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
@@ -1730,25 +1866,12 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <AdminOrderTabs
-            options={STATUS_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }))}
-            value={filterMode}
-            onChange={changeFilterMode}
-          />
-          {needsYouEligible ? (
-            <button type="button" className={`admin-needs-you-toggle ${needsYouActive ? "active" : ""}`} onClick={toggleNeedsYou}>
-              Needs you {needsYouCount > 0 ? `(${needsYouCount})` : ""}
-            </button>
-          ) : null}
-        </div>
-
-        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <RouteModeMenu
             options={ROUTE_MODES}
             value={routeModeGroup(routeMode)}
             onChange={changeRouteMode}
-            isNonDefault={!isDefaultRouteScope(routeMode, filterMode)}
+            isNonDefault={!isDefaultRouteScope(routeMode)}
           />
           {routeModeGroup(routeMode) === "DISPATCHER_ALL" ? (
             <div className="admin-dispatcher-picker dash-fade-up">
@@ -1761,59 +1884,64 @@ export default function AdminOrdersPage() {
               />
             </div>
           ) : null}
-          <GhostButton
-            icon="filter"
-            onClick={() => setFiltersOpen((value) => !value)}
-            style={
-              filtersOpen
-                ? {
-                    background: "var(--color-ink, #1d1d1f)",
-                    color: "#fff",
-                    borderColor: "var(--color-ink, #1d1d1f)",
-                    boxShadow: "0 12px 26px rgba(29,29,31,.16)",
-                  }
-                : undefined
-            }
-          >
-            Filters
-          </GhostButton>
         </div>
 
-        {!isDefaultRouteScope(routeMode, filterMode) ? (
+        {!isDefaultRouteScope(routeMode) ? (
           <RouteScopeBanner
             scope={describeRouteScope(routeMode, dispatchers)}
-            resetLabel={filterMode === "ALL" ? "Show every route" : "Back to my Factory queue"}
+            resetLabel="Back to my Factory queue"
             onReset={resetRouteScope}
           />
         ) : null}
 
-        {filtersOpen ? (
-          <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <AppleDropdown icon="calendar" value={datePreset} options={DATE_PRESETS} onChange={changeDatePreset} style={{ width: 170 }} />
-            {showStatusFilter ? (
-              <AppleDropdown
-                icon="checkmark"
-                value={orderStatus}
-                options={orderStatusOptions}
-                onChange={changeOrderStatus}
-                style={{ width: 178 }}
-              />
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <AdminOrderTabs
+              options={STATUS_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }))}
+              value={filterMode}
+              onChange={changeFilterMode}
+            />
+            {needsYouEligible ? (
+              <button type="button" className={`admin-needs-you-toggle ${needsYouActive ? "active" : ""}`} onClick={toggleNeedsYou}>
+                Needs you {needsYouCount > 0 ? `(${needsYouCount})` : ""}
+              </button>
             ) : null}
-            <AppleDropdown value={String(pageSize)} options={PAGE_SIZE_OPTIONS} onChange={changePageSize} style={{ width: 150 }} />
+          </div>
+
+          <FiltersPopover activeCount={activeFilterCount}>
+            <div className="admin-filters-panel-row">
+              <span className="admin-filters-panel-label">Date range</span>
+              <AppleDropdown icon="calendar" value={datePreset} options={DATE_PRESETS} onChange={changeDatePreset} />
+            </div>
             {datePreset === "CUSTOM" ? (
-              <>
-                <label style={dateFieldLabelStyle}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <label style={{ ...dateFieldLabelStyle, flex: 1 }}>
                   From
                   <AppleDateField value={customFrom} onChange={changeCustomFrom} />
                 </label>
-                <label style={dateFieldLabelStyle}>
+                <label style={{ ...dateFieldLabelStyle, flex: 1 }}>
                   To
                   <AppleDateField value={customTo} onChange={changeCustomTo} />
                 </label>
-              </>
+              </div>
             ) : null}
-          </div>
-        ) : null}
+            {showStatusFilter ? (
+              <div className="admin-filters-panel-row">
+                <span className="admin-filters-panel-label">Status</span>
+                <AppleDropdown icon="checkmark" value={orderStatus} options={orderStatusOptions} onChange={changeOrderStatus} />
+              </div>
+            ) : null}
+            <div className="admin-filters-panel-row">
+              <span className="admin-filters-panel-label">Page size</span>
+              <AppleDropdown value={String(pageSize)} options={PAGE_SIZE_OPTIONS} onChange={changePageSize} />
+            </div>
+            {activeFilterCount > 0 ? (
+              <div className="admin-filters-panel-foot">
+                <GhostButton onClick={resetSecondaryFilters}>Clear filters</GhostButton>
+              </div>
+            ) : null}
+          </FiltersPopover>
+        </div>
 
         {error ? (
           <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
@@ -2175,6 +2303,92 @@ export default function AdminOrdersPage() {
         @media (prefers-reduced-motion: reduce){
           .admin-route-menu{ animation:none!important; }
           .admin-route-menu-trigger{ transition:none!important; }
+        }
+
+        .admin-filters-trigger{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          height:38px;
+          padding:0 16px;
+          border:none;
+          border-radius:999px;
+          background:rgba(29,29,31,.05);
+          color:var(--color-ink, #1d1d1f);
+          font-size:13px;
+          font-weight:650;
+          font-family:inherit;
+          cursor:pointer;
+          transition:background .16s ease, color .16s ease, transform .12s var(--ease-out, ease);
+        }
+        .admin-filters-trigger:hover{
+          background:rgba(29,29,31,.09);
+        }
+        .admin-filters-trigger:active{
+          transform:scale(.97);
+        }
+        .admin-filters-trigger:focus-visible{
+          outline:2px solid rgba(0,113,227,.36);
+          outline-offset:2px;
+        }
+        .admin-filters-trigger.is-open{
+          background:rgba(0,113,227,.1);
+          color:var(--color-azure, #0071e3);
+        }
+        .admin-filters-badge{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          min-width:18px;
+          height:18px;
+          padding:0 5px;
+          border-radius:999px;
+          background:var(--color-azure, #0071e3);
+          color:#fff;
+          font-size:11px;
+          font-weight:750;
+        }
+
+        .admin-filters-panel{
+          z-index:1401;
+          display:grid;
+          gap:12px;
+          padding:16px;
+          border-radius:20px;
+          background:#fff;
+          border:1px solid rgba(0,0,0,.06);
+          box-shadow:0 16px 40px rgba(0,0,0,.14), 0 1px 0 rgba(0,0,0,.04);
+          transform-origin:top right;
+          animation:adminFiltersPanelIn .18s var(--ease-out, cubic-bezier(.23,1,.32,1)) both;
+        }
+        .admin-filters-panel.is-closing{
+          animation:adminFiltersPanelOut .16s var(--ease-out, cubic-bezier(.23,1,.32,1)) both;
+        }
+        @keyframes adminFiltersPanelIn{
+          from{ opacity:0; transform:scale(.95) translateY(-4px); }
+          to{ opacity:1; transform:scale(1) translateY(0); }
+        }
+        @keyframes adminFiltersPanelOut{
+          from{ opacity:1; transform:scale(1) translateY(0); }
+          to{ opacity:0; transform:scale(.97) translateY(-2px); }
+        }
+        .admin-filters-panel-row{ display:grid; gap:6px; }
+        .admin-filters-panel-label{
+          font-size:11px;
+          font-weight:700;
+          letter-spacing:.04em;
+          text-transform:uppercase;
+          color:var(--color-graphite, #707070);
+        }
+        .admin-filters-panel-foot{
+          display:flex;
+          justify-content:flex-end;
+          padding-top:2px;
+          border-top:1px solid rgba(29,29,31,.08);
+        }
+        @media (prefers-reduced-motion: reduce){
+          .admin-filters-panel{ animation:none!important; }
+          .admin-filters-trigger{ transition:none!important; }
         }
 
         .admin-dispatcher-picker{ display:inline-flex; }

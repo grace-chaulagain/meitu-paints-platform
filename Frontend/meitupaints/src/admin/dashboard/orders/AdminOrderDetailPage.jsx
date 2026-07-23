@@ -136,9 +136,21 @@ export default function AdminOrderDetailPage() {
   const navigate = useNavigate();
   const isMobile = useIsMobileAdmin();
 
+  // This same page is reused verbatim for a dealer's own "Full Order
+  // History" flow (a nested route under their profile, rather than the
+  // shared /admin/dashboard/orders list) so both entry points show
+  // identical detail/history/PDF UI - only orderId extraction and the back
+  // target below need to know which URL shape got them here.
   const orderId = useMemo(() => {
+    const match =
+      location.pathname.match(/^\/admin\/dashboard\/orders\/([^/]+)$/) ||
+      location.pathname.match(/^\/admin\/dashboard\/dealers\/[^/]+\/orders\/([^/]+)$/);
+    return match?.[1] || "";
+  }, [location.pathname]);
+
+  const dealerOrdersDealerId = useMemo(() => {
     const match = location.pathname.match(
-      /^\/admin\/dashboard\/orders\/([^/]+)$/,
+      /^\/admin\/dashboard\/dealers\/([^/]+)\/orders\/[^/]+$/,
     );
     return match?.[1] || "";
   }, [location.pathname]);
@@ -225,6 +237,14 @@ export default function AdminOrderDetailPage() {
   // history so the list's exact filters/page/scroll (all preserved in its URL
   // and the shell's scroll cache) are restored, instead of a fresh default list.
   const goBackToOrders = () => {
+    if (dealerOrdersDealerId) {
+      if (location.state?.fromDealerOrdersList) {
+        navigate(-1);
+      } else {
+        navigate(`/admin/dashboard/dealers/${dealerOrdersDealerId}/orders`);
+      }
+      return;
+    }
     if (location.state?.fromOrdersList) {
       navigate(-1);
     } else {

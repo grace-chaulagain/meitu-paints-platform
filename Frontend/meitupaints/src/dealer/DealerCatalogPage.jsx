@@ -536,6 +536,41 @@ export default function DealerCatalogPage() {
   const [badgeBump, setBadgeBump] = useState(false);
   const previousQtyRef = useRef(0);
 
+  // A category chevron on the "All Products" grouped view pushes into a
+  // single-category grid, purely local state (mirrors
+  // DealerCatalogMobileView.jsx's drilldownCategory exactly) rather than a
+  // real route change - the root view underneath never unmounts, so its
+  // search/category/view-mode/scroll are still exactly as left the moment
+  // this closes, with zero extra state-restoration work needed.
+  const [drilldownCategory, setDrilldownCategory] = useState(null);
+  const savedScrollTopRef = useRef(0);
+
+  // One rAF isn't reliably enough for the target view to finish relayout
+  // before the scrollTop assignment lands (same issue and same multi-attempt
+  // fix as DealerCatalogMobileView.jsx's applyScrollTop).
+  function applyCatalogScrollTop(value) {
+    const setIt = () => {
+      const el = document.querySelector(".dashboard-main-shell");
+      if (el) el.scrollTop = value;
+    };
+    setIt();
+    requestAnimationFrame(() => requestAnimationFrame(setIt));
+    setTimeout(setIt, 80);
+    setTimeout(setIt, 250);
+  }
+
+  function openCategoryDrilldown(group) {
+    const scrollEl = document.querySelector(".dashboard-main-shell");
+    savedScrollTopRef.current = scrollEl ? scrollEl.scrollTop : 0;
+    setDrilldownCategory(group);
+    applyCatalogScrollTop(0);
+  }
+
+  function closeCategoryDrilldown() {
+    setDrilldownCategory(null);
+    applyCatalogScrollTop(savedScrollTopRef.current);
+  }
+
   useEffect(() => {
     saveDraft(quantities);
   }, [quantities]);
@@ -684,73 +719,123 @@ export default function DealerCatalogPage() {
           transition: "margin-right 300ms cubic-bezier(.23,1,.32,1)",
         }}
       >
-        <Surface padding={24} className="dash-fade-up">
-          <SectionHeader
-            icon="store"
-            title="Products"
-            size="large"
-            action={refreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
-          />
+        {drilldownCategory ? (
+          <>
+            <button type="button" className="dealer-catalog-drilldown-back" onClick={closeCategoryDrilldown}>
+              <DashboardIcon name="chevron" size={13} strokeWidth={2.4} style={{ transform: "rotate(180deg)" }} />
+              Products
+            </button>
 
-          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="dealer-catalog-category-filter" style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-              <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)", fontWeight: 600 }}>Category</span>
-              <AppleDropdown
-                value={activeCategory}
-                options={categoryOptions}
-                onChange={changeCategory}
-                placeholder="All Products"
-                icon="filter"
-                style={{ minWidth: 240 }}
-              />
+            <div>
+              <div className="dealer-category-heading">
+                <span>{drilldownCategory.label}</span>
+                <span className="dealer-category-count">{drilldownCategory.items.length}</span>
+              </div>
+              <div className={viewMode === "list" ? "dealer-catalog-list" : "dealer-catalog-grid"}>
+                {drilldownCategory.items.map((family) => (
+                  <ProductFamilyCard
+                    key={family.code}
+                    family={family}
+                    quantities={quantities}
+                    cartBySku={cartBySku}
+                    onQtyChange={handleQtyChange}
+                    layout={viewMode === "list" ? "list" : "card"}
+                  />
+                ))}
+              </div>
             </div>
-            <div style={{ maxWidth: 340, flex: "1 1 240px" }}>
-              <SearchField value={search} onChange={updateSearch} placeholder="Search products…" />
-            </div>
-            <ViewToggle value={viewMode === "list" ? "list" : "card"} onChange={(next) => setViewMode(next === "list" ? "list" : "card")} />
-          </div>
-
-          {loadError ? (
-            <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", borderRadius: 14, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
-              <span>{loadError}</span>
-              <GhostButton onClick={() => productsQuery.refetch()}>Retry</GhostButton>
-            </div>
-          ) : null}
-        </Surface>
-
-        {loading ? (
-          <LoadingGrid />
-        ) : families.length === 0 ? (
-          <EmptyState icon="store" title="No products found" subtitle="Try broadening your search or clearing the current filters." />
+          </>
         ) : (
-          <div style={{ display: "grid", gap: 40 }}>
-            {familyGroups.map((group) => {
-              const cards = group.items.map((family) => (
-                <ProductFamilyCard
-                  key={family.code}
-                  family={family}
-                  quantities={quantities}
-                  cartBySku={cartBySku}
-                  onQtyChange={handleQtyChange}
-                  layout={viewMode === "list" ? "list" : "card"}
-                />
-              ));
+          <>
+            <Surface padding={24} className="dash-fade-up">
+              <SectionHeader
+                icon="store"
+                title="Products"
+                size="large"
+                action={refreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
+              />
 
-              return (
-                <div key={group.key || "uncategorized"}>
-                  <div className="dealer-category-heading">
-                    <span>{group.label}</span>
-                    <span className="dealer-category-count">{group.items.length}</span>
-                  </div>
-                  {viewMode === "list" ? (
-                    <div className="dealer-catalog-list">{cards}</div>
-                  ) : (
-                    <CatalogCarouselRow>{cards}</CatalogCarouselRow>
-                  )}
+              <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div className="dealer-catalog-category-filter" style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
+                  <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)", fontWeight: 600 }}>Category</span>
+                  <AppleDropdown
+                    value={activeCategory}
+                    options={categoryOptions}
+                    onChange={changeCategory}
+                    placeholder="All Products"
+                    icon="filter"
+                    style={{ minWidth: 240 }}
+                  />
                 </div>
-              );
-            })}
-          </div>
+                <div style={{ maxWidth: 340, flex: "1 1 240px" }}>
+                  <SearchField value={search} onChange={updateSearch} placeholder="Search products…" />
+                </div>
+                <ViewToggle value={viewMode === "list" ? "list" : "card"} onChange={(next) => setViewMode(next === "list" ? "list" : "card")} />
+              </div>
+
+              {loadError ? (
+                <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", borderRadius: 14, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
+                  <span>{loadError}</span>
+                  <GhostButton onClick={() => productsQuery.refetch()}>Retry</GhostButton>
+                </div>
+              ) : null}
+            </Surface>
+
+            {loading ? (
+              <LoadingGrid />
+            ) : families.length === 0 ? (
+              <EmptyState icon="store" title="No products found" subtitle="Try broadening your search or clearing the current filters." />
+            ) : (
+              <div style={{ display: "grid", gap: 40 }}>
+                {familyGroups.map((group) => {
+                  const cards = group.items.map((family) => (
+                    <ProductFamilyCard
+                      key={family.code}
+                      family={family}
+                      quantities={quantities}
+                      cartBySku={cartBySku}
+                      onQtyChange={handleQtyChange}
+                      layout={viewMode === "list" ? "list" : "card"}
+                    />
+                  ));
+
+                  // Only the "All Products" grouped view drills down further -
+                  // once a specific category is already chosen in the dropdown,
+                  // familyGroups has exactly one entry matching it, so there's
+                  // nothing left to drill into.
+                  const isDrillable = activeCategory === "ALL";
+
+                  return (
+                    <div key={group.key || "uncategorized"}>
+                      {isDrillable ? (
+                        <button
+                          type="button"
+                          className="dealer-category-heading is-drillable"
+                          onClick={() => openCategoryDrilldown(group)}
+                        >
+                          <span className="dealer-category-heading-label">{group.label}</span>
+                          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} className="dealer-category-heading-chevron" />
+                          <span className="dealer-category-count">{group.items.length}</span>
+                        </button>
+                      ) : (
+                        <div className="dealer-category-heading">
+                          <span>{group.label}</span>
+                          <span className="dealer-category-count">{group.items.length}</span>
+                        </div>
+                      )}
+                      {viewMode === "list" ? (
+                        <div className="dealer-catalog-list">{cards}</div>
+                      ) : isDrillable ? (
+                        <CatalogCarouselRow>{cards}</CatalogCarouselRow>
+                      ) : (
+                        <div className="dealer-catalog-grid">{cards}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1007,14 +1092,98 @@ export default function DealerCatalogPage() {
           display:flex;
           align-items:center;
           gap:8px;
+          width:100%;
           margin-bottom:16px;
           padding-bottom:10px;
+          border:none;
           border-bottom:1px solid rgba(29,29,31,.08);
+          background:transparent;
+          font-family:inherit;
           font-size:13px;
           font-weight:800;
           letter-spacing:.03em;
           text-transform:uppercase;
+          text-align:left;
           color:var(--color-ink, #1d1d1f);
+        }
+
+        .dealer-category-heading.is-drillable{
+          cursor:pointer;
+          border-radius:10px 10px 0 0;
+          transition:background-color .14s ease, transform .12s var(--ease-out, ease);
+        }
+        .dealer-category-heading.is-drillable:hover{
+          background:rgba(29,29,31,.03);
+        }
+        .dealer-category-heading.is-drillable:active{
+          transform:scale(.995);
+        }
+        .dealer-category-heading-chevron{
+          flex-shrink:0;
+          color:var(--color-azure, #0071e3);
+          transition:transform .16s var(--ease-out, ease);
+        }
+        .dealer-category-heading.is-drillable:hover .dealer-category-heading-chevron{
+          transform:translateX(2px);
+        }
+
+        /* Sleek animated underline reveal on hover - a transform-scaled
+           pseudo-element (GPU-accelerated, not a width/background-size
+           animation) growing from the left edge, matching the "only animate
+           transform/opacity" rule. currentColor picks up the azure hover
+           tint below it applies, so text and underline land in sync. */
+        .dealer-category-heading-label{
+          position:relative;
+          display:inline-block;
+        }
+        .dealer-category-heading-label::after{
+          content:"";
+          position:absolute;
+          left:0;
+          right:0;
+          bottom:-3px;
+          height:1.5px;
+          background:currentColor;
+          transform:scaleX(0);
+          transform-origin:left;
+          transition:transform .2s var(--ease-out, cubic-bezier(.23,1,.32,1));
+        }
+        .dealer-category-heading.is-drillable:hover .dealer-category-heading-label{
+          color:var(--color-azure, #0071e3);
+        }
+        .dealer-category-heading.is-drillable:hover .dealer-category-heading-label::after{
+          transform:scaleX(1);
+        }
+
+        .dealer-catalog-drilldown-back{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          width:fit-content;
+          border:none;
+          background:transparent;
+          color:var(--color-ink, #1d1d1f);
+          font-size:13.5px;
+          font-weight:700;
+          font-family:inherit;
+          cursor:pointer;
+          padding:6px 2px;
+          transition:color .14s ease, transform .12s var(--ease-out, ease);
+        }
+        .dealer-catalog-drilldown-back:hover{
+          color:var(--color-azure, #0071e3);
+        }
+        .dealer-catalog-drilldown-back:active{
+          transform:scale(.97);
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          .dealer-category-heading.is-drillable,
+          .dealer-category-heading-chevron,
+          .dealer-category-heading-label::after,
+          .dealer-catalog-drilldown-back{
+            transition:none!important;
+          }
         }
 
         .dealer-category-count{

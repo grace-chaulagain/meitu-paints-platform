@@ -1,6 +1,7 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { amountInWords, compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.js";
 import { MeituLogoMark } from "../../utils/pdfBrand.jsx";
+import { resolvePiUnitLabel } from "../../utils/piUnitLabels.js";
 
 const MEITU_PAN = "606572561";
 
@@ -207,7 +208,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
             <Text style={styles.colSN}>{index + 1}</Text>
             <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
             <Text style={styles.colQty}>{item.quantity ?? "—"}</Text>
-            <Text style={styles.colUnit}>{item.unit || item.packLabel || item.variantLabel || "—"}</Text>
+            <Text style={styles.colUnit}>{resolvePiUnitLabel(item)}</Text>
             <Text style={styles.colRate}>
               {money(item.netUnitPrice, currency, { maximumFractionDigits: 0 })}
             </Text>

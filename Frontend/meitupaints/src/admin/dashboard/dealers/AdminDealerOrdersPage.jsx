@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   useGetAdminDealerQuery,
   useGetAdminScopedOrdersQuery,
-  useLazyGetAdminScopedOrderQuery,
+  useGetProductFamiliesQuery,
+  useGetProductsQuery,
 } from "../../../redux/api/meituApi.js";
-import { downloadOrderSummaryPdf } from "../../../utils/downloadOrderSummaryPdf.jsx";
-import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import {
+  AdminOrderCardStyles,
+  AdminOrderTimelineRow,
+} from "../orders/AdminOrdersPage.jsx";
+import { groupOrdersByDay } from "../orders/orderFormatting.js";
+import { OwnerChipStyles } from "../../../components/orderflow/OwnerChip.jsx";
+import { OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
 import {
   DashboardUIStyles,
   EmptyState,
@@ -18,13 +25,39 @@ import {
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 
-const ORDER_FILTERS = [
+// Mirrors AdminOrdersPage.jsx's own status tabs (ALL is a real, distinct
+// server-side scope there - "no status/archive param at all" quietly
+// defaults to SUBMITTED-only, see listOrdersForActor in order.service.js -
+// so this list must pass status:"ALL" explicitly or a dealer's own "full
+// order history" would silently only ever show their still-pending orders).
+const STATUS_FILTERS = [
   { key: "ALL", label: "All" },
-  { key: "SUBMITTED", label: "Submitted" },
+  { key: "SUBMITTED", label: "Pending" },
   { key: "VERIFIED", label: "Verified" },
+  { key: "DISPATCHED", label: "Dispatched" },
+  { key: "COMPLETED", label: "Completed" },
   { key: "REJECTED", label: "Rejected" },
-  { key: "ARCHIVED", label: "Archived" },
+  { key: "CANCELLED", label: "Cancelled" },
 ];
+
+const LIST_DEFAULTS = { search: "", status: "ALL" };
+
+function parseListState(search) {
+  const params = new URLSearchParams(search || "");
+  const status = params.get("status") || LIST_DEFAULTS.status;
+  return {
+    search: params.get("q") || LIST_DEFAULTS.search,
+    status: STATUS_FILTERS.some((option) => option.key === status) ? status : LIST_DEFAULTS.status,
+  };
+}
+
+function buildListSearch(state) {
+  const params = new URLSearchParams();
+  if (state.search) params.set("q", state.search);
+  if (state.status && state.status !== LIST_DEFAULTS.status) params.set("status", state.status);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
 
 // A plain, minimal top-left back link - Apple's own back-navigation
 // convention (chevron + text, no button chrome) rather than a boxed
@@ -55,168 +88,6 @@ function BackLink({ onClick, children }) {
   );
 }
 
-function CloseButton({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Close"
-      style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}
-    >
-      <DashboardIcon name="close" size={14} strokeWidth={2} />
-    </button>
-  );
-}
-
-function statusTone(status) {
-  const s = String(status || "").toUpperCase();
-  if (s === "VERIFIED") return "positive";
-  if (s === "REJECTED") return "critical";
-  if (s === "ARCHIVED") return "neutral";
-  return "caution";
-}
-
-function money(value, currency = "NPR") {
-  return `${currency} ${Number(value || 0).toLocaleString()}`;
-}
-
-function formatDate(value) {
-  return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
-}
-
-function DetailItem({ label, value }) {
-  return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 13.5, lineHeight: 1.5, fontWeight: 500, color: "var(--color-ink, #1d1d1f)", wordBreak: "break-word" }}>
-        {value || "—"}
-      </div>
-    </div>
-  );
-}
-
-function OrderRow({ order, onOpen }) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(order)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(order);
-        }
-      }}
-      className="dash-list-row dash-selectable-row"
-      style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 110px 130px 100px", gap: 12, alignItems: "center", padding: "12px 16px", cursor: "pointer" }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.orderNumber || "Unnamed Order"}</div>
-        <div style={{ marginTop: 2, fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>{order?.payment?.method || "No payment method"} · {Array.isArray(order.items) ? `${order.items.length} items` : "—"}</div>
-      </div>
-      <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDate(order.createdAt)}</span>
-      <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{money(order?.totals?.total, order?.totals?.currency)}</span>
-      <span><Pill tone={statusTone(order.status)} size="small">{order.status || "—"}</Pill></span>
-    </div>
-  );
-}
-
-function OrderItemsTable({ items = [] }) {
-  if (!items.length) {
-    return <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>No items found.</div>;
-  }
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["Item", "Pack", "Qty", "Rate", "Amount"].map((head) => (
-              <th key={head} style={{ textAlign: head === "Item" || head === "Pack" ? "left" : "right", padding: "8px 10px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>
-                {head}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, index) => (
-            <tr key={`${item.sku || item.code || item.name}-${index}`} style={{ borderTop: "1px solid rgba(0,0,0,.06)" }}>
-              <td style={{ padding: "8px 10px" }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-ink, #1d1d1f)" }}>{item.name || "—"}</div>
-                <div style={{ fontSize: 11, color: "var(--color-graphite, #707070)" }}>{item.sku || item.code || ""}</div>
-              </td>
-              <td style={{ padding: "8px 10px", fontSize: 12.5 }}>{item.packLabel || item.variantLabel || item.unit || "—"}</td>
-              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5, fontWeight: 700 }}>{Number(item.quantity || 0).toLocaleString()}</td>
-              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5 }}>{Number(item.unitPrice || 0).toLocaleString()}</td>
-              <td style={{ padding: "8px 10px", textAlign: "right", fontSize: 12.5, fontWeight: 700 }}>{Number(item.lineTotal || 0).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function OrderDetailModal({ open, order, dealer, loading, onClose }) {
-  if (!open || !order) return null;
-
-  const resolvedItems = Array.isArray(order?.items)
-    ? order.items
-    : Array.isArray(order?.snapshot?.items)
-      ? order.snapshot.items
-      : [];
-
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 24 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Surface className="dash-modal-surface-in" style={{ width: "min(920px, 100%)", maxHeight: "90vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <SectionHeader eyebrow={dealer?.companyName || "Dealer"} icon="orders" title={order.orderNumber || "Order Detail"} />
-          <CloseButton onClick={onClose} />
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Pill tone={statusTone(order.status)} size="small">{order.status || "—"}</Pill>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{money(order?.totals?.total, order?.totals?.currency)}</span>
-          <GhostButton icon="download" onClick={() => downloadOrderSummaryPdf({ order, dealer })}>
-            Download PDF
-          </GhostButton>
-        </div>
-
-        <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "minmax(0,1.1fr) minmax(280px,.9fr)", gap: 16 }}>
-          <Surface padding={0} style={{ border: "1px solid rgba(0,0,0,.06)" }}>
-            <div style={{ padding: "10px 14px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--color-graphite, #707070)" }}>Order Items</div>
-            {loading ? (
-              <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>Loading order items…</div>
-            ) : (
-              <OrderItemsTable items={resolvedItems} />
-            )}
-          </Surface>
-
-          <Surface padding={16} style={{ display: "grid", gap: 12 }}>
-            <DetailItem label="Dealer" value={dealer?.companyName} />
-            <DetailItem label="Contact" value={dealer?.contactName} />
-            <DetailItem label="Phone" value={dealer?.phone} />
-            <DetailItem label="Email" value={dealer?.email} />
-            <DetailItem label="Payment Method" value={order?.payment?.method} />
-            <DetailItem label="Payment Reference" value={order?.payment?.reference} />
-            {order?.dealerNote ? <DetailItem label="Dealer Note" value={order.dealerNote} /> : null}
-            {order?.internalNote ? <DetailItem label="Internal Note" value={order.internalNote} /> : null}
-            <DetailItem label="Submitted" value={order?.createdAt ? new Date(order.createdAt).toLocaleString() : "—"} />
-          </Surface>
-        </div>
-      </Surface>
-    </div>
-  );
-}
-
 export default function AdminDealerOrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -228,17 +99,57 @@ export default function AdminDealerOrdersPage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const listState = useMemo(() => parseListState(location.search), [location.search]);
+  const { search, status } = listState;
+
+  const updateListState = useCallback(
+    (patch) => {
+      const next = { ...listState, ...patch };
+      navigate(
+        { pathname: `/admin/dashboard/dealers/${dealerId}/orders`, search: buildListSearch(next) },
+        { replace: true },
+      );
+    },
+    [listState, navigate, dealerId],
+  );
+
+  const setSearch = useCallback((value) => updateListState({ search: value }), [updateListState]);
+  const setStatus = useCallback((value) => updateListState({ status: value }), [updateListState]);
 
   const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
-  const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId }, { skip: !dealerId });
-  const [fetchOrderDetail] = useLazyGetAdminScopedOrderQuery();
+  // No status param at all - admin.service.js's listOrders (the backend for
+  // /api/admin/orders, a different implementation than the fleet-wide
+  // /api/orders the main Orders page uses) does a plain `if (status)
+  // q.status = status`, with no "ALL means every status" special case. Send
+  // the frontend's "ALL" sentinel literally and it filters for orders whose
+  // status is the string "ALL" - i.e. none - so omitting the param entirely
+  // is what actually fetches every status; status filtering happens
+  // client-side below instead. limit:100 is the server's own validated
+  // ceiling (order.validation.js), not just a sensible default - this is
+  // meant to be the dealer's *complete* order history.
+  const ordersQuery = useGetAdminScopedOrdersQuery(
+    { dealerId, limit: 100 },
+    { skip: !dealerId },
+  );
+  const productsQuery = useGetProductsQuery();
+  const familiesQuery = useGetProductFamiliesQuery();
 
   const dealer = dealerQuery.data?.item || null;
+
+  const productsMap = useMemo(() => {
+    const map = {};
+    for (const item of productsQuery.data || []) map[item.sku] = item;
+    return map;
+  }, [productsQuery.data]);
+
+  const familyMap = useMemo(() => {
+    const map = {};
+    for (const family of familiesQuery.data || []) {
+      if (family?.code) map[family.code] = family;
+    }
+    return map;
+  }, [familiesQuery.data]);
+
   const allDealerOrders = useMemo(() => {
     const incomingOrders = ordersQuery.data?.items || [];
     return incomingOrders.filter((order) => {
@@ -249,45 +160,15 @@ export default function AdminDealerOrdersPage() {
   }, [ordersQuery.data, dealerId]);
 
   const loading =
-    !dealer &&
-    allDealerOrders.length === 0 &&
-    (dealerQuery.isLoading || ordersQuery.isLoading);
+    !dealer && allDealerOrders.length === 0 && (dealerQuery.isLoading || ordersQuery.isLoading);
   const isRefreshing =
-    Boolean(dealer || allDealerOrders.length) &&
-    (dealerQuery.isFetching || ordersQuery.isFetching);
-  const queryError = dealerQuery.error?.message || ordersQuery.error?.message || "";
+    Boolean(dealer || allDealerOrders.length) && (dealerQuery.isFetching || ordersQuery.isFetching);
+  const queryError = dealerQuery.error || ordersQuery.error;
+  const error = queryError ? getQueryErrorMessage(queryError, "Failed to load order history.") : "";
 
   function loadPageData() {
     dealerQuery.refetch();
     ordersQuery.refetch();
-  }
-
-  useEffect(() => {
-    setActiveOrder((current) => {
-      if (!current?._id) return null;
-      return allDealerOrders.find((item) => item._id === current._id) || current;
-    });
-  }, [allDealerOrders]);
-
-  async function handleOpenOrder(nextOrder) {
-    if (!nextOrder?._id) return;
-
-    try {
-      setDetailLoading(true);
-      setError("");
-      const fullOrder = await fetchOrderDetail(nextOrder._id, true).unwrap();
-      setActiveOrder(fullOrder || nextOrder);
-    } catch (err) {
-      setActiveOrder(nextOrder);
-      setError(
-        err?.data?.error ||
-          err?.data?.message ||
-          err?.message ||
-          "Failed to load full order details.",
-      );
-    } finally {
-      setDetailLoading(false);
-    }
   }
 
   const searchedOrders = useMemo(() => {
@@ -295,40 +176,45 @@ export default function AdminDealerOrdersPage() {
     if (!q) return allDealerOrders;
 
     return allDealerOrders.filter((order) =>
-      [
-        order.orderNumber,
-        order.payment?.method,
-        order.payment?.reference,
-        order.dealerNote,
-        order.internalNote,
-      ]
+      [order.orderNumber, order.payment?.method, order.payment?.reference, order.dealerNote, order.internalNote]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q)),
     );
   }, [allDealerOrders, search]);
 
   const filteredOrders = useMemo(() => {
-    if (statusFilter === "ALL") return searchedOrders;
-    return searchedOrders.filter(
-      (order) => String(order.status || "").toUpperCase() === statusFilter,
-    );
-  }, [searchedOrders, statusFilter]);
+    if (status === "ALL") return searchedOrders;
+    return searchedOrders.filter((order) => String(order.status || "").toUpperCase() === status);
+  }, [searchedOrders, status]);
 
-  const countsByFilter = useMemo(() => {
-    return {
-      ALL: allDealerOrders.length,
-      SUBMITTED: allDealerOrders.filter((o) => o.status === "SUBMITTED").length,
-      VERIFIED: allDealerOrders.filter((o) => o.status === "VERIFIED").length,
-      REJECTED: allDealerOrders.filter((o) => o.status === "REJECTED").length,
-      ARCHIVED: allDealerOrders.filter((o) => o.status === "ARCHIVED").length,
-    };
+  const countsByStatus = useMemo(() => {
+    const counts = { ALL: allDealerOrders.length };
+    for (const option of STATUS_FILTERS) {
+      if (option.key === "ALL") continue;
+      counts[option.key] = allDealerOrders.filter(
+        (order) => String(order.status || "").toUpperCase() === option.key,
+      ).length;
+    }
+    return counts;
   }, [allDealerOrders]);
 
-  const filterOptions = ORDER_FILTERS.map((filter) => ({ ...filter, count: countsByFilter[filter.key] }));
+  const dayGroups = useMemo(() => groupOrdersByDay(filteredOrders), [filteredOrders]);
+
+  const openOrder = useCallback(
+    (order) => {
+      navigate(`/admin/dashboard/dealers/${dealerId}/orders/${order._id}`, {
+        state: { fromDealerOrdersList: true },
+      });
+    },
+    [navigate, dealerId],
+  );
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <DashboardUIStyles />
+      <AdminOrderCardStyles />
+      <OwnerChipStyles />
+      <OrderFlowRailStyles />
 
       <BackLink onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}`)}>Back to Dealer Profile</BackLink>
 
@@ -349,11 +235,17 @@ export default function AdminDealerOrdersPage() {
           <div style={{ maxWidth: 320, flex: "1 1 240px" }}>
             <SearchField value={search} onChange={setSearch} placeholder="Search order number, payment, notes…" />
           </div>
-          <SegmentedControl options={filterOptions} value={statusFilter} onChange={setStatusFilter} />
+          <SegmentedControl
+            options={STATUS_FILTERS.map((option) => ({ ...option, count: countsByStatus[option.key] }))}
+            value={status}
+            onChange={setStatus}
+          />
         </div>
 
-        {(error || queryError) ? (
-          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>{error || queryError}</div>
+        {error ? (
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
+            {error}
+          </div>
         ) : null}
       </Surface>
 
@@ -369,27 +261,43 @@ export default function AdminDealerOrdersPage() {
             subtitle={dealer?.companyName ? `No matching order records were found for ${dealer.companyName}.` : "No matching order records were found for this dealer."}
           />
           <div style={{ marginTop: 4 }}>
-            <GhostButton onClick={() => { setSearch(""); setStatusFilter("ALL"); }}>Clear filters</GhostButton>
+            <GhostButton onClick={() => updateListState({ search: "", status: "ALL" })}>Clear filters</GhostButton>
           </div>
         </Surface>
       ) : (
-        <Surface padding={0} className="dash-fade-up">
-          {filteredOrders.map((order) => (
-            <OrderRow key={order._id} order={order} onOpen={handleOpenOrder} />
+        <div className="admin-order-timeline">
+          {dayGroups.map((group) => (
+            <div key={group.key} className="admin-order-timeline-day">
+              <div className="admin-order-timeline-day-header">
+                <div className="admin-order-timeline-day-label">
+                  {group.relativeLabel ? (
+                    <>
+                      <strong>{group.relativeLabel}</strong>
+                      <span className="admin-order-timeline-day-sep">•</span>
+                      <span>{group.dateText}</span>
+                    </>
+                  ) : (
+                    <strong>{group.dateText}</strong>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {group.orders.map((order) => (
+                  <AdminOrderTimelineRow
+                    key={order._id}
+                    item={order}
+                    onOpen={openOrder}
+                    onVerify={openOrder}
+                    isArrived={false}
+                    productsMap={productsMap}
+                    familyMap={familyMap}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
-        </Surface>
+        </div>
       )}
-
-      <OrderDetailModal
-        open={Boolean(activeOrder)}
-        order={activeOrder}
-        dealer={dealer}
-        loading={detailLoading}
-        onClose={() => {
-          setActiveOrder(null);
-          setDetailLoading(false);
-        }}
-      />
     </div>
   );
 }

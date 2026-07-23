@@ -24,6 +24,10 @@ function DashboardNavItem({ item, active, onNavigate, compact = false }) {
   const badge = badgeText(item.badge);
   const iconName = item.icon || item.iconName || "";
 
+  // Opt-in only: an item supplies its own onContextMenu(event, item) to get
+  // a right-click affordance (e.g. AdminProductsPage.jsx's category rename
+  // tag). Every other nav item across every dashboard leaves this unset and
+  // keeps the browser's normal right-click menu, unaffected.
   return (
     <button
       type="button"
@@ -31,6 +35,14 @@ function DashboardNavItem({ item, active, onNavigate, compact = false }) {
         compact ? "compact" : ""
       } ${iconName ? "has-icon" : ""}`}
       onClick={() => onNavigate?.(item)}
+      onContextMenu={
+        item.onContextMenu
+          ? (event) => {
+              event.preventDefault();
+              item.onContextMenu(event, item);
+            }
+          : undefined
+      }
     >
       {iconName ? (
         <span className="dashboard-nav-icon">
@@ -78,6 +90,17 @@ export default function DashboardShell({
   // that going "back" (e.g. from an order detail page to the orders list) restores
   // the list exactly where the admin left it, instead of always jumping to top.
   const scrollPositions = useRef(new Map());
+  // A click-triggered navigation unmounts/shrinks the outgoing page's content
+  // inside this same, never-unmounted .dashboard-main-shell node. When the
+  // remaining scrollHeight becomes shorter than the current scrollTop, the
+  // browser force-clamps scrollTop back down and fires its own native
+  // 'scroll' event - which still reaches handleMainScroll below (still bound
+  // to the OUTGOING pathname at that point) and overwrites the real,
+  // intentional scroll position with that clamped value before the restore
+  // effect ever runs. Captured on pointerdown (capture phase, so it always
+  // fires before the row's onClick/navigate) as a snapshot that gets
+  // committed after everything else settles, so it wins over the clamp.
+  const pendingScrollSnapshot = useRef(null);
   const railWidth = DEFAULT_RAIL_WIDTH;
   const [railCollapsed, setRailCollapsed] = useState(readStoredRailCollapsed);
 
@@ -99,7 +122,25 @@ export default function DashboardShell({
     }
   }, [location.pathname]);
 
+  const handleMainPointerDownCapture = useCallback(() => {
+    if (mainRef.current) {
+      pendingScrollSnapshot.current = { pathname: location.pathname, top: mainRef.current.scrollTop };
+    }
+  }, [location.pathname]);
+
   useEffect(() => {
+    // A pending pre-navigation snapshot (see handleMainPointerDownCapture)
+    // always reflects the last render's pathname, so commit it before doing
+    // anything else this effect run - it must win over any unmount-clamp
+    // scroll event that landed on scrollPositions in between.
+    if (pendingScrollSnapshot.current) {
+      scrollPositions.current.set(
+        pendingScrollSnapshot.current.pathname,
+        pendingScrollSnapshot.current.top,
+      );
+      pendingScrollSnapshot.current = null;
+    }
+
     const node = mainRef.current;
     if (!node) return;
 
@@ -178,7 +219,12 @@ export default function DashboardShell({
           <DashboardIcon name="chevron" size={13} strokeWidth={2.1} />
         </button>
 
-        <section className="dashboard-main-shell" ref={mainRef} onScroll={handleMainScroll}>
+        <section
+          className="dashboard-main-shell"
+          ref={mainRef}
+          onScroll={handleMainScroll}
+          onPointerDownCapture={handleMainPointerDownCapture}
+        >
           {hideMobileTopbar ? null : (
             <div className="dashboard-mobile-topbar">
               <button

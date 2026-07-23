@@ -4,6 +4,7 @@ import { requireRole } from "../middlewares/requireRole.middleware.js";
 import { upload } from "../middlewares/upload.js";
 import {
   listCategories,
+  renameCategory,
   listFamilies,
   createFamily,
   updateFamily,
@@ -27,6 +28,7 @@ const router = Router();
 router.use(auth, requireRole("ADMIN"));
 
 router.get("/categories", listCategories);
+router.post("/categories/rename", renameCategory);
 
 /* -----------------------------
    Product Families

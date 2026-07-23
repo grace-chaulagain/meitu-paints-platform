@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import ProductEditorModal from "./components/ProductEditorModal";
+import AdminDecisionModal from "../dashboard/components/AdminDecisionModal.jsx";
 import DispatcherPricingWorkspace from "./dispatcherPricing/DispatcherPricingWorkspace.jsx";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import DashboardShell from "../../components/dashboard/DashboardShell.jsx";
@@ -25,6 +26,7 @@ import {
   useGetAdminProductCategoriesQuery,
   useGetAdminProductFamiliesQuery,
   useGetAdminProductsQuery,
+  useRenameProductCategoryMutation,
   useUploadAdminFamilyImageMutation,
   useUploadAdminProductImageMutation,
 } from "../../redux/api/meituApi.js";
@@ -1415,6 +1417,52 @@ export default function AdminProductsPage() {
   const [section, setSection] = useState("catalog"); // "catalog" | "dispatcherPricing"
   const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [createWithNewCategory, setCreateWithNewCategory] = useState(false);
+  const [categoryContextMenu, setCategoryContextMenu] = useState(null); // { key, title, x, y }
+  const [renameCategoryTarget, setRenameCategoryTarget] = useState(null); // { key, title }
+  const [renameCategoryValue, setRenameCategoryValue] = useState("");
+  const [renameProductCategory, renameCategoryMutation] = useRenameProductCategoryMutation();
+
+  useEffect(() => {
+    if (!categoryContextMenu) return undefined;
+    const dismiss = () => setCategoryContextMenu(null);
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    };
+  }, [categoryContextMenu]);
+
+  function openCategoryContextMenu(event, navItem) {
+    event.preventDefault();
+    setCategoryContextMenu({ key: navItem.key, title: navItem.title, x: event.clientX, y: event.clientY });
+  }
+
+  function openRenameCategoryModal() {
+    if (!categoryContextMenu) return;
+    setRenameCategoryTarget({ key: categoryContextMenu.key, title: categoryContextMenu.title });
+    setRenameCategoryValue(categoryContextMenu.title);
+    setCategoryContextMenu(null);
+  }
+
+  function closeRenameCategoryModal() {
+    if (renameCategoryMutation.isLoading) return;
+    setRenameCategoryTarget(null);
+    setRenameCategoryValue("");
+  }
+
+  async function handleConfirmRenameCategory() {
+    if (!renameCategoryTarget) return;
+    const nextLabel = renameCategoryValue.trim();
+    if (!nextLabel) return;
+    try {
+      await renameProductCategory({ fromValue: renameCategoryTarget.key, toLabel: nextLabel }).unwrap();
+      setRenameCategoryTarget(null);
+      setRenameCategoryValue("");
+    } catch (error) {
+      alert(error?.message || "Failed to rename category");
+    }
+  }
 
   function updateView(next) {
     setView(next);
@@ -1708,7 +1756,13 @@ export default function AdminProductsPage() {
       categoryOptions
         .filter((option) => option.value !== "ALL")
         .forEach((option) => {
-          categoryItems.push({ key: option.value, title: option.label, icon: "package", badge: categoryCounts.get(option.value) || 0 });
+          categoryItems.push({
+            key: option.value,
+            title: option.label,
+            icon: "package",
+            badge: categoryCounts.get(option.value) || 0,
+            onContextMenu: openCategoryContextMenu,
+          });
         });
       categoryItems.push({ key: "__ADD_CATEGORY__", title: "Add Category", icon: "plus" });
     }
@@ -1888,6 +1942,67 @@ export default function AdminProductsPage() {
         ) : null}
       </div>
       </DashboardShell>
+
+      {categoryContextMenu ? (
+        <button
+          type="button"
+          onClick={openRenameCategoryModal}
+          onPointerDown={(event) => event.stopPropagation()}
+          style={{
+            position: "fixed",
+            top: Math.max(8, categoryContextMenu.y),
+            left: Math.max(8, categoryContextMenu.x),
+            zIndex: 1700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            height: 34,
+            padding: "0 14px",
+            borderRadius: 999,
+            border: "1px solid rgba(29,29,31,.08)",
+            background: "rgba(29,29,31,.94)",
+            color: "#fff",
+            fontSize: 12.5,
+            fontWeight: 600,
+            boxShadow: "0 12px 28px rgba(0,0,0,.22)",
+            cursor: "pointer",
+          }}
+        >
+          <DashboardIcon name="edit" size={13} strokeWidth={2} />
+          Rename category
+        </button>
+      ) : null}
+
+      <AdminDecisionModal
+        open={Boolean(renameCategoryTarget)}
+        title="Rename category"
+        subtitle={renameCategoryTarget ? `Renaming "${renameCategoryTarget.title}" updates every product and page that references it.` : ""}
+        confirmLabel="Save"
+        busy={renameCategoryMutation.isLoading}
+        disabled={!renameCategoryValue.trim() || renameCategoryValue.trim() === renameCategoryTarget?.title}
+        onClose={closeRenameCategoryModal}
+        onConfirm={handleConfirmRenameCategory}
+      >
+        <input
+          autoFocus
+          value={renameCategoryValue}
+          onChange={(event) => setRenameCategoryValue(event.target.value)}
+          disabled={renameCategoryMutation.isLoading}
+          placeholder="Category name"
+          style={{
+            width: "100%",
+            height: 42,
+            borderRadius: 18,
+            border: "none",
+            background: "rgba(232,232,237,.72)",
+            padding: "0 14px",
+            outline: "none",
+            fontSize: 13.5,
+            fontWeight: 500,
+            color: "var(--color-ink, #1d1d1f)",
+          }}
+        />
+      </AdminDecisionModal>
 
       {isMobile ? (
         <>

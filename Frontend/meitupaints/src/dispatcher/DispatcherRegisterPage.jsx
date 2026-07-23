@@ -27,6 +27,33 @@ const optionalFields = [
   },
 ];
 
+// Mirrors DealershipRegistration.jsx's isValidEmail exactly - stricter than
+// the browser's native type="email" check (which accepts things like "a@b"
+// or "a@b..c"), catches the concrete malformed patterns that indicate a
+// corrupt/mistyped address: missing TLD, consecutive/leading/trailing dots,
+// stray whitespace, multiple @ signs, invalid characters. Still just a
+// format check (matching what the backend's Zod emailSchema enforces) - it
+// stops obviously corrupt input before it ever leaves the browser.
+function isValidEmail(value) {
+  const email = String(value || "").trim();
+  if (!email || /\s/.test(email) || /\.\./.test(email)) return false;
+
+  const match = email.match(/^([^@]+)@([^@]+)$/);
+  if (!match) return false;
+  const [, local, domain] = match;
+
+  if (!local || local.startsWith(".") || local.endsWith(".")) return false;
+  if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)) return false;
+
+  if (!domain || domain.startsWith(".") || domain.endsWith(".") || domain.startsWith("-") || domain.endsWith("-")) {
+    return false;
+  }
+  if (!/^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$/.test(domain)) return false;
+
+  const tld = domain.split(".").pop();
+  return /^[a-zA-Z]{2,}$/.test(tld);
+}
+
 function BackArrowIcon() {
   return (
     <svg
@@ -51,6 +78,10 @@ export default function DispatcherRegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
+  const [emailTouched, setEmailTouched] = useState(false);
+
+  const emailValid = useMemo(() => isValidEmail(formData.email), [formData.email]);
+  const showEmailError = emailTouched && formData.email.trim().length > 0 && !emailValid;
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
@@ -72,6 +103,8 @@ export default function DispatcherRegisterPage() {
       [event.target.name]: event.target.value,
     }));
   };
+
+  const handleEmailBlur = () => setEmailTouched(true);
 
   const showOptional = (key) => {
     setVisibleOptional((current) => ({ ...current, [key]: true }));
@@ -95,6 +128,15 @@ export default function DispatcherRegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitting) return;
+
+    // Belt-and-suspenders: catches a bad address even if the field was never
+    // blurred (paste-then-submit) or the browser's native type="email" check
+    // let something looser through.
+    if (!isValidEmail(formData.email)) {
+      setEmailTouched(true);
+      setError("Please enter a valid email address before submitting.");
+      return;
+    }
 
     setSubmitting(true);
     setSubmitted(false);
@@ -228,17 +270,24 @@ export default function DispatcherRegisterPage() {
                 />
               </label>
 
-              <label className="apple-dispatcher-field">
+              <label className={`apple-dispatcher-field ${showEmailError ? "invalid" : ""}`}>
                 <span>Email Address</span>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
+                  onBlur={handleEmailBlur}
                   required
                   placeholder="you@example.com"
                   autoComplete="email"
+                  aria-invalid={showEmailError}
                 />
+                {showEmailError ? (
+                  <span className="apple-dispatcher-field-error">
+                    Enter a valid email address, e.g. name@example.com
+                  </span>
+                ) : null}
               </label>
 
               <label className="apple-dispatcher-field">
@@ -564,6 +613,27 @@ export default function DispatcherRegisterPage() {
         .apple-dispatcher-field textarea:focus{
           border-color:#86868b !important;
           box-shadow:none !important;
+        }
+
+        .apple-dispatcher-field.invalid input{
+          border-color:#b64400 !important;
+        }
+
+        .apple-dispatcher-field.invalid input:focus{
+          border-color:#b64400 !important;
+        }
+
+        .apple-dispatcher-field-error{
+          /* !important: ".apple-dispatcher-field span" (the grey label
+             style two rules up) is a class+element selector, which beats
+             this single-class one on specificity alone - without it the
+             error text would silently render in the same grey as a normal
+             field label instead of reading as a warning. */
+          color:#b64400 !important;
+          font-size:12px;
+          line-height:1.4;
+          font-weight:500;
+          letter-spacing:-.003em;
         }
 
         .apple-dispatcher-field input:-webkit-autofill,

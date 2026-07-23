@@ -158,6 +158,18 @@ export default function AdminPainterProfilePage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
+  // If we arrived here by clicking a row in the list, go back via browser
+  // history so the list's exact filters (preserved in its URL) and scroll
+  // position (restored by DashboardShell's pathname-keyed scroll cache) come
+  // back, instead of a fresh default list.
+  const goBackToPainters = () => {
+    if (location.state?.fromPaintersList) {
+      navigate(-1);
+    } else {
+      navigate("/admin/dashboard/painters");
+    }
+  };
+
   const [activeTab, setActiveTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -215,7 +227,7 @@ export default function AdminPainterProfilePage() {
   async function handleDelete() {
     try {
       await deletePainter(painterId).unwrap();
-      navigate("/admin/dashboard/painters");
+      goBackToPainters();
     } catch (err) {
       setActionError(getQueryErrorMessage(err, "Failed to delete painter."));
       setDeleteOpen(false);
@@ -229,7 +241,7 @@ export default function AdminPainterProfilePage() {
         salesSummary={salesQuery.data?.summary || {}}
         loading={loading}
         loadError={painterQuery.error ? getQueryErrorMessage(painterQuery.error, "Failed to load painter.") : ""}
-        onBack={() => navigate("/admin/dashboard/painters")}
+        onBack={goBackToPainters}
         onPromote={() => promotePainter({ painterId, payload: {} }).unwrap()}
         promoting={promoting}
       />
@@ -249,12 +261,12 @@ export default function AdminPainterProfilePage() {
       <button
         type="button"
         className="painter-profile-back-btn"
-        onClick={() => navigate("/admin/dashboard/painters")}
+        onClick={goBackToPainters}
         aria-label="Back to painters"
       >
         <DashboardIcon name="chevron" size={14} strokeWidth={2.2} style={{ transform: "rotate(180deg)" }} />
       </button>
-      <button type="button" className="painter-profile-crumb-link" onClick={() => navigate("/admin/dashboard/painters")}>
+      <button type="button" className="painter-profile-crumb-link" onClick={goBackToPainters}>
         Painters
       </button>
       <DashboardIcon name="chevron" size={12} strokeWidth={2.2} style={{ color: "var(--color-graphite,#707070)" }} />

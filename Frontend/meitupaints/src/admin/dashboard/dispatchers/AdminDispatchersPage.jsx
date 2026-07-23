@@ -968,7 +968,7 @@ export default function AdminDispatchersPage() {
             : pendingDecision?.type === "reject"
               ? "Reject Dispatcher"
               : pendingDecision?.type === "delete"
-                ? "Schedule Dispatcher Deletion"
+                ? "Move Dispatcher to Trash"
                 : pendingDecision?.type === "undoDelete"
                   ? "Undo Dispatcher Deletion"
                 : pendingDecision?.dispatcher?.isActive
@@ -1001,7 +1001,7 @@ export default function AdminDispatchersPage() {
             : pendingDecision?.type === "reject"
               ? "Reject Dispatcher"
               : pendingDecision?.type === "delete"
-                ? "Schedule Deletion"
+                ? "Move to Trash"
                 : pendingDecision?.type === "undoDelete"
                   ? "Undo Deletion"
                 : pendingDecision?.dispatcher?.isActive

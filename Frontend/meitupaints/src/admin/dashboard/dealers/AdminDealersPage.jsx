@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   useAssignDispatcherToDealerMutation,
   useGetAdminDealersQuery,
@@ -405,6 +405,43 @@ function dealerLocation(dealer) {
   return address.split(",")[0].trim();
 }
 
+// The exact same six fields AdminDealerProfilePage.jsx's own "Company
+// Information" panel shows - a dealer missing any of these has a real gap
+// an admin would otherwise only discover by opening the profile.
+const REQUIRED_DEALER_FIELDS = [
+  ["companyName", "Company Name"],
+  ["contactName", "Contact Person"],
+  ["phone", "Phone"],
+  ["email", "Email"],
+  ["panVat", "PAN/VAT Number"],
+  ["address", "Address"],
+];
+
+function missingDealerFields(dealer) {
+  return REQUIRED_DEALER_FIELDS.filter(([key]) => !String(dealer?.[key] || "").trim()).map(
+    ([, label]) => label,
+  );
+}
+
+// A corner badge, not a banner - overlapping the card's own edge (like
+// Apple's notification-dot convention, or Uber's small status pills) so it
+// reads as "something needs attention" without competing with the card's
+// real content or the "..." menu button already sitting in that top-right
+// corner's padded content area. Light red fill per spec, not the app's
+// bold Meitu red - this is an incompleteness nudge, not an error state.
+function IncompleteProfileBadge({ missingFields }) {
+  if (!missingFields.length) return null;
+  return (
+    <span
+      className="dealer-grid-incomplete-badge"
+      title={`Missing: ${missingFields.join(", ")}`}
+    >
+      <DashboardIcon name="warning" size={10.5} strokeWidth={2.6} />
+      Incomplete
+    </span>
+  );
+}
+
 function DealersCard({
   dealer,
   selectionMode,
@@ -418,12 +455,15 @@ function DealersCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const palette = dealerPalette(dealer);
   const isVerified = dealer.status === "VERIFIED";
+  const missingFields = missingDealerFields(dealer);
 
   return (
     <article
       className={`dealer-grid-card ${selected ? "selected" : ""}`}
       onClick={selectionMode ? () => onSelectChange(!selected) : onViewProfile}
     >
+      <IncompleteProfileBadge missingFields={missingFields} />
+
       <div className="dealer-grid-card-top">
         {selectionMode ? (
           <RowCheckbox checked={selected} onChange={onSelectChange} />
@@ -520,18 +560,87 @@ function DealersCard({
   );
 }
 
+// Search/status/routing/activity/sort filters (plus whether the advanced
+// filter row is expanded) live in the URL rather than plain component state,
+// so that navigating into a dealer's profile and back restores the exact
+// same list view instead of resetting to defaults on remount - the shell's
+// scroll cache (DashboardShell.jsx) already restores scroll position by
+// pathname on browser-back, this just makes sure the filters that produced
+// that scroll position are restored too. Mirrors AdminOrdersPage.jsx's
+// listState/updateListState pattern.
+const DEALER_LIST_DEFAULTS = {
+  search: "",
+  statusFilter: "ALL",
+  routingFilter: "ALL",
+  activityFilter: "ALL",
+  dealerSort: "totalSales",
+  advancedOpen: false,
+};
+
+function parseDealerListState(search) {
+  const params = new URLSearchParams(search || "");
+  return {
+    search: params.get("q") || DEALER_LIST_DEFAULTS.search,
+    statusFilter: params.get("status") || DEALER_LIST_DEFAULTS.statusFilter,
+    routingFilter: params.get("routing") || DEALER_LIST_DEFAULTS.routingFilter,
+    activityFilter: params.get("activity") || DEALER_LIST_DEFAULTS.activityFilter,
+    dealerSort: params.get("sort") || DEALER_LIST_DEFAULTS.dealerSort,
+    advancedOpen: params.get("advanced") === "1",
+  };
+}
+
+function buildDealerListSearch(state) {
+  const params = new URLSearchParams();
+  if (state.search) params.set("q", state.search);
+  if (state.statusFilter && state.statusFilter !== DEALER_LIST_DEFAULTS.statusFilter) {
+    params.set("status", state.statusFilter);
+  }
+  if (state.routingFilter && state.routingFilter !== DEALER_LIST_DEFAULTS.routingFilter) {
+    params.set("routing", state.routingFilter);
+  }
+  if (state.activityFilter && state.activityFilter !== DEALER_LIST_DEFAULTS.activityFilter) {
+    params.set("activity", state.activityFilter);
+  }
+  if (state.dealerSort && state.dealerSort !== DEALER_LIST_DEFAULTS.dealerSort) {
+    params.set("sort", state.dealerSort);
+  }
+  if (state.advancedOpen) params.set("advanced", "1");
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export default function AdminDealersPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobileAdmin();
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [routingFilter, setRoutingFilter] = useState("ALL");
-  const [activityFilter, setActivityFilter] = useState("ALL");
-  const [dealerSort, setDealerSort] = useState("totalSales");
+
+  const listState = useMemo(() => parseDealerListState(location.search), [location.search]);
+  const { search, statusFilter, routingFilter, activityFilter, dealerSort, advancedOpen } = listState;
+
+  const updateListState = useCallback(
+    (patch) => {
+      const next = { ...listState, ...patch };
+      navigate(
+        { pathname: "/admin/dashboard/dealers", search: buildDealerListSearch(next) },
+        { replace: true },
+      );
+    },
+    [listState, navigate],
+  );
+
+  const setSearch = useCallback((value) => updateListState({ search: value }), [updateListState]);
+  const setStatusFilter = useCallback((value) => updateListState({ statusFilter: value }), [updateListState]);
+  const setRoutingFilter = useCallback((value) => updateListState({ routingFilter: value }), [updateListState]);
+  const setActivityFilter = useCallback((value) => updateListState({ activityFilter: value }), [updateListState]);
+  const setDealerSort = useCallback((value) => updateListState({ dealerSort: value }), [updateListState]);
+  const setAdvancedOpen = useCallback(
+    (next) => updateListState({ advancedOpen: typeof next === "function" ? next(advancedOpen) : next }),
+    [updateListState, advancedOpen],
+  );
+
   const [view, setView] = useState(getInitialView);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [routingDealer, setRoutingDealer] = useState(null);
@@ -699,11 +808,13 @@ export default function AdminDealersPage() {
   }
 
   function resetFilters() {
-    setSearch("");
-    setStatusFilter("ALL");
-    setRoutingFilter("ALL");
-    setActivityFilter("ALL");
-    setDealerSort("totalSales");
+    updateListState({
+      search: DEALER_LIST_DEFAULTS.search,
+      statusFilter: DEALER_LIST_DEFAULTS.statusFilter,
+      routingFilter: DEALER_LIST_DEFAULTS.routingFilter,
+      activityFilter: DEALER_LIST_DEFAULTS.activityFilter,
+      dealerSort: DEALER_LIST_DEFAULTS.dealerSort,
+    });
   }
 
   async function runAction(actionKey, request) {
@@ -989,7 +1100,11 @@ export default function AdminDealersPage() {
               selectionMode={selectionMode}
               selected={selectedIds.has(dealer._id)}
               onSelectChange={(checked) => toggleSelect(dealer._id, checked)}
-              onOpen={() => navigate(`/admin/dashboard/dealers/${dealer._id}`)}
+              onOpen={() =>
+                navigate(`/admin/dashboard/dealers/${dealer._id}`, {
+                  state: { fromDealersList: true },
+                })
+              }
             />
           ))}
         </Surface>
@@ -1011,7 +1126,9 @@ export default function AdminDealersPage() {
               selected={selectedIds.has(dealer._id)}
               onSelectChange={(checked) => toggleSelect(dealer._id, checked)}
               onViewProfile={() =>
-                navigate(`/admin/dashboard/dealers/${dealer._id}`)
+                navigate(`/admin/dashboard/dealers/${dealer._id}`, {
+                  state: { fromDealersList: true },
+                })
               }
               onAssignRouting={() => setRoutingDealer(dealer)}
               onToggleStatus={() => handleToggleDealerStatus(dealer)}
@@ -1290,6 +1407,26 @@ export default function AdminDealersPage() {
         .dealer-grid-card.selected{
           border-color:rgba(0,113,227,.3);
           background:rgba(0,113,227,.04);
+        }
+        .dealer-grid-incomplete-badge{
+          position:absolute;
+          top:-8px;
+          right:14px;
+          z-index:2;
+          display:inline-flex;
+          align-items:center;
+          gap:4px;
+          height:22px;
+          padding:0 9px 0 7px;
+          border-radius:999px;
+          background:#ffe8e6;
+          border:1px solid rgba(255,59,48,.2);
+          box-shadow:0 3px 8px rgba(29,29,31,.08);
+          color:#c0281c;
+          font-size:10.5px;
+          font-weight:700;
+          letter-spacing:-.005em;
+          white-space:nowrap;
         }
         .dealer-grid-card-top{
           display:flex;

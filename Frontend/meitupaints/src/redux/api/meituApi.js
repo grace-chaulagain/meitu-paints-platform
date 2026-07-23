@@ -298,6 +298,21 @@ export const meituApi = createApi({
       providesTags: () => [listTag("ProductCategory")],
     }),
 
+    // Bulk-renames every Product/ProductFamily currently in `fromValue`'s
+    // category to `toLabel` - invalidating the same Product/ProductFamily/
+    // ProductCategory list tags the public dealer/dispatcher catalog
+    // queries also provide, so their next fetch (immediate if mounted right
+    // now, otherwise on next visit) picks up the new name without any
+    // page-specific plumbing.
+    renameProductCategory: builder.mutation({
+      query: ({ fromValue, toLabel }) => ({
+        url: "/api/admin/catalog/categories/rename",
+        method: "POST",
+        body: { fromValue, toLabel },
+      }),
+      invalidatesTags: () => [listTag("Product"), listTag("ProductFamily"), listTag("ProductCategory")],
+    }),
+
     getAdminProductFamilies: builder.query({
       query: () => ({ url: "/api/admin/catalog/product-families" }),
       transformResponse: getItems,
@@ -1662,6 +1677,7 @@ export const {
   useGetProductCategoriesQuery,
   useGetProductFamiliesQuery,
   useGetAdminProductCategoriesQuery,
+  useRenameProductCategoryMutation,
   useGetAdminProductFamiliesQuery,
   useGetAdminProductsQuery,
   useCreateAdminProductMutation,

@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useGetProductsQuery } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import {
@@ -21,7 +22,19 @@ import {
   SectionHeader,
   Surface,
 } from "./DashboardUI.jsx";
+import CatalogCarouselRow from "./CatalogCarouselRow.jsx";
 import { downloadDraftOrderPdf } from "../../utils/downloadDraftOrderPdf.js";
+
+// Same Apple-style bag glyph as DealerCatalogPage.jsx's BagIcon (and the
+// site's global NavBar) - kept local rather than shared since it's a
+// solid-fill icon, not the stroke-based line icons in DashboardIcons.jsx.
+function BagIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">
+      <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
 
 // Mirrors src/dealer/DealerCatalogPage.jsx's visual language exactly (same
 // class-naming convention, "draft-" instead of "dealer-") so this internal
@@ -242,13 +255,19 @@ function SelectedProductsList({ cart, onQtyChange, onLineSelect }) {
   );
 }
 
-function DraftRail({ cart, totals, currency, onClear, onExport, onQtyChange, onLineSelect, enableExport, summaryRef }) {
+function DraftRail({ cart, totals, currency, onClear, onExport, onQtyChange, onLineSelect, enableExport, onClose }) {
   const totalQty = Number(totals.totalQty || 0);
 
   return (
-    <div className="draft-summary-rail" ref={summaryRef}>
-      <Surface padding={20} style={{ display: "grid", gap: 16 }}>
+    <Surface padding={20} style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <SectionHeader eyebrow="Draft Order" icon="invoice" title={`${totalQty} pack${totalQty === 1 ? "" : "s"}`} subtitle={`${cart.length} active line${cart.length === 1 ? "" : "s"}`} />
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label="Close draft order" className="draft-panel-close-btn">
+            <DashboardIcon name="close" size={13} strokeWidth={2.2} />
+          </button>
+        ) : null}
+      </div>
 
         <div style={{ padding: "14px 16px", borderRadius: 16, background: "rgba(0,113,227,.06)" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--color-graphite, #707070)" }}>Draft Total</div>
@@ -270,43 +289,7 @@ function DraftRail({ cart, totals, currency, onClear, onExport, onQtyChange, onL
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", marginBottom: 8 }}>Selected Products</div>
           <SelectedProductsList cart={cart} onQtyChange={onQtyChange} onLineSelect={onLineSelect} />
         </div>
-      </Surface>
-    </div>
-  );
-}
-
-function FloatingDraftBar({ itemCount, subtotal, onOpen, disabled = false }) {
-  return (
-    <button
-      type="button"
-      className="draft-floating-draft"
-      onClick={onOpen}
-      disabled={disabled}
-      style={{
-        position: "fixed",
-        right: 20,
-        bottom: 20,
-        height: 52,
-        padding: "0 18px",
-        borderRadius: 999,
-        border: "none",
-        background: disabled ? "rgba(0,0,0,.16)" : "var(--color-azure, #0071e3)",
-        color: "#fff",
-        fontWeight: 600,
-        fontSize: 14,
-        cursor: disabled ? "not-allowed" : "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 10,
-        zIndex: 80,
-        boxShadow: disabled ? "none" : "0 8px 24px rgba(0,113,227,.28)",
-      }}
-    >
-      <span style={{ display: "inline-flex", width: 24, height: 24, borderRadius: 999, background: "rgba(255,255,255,.22)", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
-        {itemCount}
-      </span>
-      {disabled ? "Build Your Draft" : `View Draft · ${money(subtotal)}`}
-    </button>
+    </Surface>
   );
 }
 
@@ -347,8 +330,10 @@ export default function DraftOrderUtilityPage({
   const [quantities, setQuantities] = useState({});
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [badgeBump, setBadgeBump] = useState(false);
+  const previousQtyRef = useRef(0);
   const productLineRefs = useRef(new Map());
-  const summaryRef = useRef(null);
 
   const categoryOptions = useMemo(() => buildCategoryOptions(products), [products]);
   const activeCategory = categoryOptions.some((option) => option.key === category) ? category : "ALL";
@@ -376,6 +361,19 @@ export default function DraftOrderUtilityPage({
 
   const cart = useMemo(() => buildCart(productsMap, quantities), [productsMap, quantities]);
   const totals = useMemo(() => calculateCartTotals(cart), [cart]);
+
+  // Detecting an increase requires comparing against the previous render's
+  // value, which a ref + effect is the correct tool for (not derivable from
+  // props/state alone during render) - mirrors DealerCatalogPage.jsx's
+  // identical badge-bump effect.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const qty = Number(totals.totalQty || 0);
+    if (qty > previousQtyRef.current) setBadgeBump(true);
+    previousQtyRef.current = qty;
+  }, [totals.totalQty]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const cartBySku = useMemo(() => {
     return cart.reduce((acc, line) => {
       acc[line.sku] = line;
@@ -440,93 +438,112 @@ export default function DraftOrderUtilityPage({
     });
   }
 
-  function scrollToSummary() {
-    summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   function handleExportDraftPdf() {
     downloadDraftOrderPdf({ cart, totals, currency, roleLabel, search, category: activeCategory });
   }
 
   return (
-    <div className="draft-catalog-shell">
-      <div className="draft-catalog-main" style={{ display: "grid", gap: 24 }}>
-        <Surface padding={24} className="dash-fade-up">
-          <SectionHeader
-            icon="invoice"
-            title={title}
-            size="large"
-            subtitle={subtitle}
-            action={refreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
-          />
-
-          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ maxWidth: 340, flex: "1 1 240px" }}>
-              <SearchField value={search} onChange={setSearch} placeholder="Search by name, SKU, code, category…" />
-            </div>
-            <Dropdown value={activeCategory} options={categoryOptions} onChange={setCategory} style={{ width: 190 }} />
-          </div>
-
-          {error ? (
-            <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
-              {error}
-            </div>
-          ) : null}
-        </Surface>
-
-        {loading ? (
-          <LoadingGrid />
-        ) : familyGroups.length === 0 ? (
-          <EmptyState icon="search" title="No products found" subtitle="Try clearing the search or selecting a broader category." />
-        ) : (
-          <div style={{ display: "grid", gap: 40 }}>
-            {familyGroups.map((group) => (
-              <div key={group.key || "uncategorized"}>
-                <div className="draft-category-heading">
-                  <span>{group.label}</span>
-                  <span className="draft-category-count">{group.items.length}</span>
-                </div>
-                <div className="draft-catalog-grid">
-                  {group.items.map((family) => (
-                    <ProductFamilyCard
-                      key={family.code}
-                      family={family}
-                      quantities={quantities}
-                      cartBySku={cartBySku}
-                      onQtyChange={handleQtyChange}
-                      setLineRef={setProductLineRef}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="draft-catalog-rail-cell">
-        <DraftRail
-          cart={cart}
-          totals={totals}
-          currency={currency}
-          onClear={() => setQuantities({})}
-          onExport={handleExportDraftPdf}
-          onQtyChange={handleQtyChange}
-          onLineSelect={handleScrollToLine}
-          enableExport={enableOfficeExport}
-          summaryRef={summaryRef}
+    <div
+      className="draft-catalog-shell"
+      style={{
+        marginRight: draftOpen ? 340 : 0,
+        transition: "margin-right 300ms cubic-bezier(.23,1,.32,1)",
+      }}
+    >
+      <Surface padding={16} className="dash-fade-up">
+        <SectionHeader
+          icon="invoice"
+          title={title}
+          subtitle={subtitle}
+          action={refreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}
         />
-      </div>
 
-      <FloatingDraftBar itemCount={cart.length} subtotal={totals.subtotal} disabled={cart.length === 0} onOpen={scrollToSummary} />
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 340, flex: "1 1 240px" }}>
+            <SearchField value={search} onChange={setSearch} placeholder="Search by name, SKU, code, category…" />
+          </div>
+          <Dropdown value={activeCategory} options={categoryOptions} onChange={setCategory} style={{ width: 190 }} />
+        </div>
+
+        {error ? (
+          <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
+            {error}
+          </div>
+        ) : null}
+      </Surface>
+
+      {loading ? (
+        <LoadingGrid />
+      ) : familyGroups.length === 0 ? (
+        <EmptyState icon="search" title="No products found" subtitle="Try clearing the search or selecting a broader category." />
+      ) : (
+        <div style={{ marginTop: 24, display: "grid", gap: 40 }}>
+          {familyGroups.map((group) => (
+            <div key={group.key || "uncategorized"}>
+              <div className="draft-category-heading">
+                <span>{group.label}</span>
+                <span className="draft-category-count">{group.items.length}</span>
+              </div>
+              <CatalogCarouselRow>
+                {group.items.map((family) => (
+                  <ProductFamilyCard
+                    key={family.code}
+                    family={family}
+                    quantities={quantities}
+                    cartBySku={cartBySku}
+                    onQtyChange={handleQtyChange}
+                    setLineRef={setProductLineRef}
+                  />
+                ))}
+              </CatalogCarouselRow>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {typeof document !== "undefined"
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                onClick={() => setDraftOpen((open) => !open)}
+                aria-pressed={draftOpen}
+                aria-label={`${draftOpen ? "Close" : "Open"} draft order, ${totals.totalQty} item${totals.totalQty === 1 ? "" : "s"}`}
+                className="draft-cart-badge"
+              >
+                <BagIcon size={17} />
+                {totals.totalQty > 0 ? (
+                  <span
+                    className={`draft-cart-sticker ${badgeBump ? "is-bumping" : ""}`}
+                    onAnimationEnd={() => setBadgeBump(false)}
+                  >
+                    {totals.totalQty}
+                  </span>
+                ) : null}
+              </button>
+
+              <div className={`draft-panel ${draftOpen ? "is-open" : ""}`} aria-hidden={!draftOpen}>
+                <DraftRail
+                  cart={cart}
+                  totals={totals}
+                  currency={currency}
+                  onClear={() => setQuantities({})}
+                  onExport={handleExportDraftPdf}
+                  onQtyChange={handleQtyChange}
+                  onLineSelect={handleScrollToLine}
+                  enableExport={enableOfficeExport}
+                  onClose={() => setDraftOpen(false)}
+                />
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
 
       <DashboardUIStyles />
       <style>{`
         .draft-catalog-shell{
-          display:grid;
-          grid-template-columns:minmax(0,1fr) 316px;
-          gap:24px;
-          align-items:stretch;
+          min-width:0;
         }
 
         .draft-catalog-grid{
@@ -795,9 +812,116 @@ export default function DraftOrderUtilityPage({
           margin:0;
         }
 
-        .draft-summary-rail{
-          position:sticky;
-          top:0;
+        /* Fixed to the viewport - stays in place while the page scrolls
+           behind it, and the panel visually opens from this same anchor
+           point (shared transform-origin: top right). Mirrors
+           DealerCatalogPage.jsx's .dealer-draft-panel/.dealer-catalog-cart-badge
+           exactly, renamed for this shared Admin/Dispatcher tool. Unlike the
+           dealer version, this stays available at every viewport width -
+           there's no separate mobile page for this internal quoting tool to
+           fall back to, so the panel narrows to fit instead of disappearing. */
+        .draft-cart-badge{
+          position:fixed;
+          top:56px;
+          right:40px;
+          z-index:500;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          width:40px;
+          height:40px;
+          border-radius:12px;
+          border:1px solid rgba(29,29,31,.1);
+          background:#fff;
+          color:var(--color-ink, #1d1d1f);
+          cursor:pointer;
+          flex-shrink:0;
+          box-shadow:0 4px 16px rgba(29,29,31,.08);
+          transition:background 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms var(--ease-out, ease);
+        }
+
+        .draft-cart-badge:hover{
+          background:var(--color-fog, #f5f5f7);
+        }
+
+        .draft-cart-badge:active{
+          transform:scale(.94);
+        }
+
+        .draft-cart-badge[aria-pressed="true"]{
+          border-color:rgba(0,113,227,.35);
+          color:var(--color-azure, #0071e3);
+          background:rgba(0,113,227,.06);
+        }
+
+        .draft-cart-sticker{
+          position:absolute;
+          top:-6px;
+          right:-6px;
+          min-width:18px;
+          height:18px;
+          padding:0 4px;
+          border-radius:999px;
+          background:var(--color-azure, #0071e3);
+          color:#fff;
+          font-size:10.5px;
+          font-weight:800;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          line-height:1;
+          box-shadow:0 0 0 2px #fff;
+        }
+
+        .draft-cart-sticker.is-bumping{
+          animation:draftCartStickerBump 320ms cubic-bezier(.34,1.56,.64,1);
+        }
+
+        @keyframes draftCartStickerBump{
+          0%{ transform:scale(1); }
+          40%{ transform:scale(1.45); }
+          100%{ transform:scale(1); }
+        }
+
+        .draft-panel{
+          position:fixed;
+          top:104px;
+          right:40px;
+          width:min(320px, calc(100vw - 24px));
+          max-height:calc(100vh - 140px);
+          z-index:499;
+          overflow:hidden;
+          opacity:0;
+          transform:scale(.95) translateY(-6px);
+          transform-origin:top right;
+          pointer-events:none;
+          transition:opacity 160ms ease, transform 180ms cubic-bezier(.23,1,.32,1);
+        }
+
+        .draft-panel.is-open{
+          opacity:1;
+          transform:scale(1) translateY(0);
+          pointer-events:auto;
+          transition:opacity 240ms ease 60ms, transform 280ms cubic-bezier(.23,1,.32,1) 60ms;
+        }
+
+        .draft-panel-close-btn{
+          width:28px;
+          height:28px;
+          border-radius:999px;
+          border:none;
+          background:var(--color-fog, #f5f5f7);
+          color:var(--color-graphite, #707070);
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          cursor:pointer;
+          flex-shrink:0;
+          transition:background 140ms ease;
+        }
+
+        .draft-panel-close-btn:hover{
+          background:rgba(29,29,31,.1);
         }
 
         .draft-lines-list::-webkit-scrollbar{
@@ -818,37 +942,35 @@ export default function DraftOrderUtilityPage({
           }
         }
 
-        @media (min-width:1101px){
-          .draft-floating-draft{ display:none!important; }
-        }
-
-        @media (max-width:1100px){
-          .draft-catalog-shell{
-            grid-template-columns:1fr;
-          }
-          .draft-catalog-rail-cell{
-            display:none;
-          }
-        }
-
         @media (max-width:640px){
-          .draft-catalog-grid{
-            grid-template-columns:1fr;
+          /* The mobile dashboard shell's own bottom tab bar (height 64px,
+             z-index 1500 - see .dealer-m-tabbar in DealerMobileStyles.core.jsx,
+             reused for the admin mobile shell too) sits well above this
+             component's z-index, so the badge must clear it entirely rather
+             than just avoid overlapping visually - otherwise the tab bar
+             intercepts every tap meant for the badge underneath it. */
+          .draft-cart-badge{
+            top:auto;
+            bottom:calc(64px + env(safe-area-inset-bottom, 0px) + 16px);
+            right:16px;
           }
-          .draft-floating-draft{
-            left:14px!important;
-            right:14px!important;
-            justify-content:center!important;
+          .draft-panel{
+            top:auto;
+            bottom:calc(64px + env(safe-area-inset-bottom, 0px) + 72px);
+            right:16px;
+            transform-origin:bottom right;
           }
         }
 
         @media (prefers-reduced-motion: reduce){
           .draft-product-card,
           .draft-qty-btn,
-          .draft-floating-draft{
+          .draft-cart-badge,
+          .draft-cart-sticker.is-bumping,
+          .draft-panel,
+          .draft-panel.is-open,
+          .draft-panel-close-btn{
             transition:none!important;
-          }
-          .draft-variant-row.draft-line-focus{
             animation:none!important;
           }
         }

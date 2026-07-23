@@ -46,6 +46,8 @@ export function AdminTrashMobileView({ onBack }) {
   const [busyAction, setBusyAction] = useState("");
   const [restoreItem, setRestoreItem] = useState(null);
   const [restoreAllOpen, setRestoreAllOpen] = useState(false);
+  const [clearTrashOpen, setClearTrashOpen] = useState(false);
+  const [clearTrashConfirmText, setClearTrashConfirmText] = useState("");
 
   const loadTrash = useCallback(async () => {
     try {
@@ -93,6 +95,26 @@ export function AdminTrashMobileView({ onBack }) {
     }
   }
 
+  async function clearTrash() {
+    setBusyAction("clear-trash");
+    try {
+      const res = await api.post("/api/admin/settings/trash/clear", {
+        type: filter,
+        confirmation: clearTrashConfirmText,
+      });
+      setClearTrashOpen(false);
+      setClearTrashConfirmText("");
+      toast(`${res?.data?.purgedCount || 0} item(s) permanently deleted`);
+      await loadTrash();
+    } catch (err) {
+      toast(err?.response?.data?.error || err?.message || "Failed to clear trash.");
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  const clearTrashBlocked = clearTrashConfirmText.trim() !== "CLEAR TRASH";
+
   return (
     <div className="dealer-m-orders">
       <SkeletonSwap
@@ -115,9 +137,12 @@ export function AdminTrashMobileView({ onBack }) {
         </div>
 
         {items.length > 0 ? (
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
             <PrimaryButton variant="secondary" onClick={() => setRestoreAllOpen(true)} disabled={Boolean(busyAction)}>
               Restore All Visible
+            </PrimaryButton>
+            <PrimaryButton variant="danger" onClick={() => setClearTrashOpen(true)} disabled={Boolean(busyAction)}>
+              Clear Trash
             </PrimaryButton>
           </div>
         ) : null}
@@ -201,6 +226,56 @@ export function AdminTrashMobileView({ onBack }) {
         <div className="dealer-m-newsale-title">Restore all visible trash?</div>
         <div style={{ marginTop: 6, fontSize: 13, color: "var(--color-graphite, #707070)" }}>
           This restores all {items.length} item(s) currently shown in this filter.
+        </div>
+      </MobileSheet>
+
+      <MobileSheet
+        open={clearTrashOpen}
+        onClose={() => {
+          if (!busyAction) {
+            setClearTrashOpen(false);
+            setClearTrashConfirmText("");
+          }
+        }}
+        ariaLabel="Clear trash"
+        footer={
+          <PrimaryButton
+            variant="danger"
+            loading={busyAction === "clear-trash"}
+            disabled={clearTrashBlocked}
+            onClick={clearTrash}
+          >
+            Clear Trash Forever
+          </PrimaryButton>
+        }
+      >
+        <div className="dealer-m-newsale-title">Permanently clear trash?</div>
+        <div style={{ marginTop: 6, fontSize: 13, color: "var(--color-graphite, #707070)" }}>
+          This immediately and permanently deletes all {items.length} item(s) currently shown in this
+          filter from the database. This cannot be undone — it does not wait for the {retentionDays}-day
+          recovery window.
+        </div>
+        <div style={{ marginTop: 14, display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
+            Type <strong style={{ color: "var(--color-ink, #1d1d1f)" }}>CLEAR TRASH</strong> to confirm.
+          </div>
+          <input
+            value={clearTrashConfirmText}
+            onChange={(e) => setClearTrashConfirmText(e.target.value)}
+            disabled={busyAction === "clear-trash"}
+            style={{
+              width: "100%",
+              height: 44,
+              borderRadius: 14,
+              border: "1px solid rgba(29,29,31,.1)",
+              background: "var(--color-fog, #f5f5f7)",
+              padding: "0 14px",
+              outline: "none",
+              fontSize: 14,
+              fontWeight: 500,
+              color: "var(--color-ink, #1d1d1f)",
+            }}
+          />
         </div>
       </MobileSheet>
     </div>

@@ -25,7 +25,6 @@ import {
   DashboardUIStyles,
   EmptyState,
   GhostButton,
-  MetricTile,
   Pill,
   PrimaryButton,
   SectionHeader,
@@ -322,7 +321,7 @@ function MoreMenu({ open, onToggle, onClose, isVerified, canResendSetup, deletio
             ) : null}
             <div className="dealer-profile-more-divider" />
             <button type="button" className="danger" disabled={busy || deletionPending} onClick={onScheduleDeletion}>
-              {deletionPending ? "Deletion pending" : "Schedule deletion"}
+              {deletionPending ? "Deletion pending" : "Move to trash"}
             </button>
           </div>
         </>
@@ -919,6 +918,18 @@ export default function AdminDealerProfilePage() {
     return match?.[1] || "";
   }, [location.pathname]);
 
+  // If we arrived here by clicking a row in the list, go back via browser
+  // history so the list's exact filters (preserved in its URL) and scroll
+  // position (restored by DashboardShell's pathname-keyed scroll cache) come
+  // back, instead of a fresh default list.
+  const goBackToDealers = () => {
+    if (location.state?.fromDealersList) {
+      navigate(-1);
+    } else {
+      navigate("/admin/dashboard/dealers");
+    }
+  };
+
   const [activeTab, setActiveTab] = useState("overview");
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState("");
@@ -1119,7 +1130,7 @@ export default function AdminDealerProfilePage() {
     if (ok) {
       setDeleteConfirmOpen(false);
       setDeleteConfirmation("");
-      navigate("/admin/dashboard/dealers");
+      goBackToDealers();
     }
   }
 
@@ -1159,7 +1170,7 @@ export default function AdminDealerProfilePage() {
         recentOrders={recentOrders}
         loading={loading}
         loadError={loadError}
-        onBack={() => navigate("/admin/dashboard/dealers")}
+        onBack={goBackToDealers}
         busyAction={busyAction}
         error={error}
         onToggleStatus={handleToggleStatus}
@@ -1176,7 +1187,7 @@ export default function AdminDealerProfilePage() {
       <div style={{ display: "grid", gap: 16 }}>
         <EmptyState icon="store" title="Dealer not found" subtitle="This dealer profile could not be located in the admin register." />
         <div>
-          <GhostButton onClick={() => navigate("/admin/dashboard/dealers")}>Back to Dealer Register</GhostButton>
+          <GhostButton onClick={goBackToDealers}>Back to Dealer Register</GhostButton>
         </div>
       </div>
     );
@@ -1187,10 +1198,10 @@ export default function AdminDealerProfilePage() {
       <DashboardUIStyles />
 
       <div className="dealer-profile-breadcrumb">
-        <button type="button" className="dealer-profile-back-btn" onClick={() => navigate("/admin/dashboard/dealers")} aria-label="Back to dealers">
+        <button type="button" className="dealer-profile-back-btn" onClick={goBackToDealers} aria-label="Back to dealers">
           <DashboardIcon name="chevron" size={14} strokeWidth={2.2} style={{ transform: "rotate(180deg)" }} />
         </button>
-        <button type="button" className="dealer-profile-crumb-link" onClick={() => navigate("/admin/dashboard/dealers")}>
+        <button type="button" className="dealer-profile-crumb-link" onClick={goBackToDealers}>
           Dealers
         </button>
         <DashboardIcon name="chevron" size={12} strokeWidth={2.2} style={{ color: "var(--color-graphite,#707070)" }} />
@@ -1263,82 +1274,47 @@ export default function AdminDealerProfilePage() {
       />
 
       {activeTab === "overview" ? (
-        <div className="dealer-profile-overview-grid">
-          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
-            <Surface padding={22} className="dash-fade-up">
-              <SectionHeader icon="user" title="Company Information" />
-              <div style={{ marginTop: 12 }}>
-                <CompanyInfoRow icon="store" label="Company Name" value={dealer.companyName} />
-                <CompanyInfoRow icon="user" label="Contact Person" value={dealer.contactName} />
-                <CompanyInfoRow icon="headset" label="Phone" value={dealer.phone} />
-                <CompanyInfoRow icon="inbox" label="Email" value={dealer.email} />
-                <CompanyInfoRow icon="invoice" label="PAN/VAT Number" value={dealer.panVat} />
-                <CompanyInfoRow icon="pin" label="Address" value={dealer.address} />
-              </div>
-            </Surface>
+        <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
+          <Surface padding={22} className="dash-fade-up">
+            <SectionHeader icon="user" title="Company Information" />
+            <div style={{ marginTop: 12 }}>
+              <CompanyInfoRow icon="store" label="Company Name" value={dealer.companyName} />
+              <CompanyInfoRow icon="user" label="Contact Person" value={dealer.contactName} />
+              <CompanyInfoRow icon="headset" label="Phone" value={dealer.phone} />
+              <CompanyInfoRow icon="inbox" label="Email" value={dealer.email} />
+              <CompanyInfoRow icon="invoice" label="PAN/VAT Number" value={dealer.panVat} />
+              <CompanyInfoRow icon="pin" label="Address" value={dealer.address} />
+            </div>
+          </Surface>
 
-            <Surface padding={22} className="dash-fade-up">
-              <SectionHeader icon="truck" title="Assigned Dispatcher" />
-              {assignedDispatcher ? (
-                <div className="dealer-profile-dispatcher">
-                  <Avatar label={assignedDispatcher.name || "D"} size={44} tone="accent" />
-                  <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{assignedDispatcher.name || "Dispatcher"}</div>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>Dispatcher</div>
-                    <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
-                      {assignedDispatcher.phone ? <div style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{assignedDispatcher.phone}</div> : null}
-                      {assignedDispatcher.email ? <div style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{assignedDispatcher.email}</div> : null}
-                    </div>
+          <Surface padding={22} className="dash-fade-up">
+            <SectionHeader icon="truck" title="Assigned Dispatcher" />
+            {assignedDispatcher ? (
+              <div className="dealer-profile-dispatcher">
+                <Avatar label={assignedDispatcher.name || "D"} size={44} tone="accent" />
+                <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{assignedDispatcher.name || "Dispatcher"}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>Dispatcher</div>
+                  <div style={{ marginTop: 6, display: "grid", gap: 2 }}>
+                    {assignedDispatcher.phone ? <div style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{assignedDispatcher.phone}</div> : null}
+                    {assignedDispatcher.email ? <div style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{assignedDispatcher.email}</div> : null}
                   </div>
-                  <GhostButton icon="user" onClick={() => navigate(`/admin/dashboard/dispatchers/${assignedDispatcher._id}`)}>
-                    View Profile
-                  </GhostButton>
                 </div>
-              ) : (
-                <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--color-graphite,#707070)", maxWidth: 380 }}>
-                    This dealer is fulfilled directly by the factory - no dispatcher is assigned.
-                  </div>
-                  <GhostButton icon="truck" onClick={() => setRoutingOpen(true)}>
-                    Assign Dispatcher
-                  </GhostButton>
+                <GhostButton icon="user" onClick={() => navigate(`/admin/dashboard/dispatchers/${assignedDispatcher._id}`)}>
+                  View Profile
+                </GhostButton>
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: "var(--color-graphite,#707070)", maxWidth: 380 }}>
+                  This dealer is fulfilled directly by the factory - no dispatcher is assigned.
                 </div>
-              )}
-            </Surface>
-          </div>
-
-          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
-            <Surface padding={22} className="dash-fade-up">
-              <SectionHeader icon="chart" title="Performance Summary" action={<Pill tone="neutral" size="small">Lifetime</Pill>} />
-              <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <MetricTile label="Total Orders" value={performanceSummary.totalApprovedOrders || 0} icon="orders" />
-                <MetricTile label="Total Units Sold" value={Number(productIntelligence.totalUnitsOrdered || 0).toLocaleString()} icon="package" />
-                <MetricTile label="Total Sales" value={money(performanceSummary.totalSalesApproved)} icon="chart" tone="accent" />
-                <MetricTile label="Avg. Order Value" value={money(performanceSummary.averageApprovedOrderValue)} icon="invoice" tone="accent" />
+                <GhostButton icon="truck" onClick={() => setRoutingOpen(true)}>
+                  Assign Dispatcher
+                </GhostButton>
               </div>
-            </Surface>
-
-            <Surface padding={22} className="dash-fade-up">
-              <SectionHeader
-                icon="history"
-                title="Recent Activity"
-                action={
-                  <GhostButton onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}/orders`)}>
-                    View All
-                  </GhostButton>
-                }
-              />
-              <div style={{ marginTop: 10 }}>
-                {ordersQuery.isLoading ? (
-                  <div style={{ height: 120, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
-                ) : recentOrders.length === 0 ? (
-                  <div style={{ padding: "14px 4px", fontSize: 12.5, color: "var(--color-graphite,#707070)" }}>No orders yet.</div>
-                ) : (
-                  recentOrders.slice(0, 5).map((order) => <OrderActivityRow key={order._id} order={order} onOpen={openOrder} />)
-                )}
-              </div>
-            </Surface>
-          </div>
+            )}
+          </Surface>
         </div>
       ) : null}
 
@@ -1506,10 +1482,10 @@ export default function AdminDealerProfilePage() {
 
       <AdminDecisionModal
         open={deleteConfirmOpen}
-        title="Schedule dealer deletion?"
+        title="Move dealer to trash?"
         subtitle="This revokes dealer access and moves the profile to Settings Trash for the undo window before permanent deletion."
         tone="danger"
-        confirmLabel="Schedule Deletion"
+        confirmLabel="Move to Trash"
         busy={busyAction === `delete-${dealer._id}`}
         details={[
           { label: "Dealer", value: dealer.companyName || dealer.contactName || dealer.email || "Dealer" },
@@ -1702,12 +1678,6 @@ export default function AdminDealerProfilePage() {
           color:var(--color-ink,#1d1d1f);
           font-weight:700;
           border-bottom-color:#dc2626;
-        }
-        .dealer-profile-overview-grid{
-          display:grid;
-          grid-template-columns:1.1fr 1fr;
-          gap:16px;
-          align-items:start;
         }
         .dealer-profile-row{
           display:flex;
@@ -2067,9 +2037,6 @@ export default function AdminDealerProfilePage() {
           background:rgba(29,29,31,.06);
         }
         @media (max-width:980px){
-          .dealer-profile-overview-grid{
-            grid-template-columns:1fr;
-          }
           .dealer-profile-info-tiles{
             margin-left:0;
           }

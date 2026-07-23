@@ -161,6 +161,58 @@ function uploadBufferToCloudinary(buffer, options = {}) {
 }
 
 /* -----------------------------
+   Categories
+----------------------------- */
+
+// Categories aren't a real collection - listProductCategories() (product
+// service) derives the whole list via Product/ProductFamily.distinct on
+// their free-text `category` field (see Product.model.js - it's a plain
+// String, not an enum). Every stored value already follows an UPPER_SNAKE
+// convention (e.g. "GRANITE_EPOXY_FLOOR"), with categoryLabel() deriving the
+// human-readable label from it on read (replace "_" with a space, title-
+// case). Renaming keeps that same single-source-of-truth shape rather than
+// introducing a separate "display name" field: the admin types a plain
+// name, this normalizes it into the same stored convention, and every page
+// that already renders categoryLabel(product.category) picks up the new
+// name automatically - no other page needs its own update.
+function normalizeCategoryValue(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+// Deliberately does NOT touch historical Order.items[].category snapshots -
+// those describe what a category was called *at the time* that order was
+// placed, same reasoning as every other order snapshot field in this app.
+// piUnitLabels.js's category->unit-label map on the frontend needs both the
+// old and new key for this reason (old orders still carry the old value).
+export async function renameProductCategoryService({ fromValue, toLabel }) {
+  const normalizedFrom = normalizeCategoryValue(fromValue);
+  const normalizedTo = normalizeCategoryValue(toLabel);
+
+  if (!normalizedFrom) throw new Error("fromValue is required");
+  if (!normalizedTo) throw new Error("A new category name is required");
+
+  if (normalizedFrom === normalizedTo) {
+    return { renamed: false, productsUpdated: 0, familiesUpdated: 0, category: normalizedTo };
+  }
+
+  const [productResult, familyResult] = await Promise.all([
+    Product.updateMany({ category: normalizedFrom }, { $set: { category: normalizedTo } }),
+    ProductFamily.updateMany({ category: normalizedFrom }, { $set: { category: normalizedTo } }),
+  ]);
+
+  return {
+    renamed: true,
+    productsUpdated: productResult.modifiedCount,
+    familiesUpdated: familyResult.modifiedCount,
+    category: normalizedTo,
+  };
+}
+
+/* -----------------------------
    Product Family
 ----------------------------- */
 export async function listAllFamiliesService() {

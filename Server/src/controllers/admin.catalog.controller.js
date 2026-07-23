@@ -15,6 +15,7 @@ import {
   uploadProductImageService,
   setPrimaryProductImageService,
   deleteProductImageService,
+  renameProductCategoryService,
 } from "../services/admin.catalog.service.js";
 import { listProductCategories } from "../services/product.service.js";
 
@@ -31,6 +32,16 @@ export async function listCategories(req, res) {
     return res.json({ ok: true, items });
   } catch (error) {
     return handleError(res, error, "Failed to fetch product categories");
+  }
+}
+
+export async function renameCategory(req, res) {
+  try {
+    const { fromValue, toLabel } = req.body || {};
+    const item = await renameProductCategoryService({ fromValue, toLabel });
+    return res.json({ ok: true, item });
+  } catch (error) {
+    return handleError(res, error, "Failed to rename category");
   }
 }
 

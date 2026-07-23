@@ -54,6 +54,16 @@ export const restoreAllTrashItemsController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, ...out });
 });
 
+export const clearTrashController = asyncHandler(async (req, res) => {
+  const { type = "ALL", confirmation = "" } = req.body || {};
+  const out = await adminService.purgeAllTrashItems({
+    type,
+    confirmation,
+    adminUser: req.user,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
 // Insights
 export const getAdminInsightsController = asyncHandler(async (req, res) => {
   const item = await adminInsightsService.getAdminInsights(req.query || {});
@@ -124,13 +134,12 @@ export const rejectDealerApplicationController = asyncHandler(
 export const deleteDealerApplicationController = asyncHandler(
   async (req, res) => {
     const { applicationId } = req.params || {};
-    const { confirmation = "", reason = "" } = req.body || {};
+    const { reason = "" } = req.body || {};
 
     if (!applicationId) throw new ApiError(400, "Missing applicationId");
 
     const out = await adminService.deleteDealerApplication({
       applicationId,
-      confirmation,
       reason,
       adminUser: req.user,
     });
@@ -459,13 +468,13 @@ export const verifyDispatcherApplicationController = asyncHandler(
 export const rejectDispatcherApplicationController = asyncHandler(
   async (req, res) => {
     const { dispatcherId } = req.params || {};
-    const { notes = "" } = req.body || {};
+    const { reviewNote = "" } = req.body || {};
 
     if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
 
     const out = await adminService.rejectDispatcherApplication({
       dispatcherId,
-      notes,
+      reviewNote,
       adminUser: req.user,
     });
 

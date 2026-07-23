@@ -55,6 +55,19 @@ function BackButton({ onClick }) {
   );
 }
 
+const textAreaStyle = {
+  width: "100%",
+  borderRadius: 12,
+  border: "none",
+  background: "var(--color-fog, #f5f5f7)",
+  padding: 12,
+  fontSize: 13.5,
+  fontWeight: 500,
+  color: "var(--color-ink, #1d1d1f)",
+  outline: "none",
+  resize: "vertical",
+};
+
 function CardLabel({ icon, children }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -107,8 +120,8 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
   const [pendingDecision, setPendingDecision] = useState(""); // "approve" | "reject" | ""
+  const [rejectNote, setRejectNote] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const dispatcherQuery = useGetAdminDispatcherQuery(dispatcherId, { skip: !dispatcherId });
   const dispatcher = dispatcherQuery.data?.item || null;
@@ -147,7 +160,7 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
     const success = await runAction(`reject-${dispatcher._id}`, () =>
       rejectDispatcher({
         dispatcherId: dispatcher._id,
-        payload: { notes: dispatcher.notes || "" },
+        payload: { reviewNote: rejectNote.trim() },
       }).unwrap(),
     );
     if (success) goBack();
@@ -158,8 +171,7 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
       deleteDispatcher({
         dispatcherId: dispatcher._id,
         payload: {
-          confirmation: deleteConfirmation,
-          reason: "Admin scheduled dispatcher deletion",
+          reason: dispatcher.status === "VERIFIED" ? "Admin moved dispatcher to trash" : "Admin moved dispatcher application to trash",
         },
       }).unwrap(),
     );
@@ -224,10 +236,7 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
               <GhostButton
                 danger
                 icon="trash"
-                onClick={() => {
-                  setDeleteConfirmOpen(true);
-                  setDeleteConfirmation("");
-                }}
+                onClick={() => setDeleteConfirmOpen(true)}
               >
                 Delete
               </GhostButton>
@@ -307,7 +316,7 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
       <AdminDecisionModal
         open={pendingDecision === "reject"}
         title="Reject Dispatcher"
-        subtitle="This records a rejection decision for the dispatcher application."
+        subtitle="The applicant will be emailed this reason, so keep it clear and professional."
         tone="danger"
         confirmLabel="Reject Dispatcher"
         busy={busyAction === `reject-${dispatcher._id}`}
@@ -318,17 +327,29 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
           { label: "Phone", value: dispatcher.phone },
         ]}
         onClose={() => {
-          if (!busyAction) setPendingDecision("");
+          if (!busyAction) {
+            setPendingDecision("");
+            setRejectNote("");
+          }
         }}
         onConfirm={handleReject}
-      />
+      >
+        <textarea
+          rows={4}
+          value={rejectNote}
+          onChange={(e) => setRejectNote(e.target.value)}
+          placeholder="Document the reason for rejecting this application…"
+          disabled={busyAction === `reject-${dispatcher._id}`}
+          style={textAreaStyle}
+        />
+      </AdminDecisionModal>
 
       <AdminDecisionModal
         open={deleteConfirmOpen}
-        title="Schedule Dispatcher Deletion"
-        subtitle="This immediately revokes dispatcher access, unassigns their dealers to factory handling, and moves the record to Settings Trash for 30 days."
+        title="Delete Dispatcher Application"
+        subtitle="This moves the application to Settings Trash for 30 days before permanent database deletion."
         tone="danger"
-        confirmLabel="Schedule Deletion"
+        confirmLabel="Move to Trash"
         busy={busyAction === `delete-${dispatcher._id}`}
         details={[
           { label: "Name", value: dispatcher.name },
@@ -336,14 +357,8 @@ export default function AdminDispatcherApplicationDetailPage({ dispatcherId, onB
           { label: "Email", value: dispatcher.email },
           { label: "Retention", value: "30 days in Settings Trash" },
         ]}
-        requireText={dispatcher.name || "DELETE"}
-        confirmationText={deleteConfirmation}
-        onConfirmationTextChange={setDeleteConfirmation}
         onClose={() => {
-          if (!busyAction) {
-            setDeleteConfirmOpen(false);
-            setDeleteConfirmation("");
-          }
+          if (!busyAction) setDeleteConfirmOpen(false);
         }}
         onConfirm={handleDelete}
       />

@@ -302,7 +302,6 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
   const [rejecting, setRejecting] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const applicationQuery = useGetAdminDealerApplicationQuery(applicationId, { skip: !applicationId });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
@@ -351,7 +350,6 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
       deleteDealerApplication({
         applicationId: application._id,
         payload: {
-          confirmation: deleteConfirmation,
           reason: "Admin moved dealer application to trash",
         },
       }).unwrap(),
@@ -426,10 +424,7 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
               <GhostButton
                 danger
                 icon="trash"
-                onClick={() => {
-                  setDeleteConfirmOpen(true);
-                  setDeleteConfirmation("");
-                }}
+                onClick={() => setDeleteConfirmOpen(true)}
               >
                 Delete
               </GhostButton>
@@ -582,14 +577,8 @@ export default function AdminDealerApplicationDetailPage({ applicationId, onBack
           { label: "Email", value: application.email },
           { label: "Retention", value: "30 days in Settings Trash" },
         ]}
-        requireText={application.companyName || ""}
-        confirmationText={deleteConfirmation}
-        onConfirmationTextChange={setDeleteConfirmation}
         onClose={() => {
-          if (!busyAction) {
-            setDeleteConfirmOpen(false);
-            setDeleteConfirmation("");
-          }
+          if (!busyAction) setDeleteConfirmOpen(false);
         }}
         onConfirm={handleDelete}
       />

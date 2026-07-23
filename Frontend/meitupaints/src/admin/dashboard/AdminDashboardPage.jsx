@@ -781,6 +781,13 @@ export default function AdminDashboard() {
 
     if (
       path.startsWith("/admin/dashboard/dealers/") &&
+      /\/orders\/[^/]+$/.test(path)
+    ) {
+      return <AdminOrderDetailPage />;
+    }
+
+    if (
+      path.startsWith("/admin/dashboard/dealers/") &&
       path.endsWith("/orders")
     ) {
       return <AdminDealerOrdersPage />;

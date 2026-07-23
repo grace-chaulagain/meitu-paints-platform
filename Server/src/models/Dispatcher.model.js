@@ -63,6 +63,15 @@ const DispatcherSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    // Dedicated field for the rejection reason - deliberately separate from
+    // `notes` (the dispatcher's own ongoing operational notes, shown on
+    // their profile) so recording why an application was rejected doesn't
+    // silently overwrite unrelated notes. Matches DealerApplication's
+    // reviewNote naming.
+    reviewNote: {
+      type: String,
+      default: "",
+    },
     isActive: {
       type: Boolean,
       default: true,

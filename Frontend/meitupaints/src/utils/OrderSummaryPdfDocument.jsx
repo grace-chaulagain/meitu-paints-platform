@@ -1,6 +1,7 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { MeituLogoMark } from "./pdfBrand.jsx";
 import { PDF_COLORS } from "./pdfColors.js";
+import { resolvePiUnitLabel } from "./piUnitLabels.js";
 
 // Same "document family" as the factory Proforma Invoice (structure,
 // spacing, table proportions) but with its own lighter touch: the red mark
@@ -204,7 +205,7 @@ function SummaryPage({ order, dealer }) {
             <Text style={styles.colSN}>{index + 1}</Text>
             <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
             <Text style={styles.colQty}>{item?.quantity ?? "—"}</Text>
-            <Text style={styles.colUnit}>{item?.unit || item?.packLabel || item?.variantLabel || "—"}</Text>
+            <Text style={styles.colUnit}>{resolvePiUnitLabel(item)}</Text>
             <Text style={styles.colRate}>{money(item?.unitPrice, currency)}</Text>
             <Text style={styles.colAmount}>{money(item?.lineTotal, currency)}</Text>
           </View>

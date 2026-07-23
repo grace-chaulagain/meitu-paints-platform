@@ -117,6 +117,8 @@ export default function AdminTrashPage() {
   const [success, setSuccess] = useState("");
   const [restoreItem, setRestoreItem] = useState(null);
   const [restoreAllOpen, setRestoreAllOpen] = useState(false);
+  const [clearTrashOpen, setClearTrashOpen] = useState(false);
+  const [clearTrashConfirmText, setClearTrashConfirmText] = useState("");
 
   const loadTrash = useCallback(async () => {
     try {
@@ -169,6 +171,35 @@ export default function AdminTrashPage() {
     }
   }
 
+  async function clearTrash() {
+    try {
+      setBusyAction("clear-trash");
+      setError("");
+      setSuccess("");
+      const res = await api.post("/api/admin/settings/trash/clear", {
+        type: filter,
+        confirmation: clearTrashConfirmText,
+      });
+      setClearTrashOpen(false);
+      setClearTrashConfirmText("");
+      setSuccess(
+        `${res?.data?.purgedCount || 0} item${
+          Number(res?.data?.purgedCount || 0) === 1 ? "" : "s"
+        } permanently deleted.`,
+      );
+      await loadTrash();
+    } catch (err) {
+      setError(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to clear trash.",
+      );
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   async function restoreAll() {
     try {
       setBusyAction("restore-all");
@@ -211,6 +242,14 @@ export default function AdminTrashPage() {
               </GhostButton>
               <GhostButton icon="refresh" onClick={loadTrash} disabled={loading}>
                 Refresh
+              </GhostButton>
+              <GhostButton
+                icon="trash"
+                danger
+                onClick={() => setClearTrashOpen(true)}
+                disabled={!items.length || Boolean(busyAction)}
+              >
+                Clear Trash
               </GhostButton>
               <PrimaryButton
                 icon="checkmark"
@@ -331,6 +370,30 @@ export default function AdminTrashPage() {
           if (!busyAction) setRestoreAllOpen(false);
         }}
         onConfirm={restoreAll}
+      />
+
+      <AdminDecisionModal
+        open={clearTrashOpen}
+        tone="danger"
+        title="Permanently clear trash?"
+        subtitle={`This immediately and permanently deletes every item currently shown in the ${activeFilterLabel} trash view from the database. This cannot be undone — it does not wait for the ${retentionDays}-day recovery window.`}
+        confirmLabel="Clear Trash Forever"
+        requireText="CLEAR TRASH"
+        confirmationText={clearTrashConfirmText}
+        onConfirmationTextChange={setClearTrashConfirmText}
+        busy={busyAction === "clear-trash"}
+        disabled={!items.length}
+        details={[
+          { label: "Scope", value: activeFilterLabel },
+          { label: "Items", value: String(items.length) },
+        ]}
+        onClose={() => {
+          if (!busyAction) {
+            setClearTrashOpen(false);
+            setClearTrashConfirmText("");
+          }
+        }}
+        onConfirm={clearTrash}
       />
     </div>
   );

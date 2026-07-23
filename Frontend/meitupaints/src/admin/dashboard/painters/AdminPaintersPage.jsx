@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   useCreatePainterMutation,
   useDeletePainterMutation,
@@ -97,6 +97,35 @@ function hashString(value) {
     hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
   }
   return hash;
+}
+
+// Search/type/ID-status filters live in the URL (rather than plain component
+// state) so that navigating into a painter's profile and back restores the
+// exact same list view instead of resetting to defaults on remount - the
+// shell's scroll cache (DashboardShell.jsx) already restores scroll position
+// by pathname on browser-back, this just makes sure the filters that produced
+// that scroll position are restored too. Mirrors AdminOrdersPage.jsx's
+// listState/updateListState pattern.
+const PAINTER_LIST_DEFAULTS = { search: "", type: "ALL", idStatus: "ALL" };
+
+function parsePainterListState(search) {
+  const params = new URLSearchParams(search || "");
+  return {
+    search: params.get("q") || PAINTER_LIST_DEFAULTS.search,
+    type: params.get("type") || PAINTER_LIST_DEFAULTS.type,
+    idStatus: params.get("idStatus") || PAINTER_LIST_DEFAULTS.idStatus,
+  };
+}
+
+function buildPainterListSearch(state) {
+  const params = new URLSearchParams();
+  if (state.search) params.set("q", state.search);
+  if (state.type && state.type !== PAINTER_LIST_DEFAULTS.type) params.set("type", state.type);
+  if (state.idStatus && state.idStatus !== PAINTER_LIST_DEFAULTS.idStatus) {
+    params.set("idStatus", state.idStatus);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 function painterPalette(painter) {
@@ -264,10 +293,27 @@ function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
 
 export default function AdminPaintersPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobileAdmin();
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("ALL");
-  const [idStatus, setIdStatus] = useState("ALL");
+
+  const listState = useMemo(() => parsePainterListState(location.search), [location.search]);
+  const { search, type, idStatus } = listState;
+
+  const updateListState = useCallback(
+    (patch) => {
+      const next = { ...listState, ...patch };
+      navigate(
+        { pathname: "/admin/dashboard/painters", search: buildPainterListSearch(next) },
+        { replace: true },
+      );
+    },
+    [listState, navigate],
+  );
+
+  const setSearch = useCallback((value) => updateListState({ search: value }), [updateListState]);
+  const setType = useCallback((value) => updateListState({ type: value }), [updateListState]);
+  const setIdStatus = useCallback((value) => updateListState({ idStatus: value }), [updateListState]);
+
   const [view, setView] = useState(getInitialView);
   const [formPainter, setFormPainter] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -308,7 +354,9 @@ export default function AdminPaintersPage() {
     setFormOpen(true);
   }
   function openProfile(painter) {
-    navigate(`/admin/dashboard/painters/${painter._id}`);
+    navigate(`/admin/dashboard/painters/${painter._id}`, {
+      state: { fromPaintersList: true },
+    });
   }
 
   async function handleSave(payload) {
