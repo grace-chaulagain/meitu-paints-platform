@@ -9,6 +9,7 @@ import Order, {
   ORDER_STATUS,
 } from "../models/Order.model.js";
 import DealerProfile from "../models/DealerProfile.model.js";
+import Product from "../models/Product.model.js";
 import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import User from "../models/User.model.js";
 import { ROLES } from "../constants/roles.js";
@@ -312,10 +313,20 @@ async function assertCanAmendOrder({ order, actorUser }) {
 // Item / totals helpers
 // ----------------------------
 
-function sanitizeOrderItems(items = []) {
+// Async because it now cross-checks each item's quantity against its
+// Product's minQuantity (e.g. wall putty PB variants, which only make sense
+// at 500+ bags) - this is the real enforcement point, since a direct API
+// call could otherwise bypass whatever floor the cart UI applies client-side.
+async function sanitizeOrderItems(items = []) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new ApiError(400, "At least one order item is required");
   }
+
+  const skus = [...new Set(items.map((item) => normalizeText(item?.sku)).filter(Boolean))];
+  const products = skus.length
+    ? await Product.find({ sku: { $in: skus } }).select("sku minQuantity").lean()
+    : [];
+  const minQuantityBySku = new Map(products.map((p) => [p.sku, Number(p.minQuantity) || 1]));
 
   return items.map((item, index) => {
     const name = normalizeText(item?.name);
@@ -332,6 +343,15 @@ function sanitizeOrderItems(items = []) {
       `Item ${index + 1} unitPrice`,
     );
 
+    const sku = normalizeText(item?.sku);
+    const minQuantity = minQuantityBySku.get(sku) || 1;
+    if (quantity < minQuantity) {
+      throw new ApiError(
+        400,
+        `Item ${index + 1} (${name}): minimum order quantity is ${minQuantity}`,
+      );
+    }
+
     const lineTotal =
       item?.lineTotal !== undefined && item?.lineTotal !== null
         ? parsePositiveNumber(item.lineTotal, `Item ${index + 1} lineTotal`)
@@ -339,7 +359,7 @@ function sanitizeOrderItems(items = []) {
 
     return {
       productId: item?.productId || null,
-      sku: normalizeText(item?.sku),
+      sku,
       code: normalizeText(item?.code),
       name,
       category: normalizeText(item?.category),
@@ -486,7 +506,7 @@ export async function createOrder({
   }
 
   const dealer = await getDealerForOrderPlacement(actorUser.dealerId);
-  const sanitizedItems = sanitizeOrderItems(items);
+  const sanitizedItems = await sanitizeOrderItems(items);
   const normalizedTotals = buildOrderTotals({
     items: sanitizedItems,
     totals,
@@ -774,7 +794,7 @@ export async function amendOrder({
   await assertCanAmendOrder({ order, actorUser });
 
   if (items !== undefined) {
-    const sanitizedItems = sanitizeOrderItems(items);
+    const sanitizedItems = await sanitizeOrderItems(items);
     order.items = sanitizedItems;
     order.totals = buildOrderTotals({
       items: sanitizedItems,

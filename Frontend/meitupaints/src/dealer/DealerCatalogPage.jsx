@@ -115,14 +115,42 @@ function resolveFamilyDisplayImage(family) {
   };
 }
 
-function QtyStepper({ value, onChange, selected = false, disabled = false }) {
+// `min` is the product's minQuantity (1 for almost everything - a no-op
+// floor - 500 for the wall putty PB variants). Below the floor, the only
+// meaningful states are "not in cart" (0) and "at least min" - there's no
+// dedicated remove control in this catalog view, so decrementing at/under
+// the floor drops straight to 0 (removes it) rather than getting stuck one
+// bag short of the minimum.
+function QtyStepper({ value, onChange, selected = false, disabled = false, min = 1 }) {
   const qty = Number(value || 0);
+  const floor = Math.max(1, Number(min) || 1);
+
+  function handleDecrement() {
+    if (floor > 1 && qty <= floor) {
+      onChange(0);
+    } else {
+      onChange(Math.max(0, qty - 1));
+    }
+  }
+
+  function handleIncrement() {
+    onChange(floor > 1 && qty < floor ? floor : qty + 1);
+  }
+
+  function handleTyped(raw) {
+    if (raw === "") {
+      onChange("");
+      return;
+    }
+    const next = Math.max(0, Number(raw));
+    onChange(floor > 1 && next > 0 && next < floor ? floor : next);
+  }
 
   return (
     <div className={`dealer-qty-stepper ${selected ? "selected" : ""} ${disabled ? "disabled" : ""}`}>
       <button
         type="button"
-        onClick={() => onChange(Math.max(0, qty - 1))}
+        onClick={handleDecrement}
         aria-label="Decrease quantity"
         className="dealer-qty-btn"
         disabled={disabled}
@@ -131,18 +159,17 @@ function QtyStepper({ value, onChange, selected = false, disabled = false }) {
       </button>
       <input
         type="number"
-        min="0"
+        min={floor > 1 ? 0 : "0"}
         step="1"
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))
-        }
+        onChange={(event) => handleTyped(event.target.value)}
         className="dealer-qty-input"
         disabled={disabled}
+        title={floor > 1 ? `Minimum order quantity: ${floor}` : undefined}
       />
       <button
         type="button"
-        onClick={() => onChange(qty + 1)}
+        onClick={handleIncrement}
         aria-label="Increase quantity"
         className="dealer-qty-btn"
         disabled={disabled}
@@ -248,7 +275,13 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, sizeOptions, onS
         </div>
       </div>
 
-      <QtyStepper value={quantity} selected={selected} disabled={isPriceless} onChange={(next) => onQtyChange(product.sku, next)} />
+      <QtyStepper
+        value={quantity}
+        selected={selected}
+        disabled={isPriceless}
+        min={product.minQuantity || 1}
+        onChange={(next) => onQtyChange(product.sku, next)}
+      />
     </div>
   );
 }

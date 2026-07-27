@@ -159,6 +159,7 @@ export function buildCartLine(product, quantity, sharedMetricValue = null) {
     localMetricValue,
     lineTotal: unitPrice * qty,
     components: product.components || [],
+    minQuantity: Number(product.minQuantity) || 1,
   };
 }
 

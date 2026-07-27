@@ -335,7 +335,15 @@ export function ProductSheet({ open, onClose, family, draft }) {
                 // half-active.
                 if (next === 0) setSelectedSku(null);
               }}
-              min={0}
+              // Below a product's minQuantity (e.g. wall putty PB's 500-bag
+              // floor), the stepper's own clamp (Math.max(min, value+delta))
+              // already jumps straight to the floor on the first tap of "+" -
+              // no separate auto-seed logic needed. Removal happens by
+              // tapping the pack again (deselect), not by decrementing past
+              // the floor - matches the desktop catalog's equivalent, minus
+              // the snap-to-zero since there's no bare decrement-to-remove
+              // affordance in this stepper's contract.
+              min={Number(selectedProduct?.minQuantity) > 1 ? selectedProduct.minQuantity : 0}
               size={36}
             />
           </div>

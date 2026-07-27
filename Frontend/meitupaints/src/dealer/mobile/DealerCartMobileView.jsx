@@ -83,7 +83,11 @@ function CartLineRow({ line, group, revealedSku, onReveal, onRemoveLine, onChang
                 if (next === 0) onRemoveLine(line.sku, label, group);
                 else onChangeQuantity(line.sku, next);
               }}
-              min={0}
+              // A real floor (wall putty PB's 500) disables decrement right
+              // at the minimum instead of reaching 0 - removal there goes
+              // through the swipe-to-reveal Remove action above, same as it
+              // already does everywhere else in this cart.
+              min={Number(line.minQuantity) > 1 ? line.minQuantity : 0}
               size={28}
               showRemoveHint
             />

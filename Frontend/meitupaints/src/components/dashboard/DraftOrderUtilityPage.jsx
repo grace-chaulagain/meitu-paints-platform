@@ -118,14 +118,35 @@ function lowestPackPrice(family) {
   return prices.length ? Math.min(...prices) : null;
 }
 
-function QtyStepper({ value, onChange, selected = false }) {
+// `min` mirrors DealerCatalogPage.jsx's QtyStepper (1 is a no-op for
+// everything except the wall putty PB variants, floor 500) - decrementing
+// at/under the floor drops straight to 0 rather than sticking one short.
+function QtyStepper({ value, onChange, selected = false, min = 1 }) {
   const qty = Number(value || 0);
+  const floor = Math.max(1, Number(min) || 1);
+
+  function handleDecrement() {
+    onChange(floor > 1 && qty <= floor ? 0 : Math.max(0, qty - 1));
+  }
+
+  function handleIncrement() {
+    onChange(floor > 1 && qty < floor ? floor : qty + 1);
+  }
+
+  function handleTyped(raw) {
+    if (raw === "") {
+      onChange("");
+      return;
+    }
+    const next = Math.max(0, Number(raw));
+    onChange(floor > 1 && next > 0 && next < floor ? floor : next);
+  }
 
   return (
     <div className={`draft-qty-stepper ${selected ? "selected" : ""}`}>
       <button
         type="button"
-        onClick={() => onChange(Math.max(0, qty - 1))}
+        onClick={handleDecrement}
         aria-label="Decrease quantity"
         className="draft-qty-btn"
       >
@@ -136,14 +157,13 @@ function QtyStepper({ value, onChange, selected = false }) {
         min="0"
         step="1"
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))
-        }
+        onChange={(event) => handleTyped(event.target.value)}
         className="draft-qty-input"
+        title={floor > 1 ? `Minimum order quantity: ${floor}` : undefined}
       />
       <button
         type="button"
-        onClick={() => onChange(qty + 1)}
+        onClick={handleIncrement}
         aria-label="Increase quantity"
         className="draft-qty-btn"
       >
@@ -183,7 +203,12 @@ function VariantRow({ product, quantity, cartLine, onQtyChange, setLineRef }) {
         </div>
       </div>
 
-      <QtyStepper value={quantity} selected={selected} onChange={(next) => onQtyChange(product.sku, next)} />
+      <QtyStepper
+        value={quantity}
+        selected={selected}
+        min={product.minQuantity || 1}
+        onChange={(next) => onQtyChange(product.sku, next)}
+      />
     </div>
   );
 }
@@ -406,7 +431,7 @@ function SelectedProductsList({ cart, onQtyChange, onLineSelect }) {
             <span style={{ fontSize: 11, color: "var(--color-graphite, #707070)" }}>{formatPack(line.pack)} · {getTierLabel(line.tier, line.pricing)}</span>
           </button>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <QtyStepper value={line.quantity} onChange={(next) => onQtyChange(line.sku, next)} />
+            <QtyStepper value={line.quantity} min={line.minQuantity || 1} onChange={(next) => onQtyChange(line.sku, next)} />
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)" }}>{money(line.lineTotal, line.currency)}</div>
               <button

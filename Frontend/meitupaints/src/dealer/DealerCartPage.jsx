@@ -74,17 +74,32 @@ function summary(cart) {
   return { totalItems: totals.totalQty, subtotal: totals.subtotal, lines: cart.length };
 }
 
-function QtyStepper({ value, onChange }) {
+// A dedicated remove (trash) button already exists per cart line here, so
+// unlike the catalog's QtyStepper this one just hard-floors at `min` instead
+// of snapping to 0 - removal is the trash button's job, not the stepper's.
+function QtyStepper({ value, onChange, min = 1 }) {
   const qty = Number(value || 0);
+  const floor = Math.max(1, Number(min) || 1);
   return (
     <div style={{ display: "inline-flex", alignItems: "center", borderRadius: 10, background: "#fff", border: "1px solid rgba(0,0,0,.12)", overflow: "hidden" }}>
-      <button type="button" onClick={() => onChange(Math.max(0, qty - 1))} aria-label="Decrease quantity" style={{ width: 32, height: 34, border: "none", borderRight: "1px solid rgba(0,0,0,.1)", background: "transparent", fontSize: 15, fontWeight: 700, cursor: "pointer", color: "var(--color-ink, #1d1d1f)" }}>−</button>
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(floor, qty - 1))}
+        aria-label="Decrease quantity"
+        disabled={qty <= floor}
+        style={{ width: 32, height: 34, border: "none", borderRight: "1px solid rgba(0,0,0,.1)", background: "transparent", fontSize: 15, fontWeight: 700, cursor: qty <= floor ? "not-allowed" : "pointer", color: qty <= floor ? "rgba(0,0,0,.25)" : "var(--color-ink, #1d1d1f)" }}
+      >
+        −
+      </button>
       <input
         type="number"
-        min="0"
+        min={floor}
         step="1"
         value={value}
-        onChange={(event) => onChange(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))}
+        onChange={(event) =>
+          onChange(event.target.value === "" ? "" : Math.max(floor, Number(event.target.value)))
+        }
+        title={floor > 1 ? `Minimum order quantity: ${floor}` : undefined}
         style={{ width: 42, height: 34, border: "none", outline: "none", background: "transparent", textAlign: "center", fontWeight: 700, color: "var(--color-ink, #1d1d1f)", fontSize: 13 }}
       />
       <button type="button" onClick={() => onChange(qty + 1)} aria-label="Increase quantity" style={{ width: 32, height: 34, border: "none", borderLeft: "1px solid rgba(0,0,0,.1)", background: "transparent", fontSize: 15, fontWeight: 700, cursor: "pointer", color: "var(--color-ink, #1d1d1f)" }}>+</button>
@@ -142,7 +157,7 @@ function CartLine({ item, onQtyChange, onRemove }) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "center" }}>
-        <QtyStepper value={item.quantity} onChange={(next) => onQtyChange(item.sku, next)} />
+        <QtyStepper value={item.quantity} min={item.minQuantity || 1} onChange={(next) => onQtyChange(item.sku, next)} />
       </div>
 
       <div style={{ textAlign: "right", fontSize: 14.5, fontWeight: 700, color: "var(--color-ink, #1d1d1f)", whiteSpace: "nowrap" }}>

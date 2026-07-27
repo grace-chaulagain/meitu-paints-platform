@@ -160,6 +160,12 @@ const ProductSchema = new mongoose.Schema(
     // Pricing rules + tiers for this SKU
     pricing: { type: PricingSchema, default: () => ({}) },
 
+    // Smallest quantity a dealer/dispatcher can order this SKU in (e.g. the
+    // wall putty PB variants, which are bulk/project-based pricing and only
+    // make sense at 500+ bags). 1 is a no-op default matching today's
+    // behavior for every existing product.
+    minQuantity: { type: Number, default: 1, min: 1 },
+
     // Set/bundle contents for display only (e.g. the Granite Epoxy Floor
     // Paint kit) - no per-component price, just what's inside. Empty for
     // every ordinary single-item product.
