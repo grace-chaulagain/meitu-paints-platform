@@ -13,7 +13,10 @@ import {
 } from "../controllers/order.controller.js";
 
 import { auth } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import {
+  requireRole,
+  requireRoleWithReadOnlyAdmin,
+} from "../middlewares/requireRole.middleware.js";
 import {
   validateBody,
   validateParams,
@@ -46,7 +49,7 @@ router.post(
 router.get(
   "/",
   auth,
-  requireRole("ADMIN", "DEALER", "DISPATCHER"),
+  requireRoleWithReadOnlyAdmin("ADMIN", "DEALER", "DISPATCHER"),
   validateQuery(adminOrderListQuerySchema),
   listOrdersController,
 );
@@ -55,7 +58,7 @@ router.get(
 router.get(
   "/:orderId/stock-check",
   auth,
-  requireRole("ADMIN"),
+  requireRoleWithReadOnlyAdmin("ADMIN"),
   validateParams(orderIdParamsSchema),
   getOrderStockCheckController,
 );
@@ -64,7 +67,7 @@ router.get(
 router.get(
   "/:orderId",
   auth,
-  requireRole("ADMIN", "DEALER", "DISPATCHER"),
+  requireRoleWithReadOnlyAdmin("ADMIN", "DEALER", "DISPATCHER"),
   validateParams(orderIdParamsSchema),
   getOrderController,
 );

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { auth } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { requireRoleWithReadOnlyAdmin } from "../middlewares/requireRole.middleware.js";
 import { upload } from "../middlewares/upload.js";
 import {
   listCategories,
@@ -25,7 +25,7 @@ import {
 
 const router = Router();
 
-router.use(auth, requireRole("ADMIN"));
+router.use(auth, requireRoleWithReadOnlyAdmin("ADMIN"));
 
 router.get("/categories", listCategories);
 router.post("/categories/rename", renameCategory);

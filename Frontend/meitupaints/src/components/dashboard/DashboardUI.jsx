@@ -10,6 +10,10 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DashboardIcon } from "./DashboardIcons.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { useMediaQuery } from "../../hooks/useMediaQuery.js";
+import {
+  getReadOnlyButtonState,
+  useReadOnlyAdminMode,
+} from "./readOnlyAdminMode.jsx";
 
 export function Surface({ children, padding = 20, style = {}, ...rest }) {
   return (
@@ -351,13 +355,17 @@ export function PrimaryButton({
   icon = "",
   loading = false,
 }) {
-  const isDisabled = disabled || loading;
+  const readOnly = useReadOnlyAdminMode();
+  const readOnlyState = getReadOnlyButtonState({ readOnly, disabled, loading, children, icon });
+  const isDisabled = readOnlyState.disabled;
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={isDisabled}
-      className="admin-ui-primary-btn"
+      className={`admin-ui-primary-btn ${readOnlyState.locked ? "admin-readonly-action-locked" : ""}`}
+      data-readonly-write-action={readOnlyState.locked ? "true" : undefined}
+      title={readOnlyState.title || undefined}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -382,12 +390,16 @@ export function PrimaryButton({
 }
 
 export function GhostButton({ children, onClick, disabled = false, icon = "", danger = false, style = {} }) {
+  const readOnly = useReadOnlyAdminMode();
+  const readOnlyState = getReadOnlyButtonState({ readOnly, disabled, children, icon, danger });
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
-      className="admin-ui-ghost-btn"
+      disabled={readOnlyState.disabled}
+      className={`admin-ui-ghost-btn ${readOnlyState.locked ? "admin-readonly-action-locked" : ""}`}
+      data-readonly-write-action={readOnlyState.locked ? "true" : undefined}
+      title={readOnlyState.title || undefined}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -400,8 +412,8 @@ export function GhostButton({ children, onClick, disabled = false, icon = "", da
         color: danger ? "#b42318" : "var(--color-ink, #1d1d1f)",
         fontSize: 13,
         fontWeight: 700,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
+        cursor: readOnlyState.disabled ? "not-allowed" : "pointer",
+        opacity: readOnlyState.disabled ? 0.5 : 1,
         transition: "transform .14s var(--ease-out, ease), background .14s ease, border-color .14s ease",
         ...style,
       }}

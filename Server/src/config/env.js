@@ -112,6 +112,10 @@ export const COOKIE_SECURE = boolEnv("COOKIE_SECURE", IS_PRODUCTION);
 export const TRUST_PROXY = boolEnv("TRUST_PROXY", IS_PRODUCTION);
 
 export const SERVE_CLIENT = boolEnv("SERVE_CLIENT", IS_PRODUCTION);
+export const READ_ONLY_DB_INSPECTION = boolEnv(
+  "READ_ONLY_DB_INSPECTION",
+  false,
+);
 export const CLIENT_DIST_DIR =
   trimEnv("CLIENT_DIST_DIR") ||
   path.resolve(__dirname, "../../../Frontend/meitupaints/dist");

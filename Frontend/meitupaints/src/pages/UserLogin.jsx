@@ -117,7 +117,7 @@ export default function UserLogin() {
       );
 
       const defaultDestination =
-        role === "ADMIN"
+        role === "ADMIN" || role === "READ_ONLY_ADMIN"
           ? "/admin/dashboard"
           : role === "DISPATCHER"
             ? "/dispatcher/dashboard"

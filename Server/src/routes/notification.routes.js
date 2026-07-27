@@ -7,11 +7,11 @@ import {
   markNotificationsReadController,
 } from "../controllers/notification.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { requireRoleWithReadOnlyAdmin } from "../middlewares/requireRole.middleware.js";
 
 const router = Router();
 
-router.use(auth, requireRole("ADMIN", "DISPATCHER", "FACTORY"));
+router.use(auth, requireRoleWithReadOnlyAdmin("ADMIN", "DISPATCHER", "FACTORY"));
 
 router.get("/summary", getNotificationSummaryController);
 router.get("/", listNotificationsController);

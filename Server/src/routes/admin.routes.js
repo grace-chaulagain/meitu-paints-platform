@@ -113,7 +113,7 @@ import {
   deleteCatalogProductController,
 } from "../controllers/pointsCatalog.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { requireRoleWithReadOnlyAdmin } from "../middlewares/requireRole.middleware.js";
 import { upload } from "../middlewares/upload.js";
 import {
   validateBody,
@@ -165,7 +165,7 @@ import {
 
 const router = Router();
 
-router.use(auth, requireRole("ADMIN"));
+router.use(auth, requireRoleWithReadOnlyAdmin("ADMIN"));
 
 // Settings
 router.get("/settings/notifications", getNotificationSettingsController);

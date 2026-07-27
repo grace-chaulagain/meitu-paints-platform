@@ -552,7 +552,7 @@ function NavBar() {
       },
     ];
 
-    if (role === "ADMIN") {
+    if (role === "ADMIN" || role === "READ_ONLY_ADMIN") {
       items.push(
         {
           label: "Dashboard",

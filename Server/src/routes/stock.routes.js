@@ -10,7 +10,7 @@ import {
   updateStockThresholdController,
 } from "../controllers/stock.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { requireRoleWithReadOnlyAdmin } from "../middlewares/requireRole.middleware.js";
 import {
   validateBody,
   validateParams,
@@ -27,7 +27,7 @@ import {
 
 const router = Router();
 
-router.use(auth, requireRole("FACTORY", "ADMIN"));
+router.use(auth, requireRoleWithReadOnlyAdmin("FACTORY", "ADMIN"));
 
 router.get("/", validateQuery(stockListQuerySchema), listStockController);
 router.get(
