@@ -327,23 +327,27 @@ export function ProductSheet({ open, onClose, family, draft }) {
               value={previewQty}
               onChange={(next) => {
                 if (!selectedSku) return;
-                draft.setQuantity(selectedSku, next);
+                // min stays 0 at the component level (so decrement can
+                // always reach 0) - the floor itself is enforced here:
+                // incrementing from below it jumps straight to it, and
+                // decrementing while already at/under it removes the line
+                // entirely instead of getting stuck one bag short. Mirrors
+                // the desktop catalog's QtyStepper.
+                const floor = Number(selectedProduct?.minQuantity) || 1;
+                let finalNext = next;
+                if (floor > 1) {
+                  if (next > previewQty && next < floor) finalNext = floor;
+                  else if (next < previewQty && previewQty <= floor) finalNext = 0;
+                }
+                draft.setQuantity(selectedSku, finalNext);
                 // Dropping to zero deselects the row instead of sitting
                 // there expanded-but-empty - matches how a fresh pack
                 // starts (nothing selected until tapped), so re-adding
                 // requires the same deliberate tap rather than looking
                 // half-active.
-                if (next === 0) setSelectedSku(null);
+                if (finalNext === 0) setSelectedSku(null);
               }}
-              // Below a product's minQuantity (e.g. wall putty PB's 500-bag
-              // floor), the stepper's own clamp (Math.max(min, value+delta))
-              // already jumps straight to the floor on the first tap of "+" -
-              // no separate auto-seed logic needed. Removal happens by
-              // tapping the pack again (deselect), not by decrementing past
-              // the floor - matches the desktop catalog's equivalent, minus
-              // the snap-to-zero since there's no bare decrement-to-remove
-              // affordance in this stepper's contract.
-              min={Number(selectedProduct?.minQuantity) > 1 ? selectedProduct.minQuantity : 0}
+              min={0}
               size={36}
             />
           </div>

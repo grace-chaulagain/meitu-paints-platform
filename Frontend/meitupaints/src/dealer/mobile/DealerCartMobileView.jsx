@@ -80,14 +80,22 @@ function CartLineRow({ line, group, revealedSku, onReveal, onRemoveLine, onChang
             <QuantityStepper
               value={line.quantity}
               onChange={(next) => {
-                if (next === 0) onRemoveLine(line.sku, label, group);
-                else onChangeQuantity(line.sku, next);
+                // min stays 0 at the component level (so decrement can
+                // always reach 0) - a real per-product floor (wall putty
+                // PB's 500) is enforced here instead: incrementing from
+                // below it jumps straight to it, decrementing while
+                // already at/under it removes the line, same as tapping
+                // "-" on any other product already does.
+                const floor = Number(line.minQuantity) || 1;
+                let finalNext = next;
+                if (floor > 1) {
+                  if (next > line.quantity && next < floor) finalNext = floor;
+                  else if (next < line.quantity && line.quantity <= floor) finalNext = 0;
+                }
+                if (finalNext === 0) onRemoveLine(line.sku, label, group);
+                else onChangeQuantity(line.sku, finalNext);
               }}
-              // A real floor (wall putty PB's 500) disables decrement right
-              // at the minimum instead of reaching 0 - removal there goes
-              // through the swipe-to-reveal Remove action above, same as it
-              // already does everywhere else in this cart.
-              min={Number(line.minQuantity) > 1 ? line.minQuantity : 0}
+              min={0}
               size={28}
               showRemoveHint
             />
