@@ -4,6 +4,7 @@ import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Dealer from "../models/DealerProfile.model.js";
 import Order, { ORDER_ORIGIN } from "../models/Order.model.js";
 import Product from "../models/Product.model.js";
+import User from "../models/User.model.js";
 import DispatcherProductPrice from "../models/DispatcherProductPrice.model.js";
 import { listMyReplenishmentCatalog as fetchMyReplenishmentCatalog } from "./dispatcherPricing.service.js";
 import ApiError from "../utils/apiError.js";
@@ -15,6 +16,7 @@ import {
 import { archiveVerifiedOrderToGoogleSheets } from "./googleSheetsArchive.service.js";
 import { sendDealerStatusEmail } from "./factory.service.js";
 import { generateUniqueOrderNumber } from "./order.service.js";
+import { sendMail, renderEmailShell } from "../utils/email.js";
 import {
   checkDispatcherOrderStock,
   consumeDispatcherStockForOrder,
@@ -156,6 +158,42 @@ function buildDealerSearchQuery(search = "") {
    Public Dispatcher Application
 ---------------------------------------- */
 
+// Dispatcher applications have no email-confirmation-link step (unlike
+// dealer applications) - this is purely an informational "we got it"
+// receipt, sent best-effort so a delivery hiccup never blocks the
+// application itself from being created (see the fire-and-forget .catch
+// at the call site, matching notifyDispatcherApplicationSubmitted below).
+function dispatcherApplicationReceivedTemplate({ name, companyName }) {
+  const subject = "We've received your Meitu Paints dispatcher application";
+  const greetingName = name || companyName || "there";
+
+  const text = [
+    `Hello ${greetingName},`,
+    "",
+    `Thanks for applying to become a Meitu Paints dispatcher${companyName ? ` for ${companyName}` : ""}.`,
+    "Our team is reviewing your application and will follow up by email once a decision has been made.",
+    "",
+    "If you didn't submit this application, you can safely ignore this email.",
+  ].join("\n");
+
+  const html = renderEmailShell({
+    preheader: "We've received your Meitu Paints dispatcher application.",
+    eyebrow: "Application Received",
+    title: "We've Received Your Application",
+    intro: `Hello ${greetingName}, thanks for applying to become a Meitu Paints dispatcher${companyName ? ` for ${companyName}` : ""}. Our team is reviewing your application and will follow up by email once a decision has been made.`,
+  });
+
+  return { subject, text, html };
+}
+
+async function sendDispatcherApplicationReceivedEmail(dispatcher) {
+  const { subject, text, html } = dispatcherApplicationReceivedTemplate({
+    name: dispatcher.name,
+    companyName: dispatcher.companyName,
+  });
+  await sendMail({ to: dispatcher.email, subject, text, html });
+}
+
 export async function createDispatcherApplication(payload = {}) {
   const name = normalizeText(payload.name);
   const companyName = normalizeText(payload.companyName);
@@ -164,14 +202,27 @@ export async function createDispatcherApplication(payload = {}) {
   const address = normalizeText(payload.address);
   const notes = normalizeText(payload.notes);
 
-  if (!name) throw new Error("Name is required");
-  if (!companyName) throw new Error("Company name is required");
-  if (!phone) throw new Error("Phone is required");
-  if (!email) throw new Error("Email is required");
+  if (!name) throw new ApiError(400, "Name is required");
+  if (!companyName) throw new ApiError(400, "Company name is required");
+  if (!phone) throw new ApiError(400, "Phone is required");
+  if (!email) throw new ApiError(400, "Email is required");
 
   const existing = await Dispatcher.findOne({ email });
   if (existing) {
-    throw new Error("Dispatcher application with this email already exists");
+    throw new ApiError(409, "Dispatcher application with this email already exists");
+  }
+
+  // This email already belongs to a real account of any other role (dealer,
+  // admin, factory) - the Dispatcher.findOne check above only catches an
+  // existing/pending dispatcher record, not a collision with a different
+  // role's account. Previously this was only ever discovered at admin
+  // approval time (verifyDispatcherApplication's own User.findOne check).
+  const existingUser = await User.findOne({ email }).select("_id").lean();
+  if (existingUser) {
+    throw new ApiError(
+      409,
+      "This email is already registered to an existing account. Please use a different email or sign in instead.",
+    );
   }
 
   const dispatcher = await Dispatcher.create({
@@ -189,7 +240,24 @@ export async function createDispatcherApplication(payload = {}) {
     console.warn("[admin-notification] dispatcher application:", error.message);
   });
 
+  sendDispatcherApplicationReceivedEmail(dispatcher).catch((error) => {
+    console.warn("[email] dispatcher application received:", error.message);
+  });
+
   return dispatcher;
+}
+
+// Live pre-submit check for the registration form (on email-field blur) -
+// deliberately scoped to just User, not Dispatcher, so it never blocks a
+// legitimate resend/retry of the dispatcher application itself. The real
+// source of truth is createDispatcherApplication's own checks above; this
+// is only the pre-submit UX layer.
+export async function checkDispatcherEmailAvailability(rawEmail) {
+  const email = normalizeEmail(rawEmail);
+  if (!email) throw new ApiError(400, "email is required");
+
+  const existingUser = await User.findOne({ email }).select("_id").lean();
+  return { available: !existingUser };
 }
 
 /* ---------------------------------------

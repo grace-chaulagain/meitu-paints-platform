@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createDispatcherApplicationController,
+  checkDispatcherEmailAvailabilityController,
   listDispatchersController,
   listPendingDispatchersController,
   getDispatcherByIdController,
@@ -26,8 +27,11 @@ import {
   getMyReplenishmentOrderController,
 } from "../controllers/dispatcher.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
-import { applicationRateLimit } from "../middlewares/rateLimit.middleware.js";
-import { requireRole } from "../middlewares/requireRole.middleware.js";
+import { applicationRateLimit, publicReadRateLimit } from "../middlewares/rateLimit.middleware.js";
+import {
+  requireRole,
+  requireRoleWithReadOnlyAdmin,
+} from "../middlewares/requireRole.middleware.js";
 import { validateBody, validateParams } from "../middlewares/validate.middleware.js";
 import { dispatcherApplicationBodySchema } from "../validations/application.validation.js";
 import { orderIdParamsSchema } from "../validations/common.validation.js";
@@ -48,6 +52,15 @@ router.post(
   applicationRateLimit,
   validateBody(dispatcherApplicationBodySchema),
   createDispatcherApplicationController,
+);
+
+// Public, unauthenticated - must stay registered before the /:dispatcherId
+// admin-only param route below, otherwise Express would match "check-email"
+// as a :dispatcherId value and hit the ADMIN-gated middleware instead.
+router.get(
+  "/check-email",
+  publicReadRateLimit,
+  checkDispatcherEmailAvailabilityController,
 );
 
 /* ---------------------------------------
@@ -202,26 +215,26 @@ router.post(
    Admin Dispatcher Management
 ---------------------------------------- */
 
-router.get("/", auth, requireRole("ADMIN"), listDispatchersController);
+router.get("/", auth, requireRoleWithReadOnlyAdmin("ADMIN"), listDispatchersController);
 
 router.get(
   "/pending",
   auth,
-  requireRole("ADMIN"),
+  requireRoleWithReadOnlyAdmin("ADMIN"),
   listPendingDispatchersController,
 );
 
 router.get(
   "/verified",
   auth,
-  requireRole("ADMIN"),
+  requireRoleWithReadOnlyAdmin("ADMIN"),
   listVerifiedDispatchersController,
 );
 
 router.get(
   "/:dispatcherId",
   auth,
-  requireRole("ADMIN"),
+  requireRoleWithReadOnlyAdmin("ADMIN"),
   getDispatcherByIdController,
 );
 

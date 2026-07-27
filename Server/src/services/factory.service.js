@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import nodemailer from "nodemailer";
 
 import Order, {
   ORDER_ORIGIN,
@@ -24,8 +23,14 @@ import { creditDispatcherStock } from "./dispatcherStock.service.js";
 import Invoice from "../models/Invoice.model.js";
 import { issueInvoiceForOrder } from "./invoice.service.js";
 import { recordPurchaseMovement } from "./dealerInventory.service.js";
-
-let smtpTransport = null;
+import { buildPublicAppUrl } from "../utils/publicUrl.js";
+import {
+  smtpConfigured,
+  sendMail,
+  renderEmailShell,
+  renderDetailRows,
+  renderCallout,
+} from "../utils/email.js";
 
 const STATUS_LABELS = Object.freeze({
   SUBMITTED: "Submitted",
@@ -63,60 +68,53 @@ function statusLabel(status = "") {
   return STATUS_LABELS[status] || clean(status).replace(/_/g, " ");
 }
 
-function smtpConfigured() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
-}
-
-function getSmtpTransport() {
-  if (smtpTransport) return smtpTransport;
-  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } = process.env;
-  smtpTransport = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: String(SMTP_SECURE) === "true",
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
-  });
-  return smtpTransport;
-}
-
+// Sent on every order status transition (Submitted/Verified/Dispatched/
+// Completed/Rejected/Cancelled) - by far the most frequently sent email in
+// the app, so it gets the full shared-shell treatment rather than a plain
+// eyebrow/title.
 export async function sendDealerStatusEmail({ order, status, reason = "" }) {
   const to = clean(order?.dealerSnapshot?.email);
-  if (!to || !smtpConfigured()) {
-    if (!smtpConfigured()) {
-      console.warn("[factory-email] SMTP is not configured; skipped dealer status email.");
-    }
+  if (!to) return null;
+  if (!smtpConfigured()) {
+    console.warn("[factory-email] SMTP is not configured; skipped dealer status email.");
     return null;
   }
 
   const label = statusLabel(status);
-  const { SMTP_USER, MAIL_FROM, APP_URL } = process.env;
-  const orderUrl = `${String(APP_URL || "").replace(/\/+$/, "")}/dealer/orders`;
+  const orderUrl = buildPublicAppUrl("/dealer/orders");
   const dealerName =
     order.dealerSnapshot?.companyName || order.dealerSnapshot?.contactName || "Dealer";
-  const rejection = reason ? `\n\nReason: ${reason}` : "";
+  const orderNumber = order.orderNumber || "";
+
   const text = [
     `Hello ${dealerName},`,
     "",
-    `Your order ${order.orderNumber || ""} is now ${label}.`,
-    rejection.trim(),
+    `Your order ${orderNumber} is now ${label}.`,
+    reason ? `\nReason: ${reason}` : "",
     orderUrl ? `View your order history: ${orderUrl}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 
-  await getSmtpTransport().sendMail({
-    from: MAIL_FROM || SMTP_USER,
+  const html = renderEmailShell({
+    preheader: `Your order ${orderNumber} is now ${label}.`,
+    eyebrow: "Order Update",
+    title: `Order ${label}`,
+    intro: `Hello ${dealerName}, your order ${orderNumber} is now ${label}.`,
+    bodyHtml: renderDetailRows([
+      { label: "Order Number", value: orderNumber },
+      { label: "Status", value: label },
+    ]),
+    calloutHtml: renderCallout(reason, { label: "Reason" }),
+    ctaLabel: "View Order",
+    ctaUrl: orderUrl,
+  });
+
+  await sendMail({
     to,
-    subject: `Meitu Paints order ${order.orderNumber || ""}: ${label}`.trim(),
+    subject: `Meitu Paints order ${orderNumber}: ${label}`.trim(),
     text,
-    html: text.replace(/\n/g, "<br/>"),
+    html,
   });
 
   return new Date();

@@ -1,5 +1,3 @@
-import nodemailer from "nodemailer";
-
 import ApiError from "../utils/apiError.js";
 import AdminNotificationSettings from "../models/AdminNotificationSettings.model.js";
 import FactorySettings from "../models/FactorySettings.model.js";
@@ -12,9 +10,14 @@ import {
   NOTIFICATION_CATEGORY,
 } from "./notification.service.js";
 import { buildPublicAppUrl } from "../utils/publicUrl.js";
+import {
+  smtpConfigured,
+  sendMail,
+  renderEmailShell,
+  renderDetailRows,
+} from "../utils/email.js";
 import { NODE_ENV } from "../config/env.js";
 
-let smtpTransport = null;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeEmail(value = "") {
@@ -34,64 +37,8 @@ function assertValidEmail(email, label) {
   }
 }
 
-function escapeHtml(value = "") {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function buildAppLink(path = "/") {
   return buildPublicAppUrl(normalizeText(path) || "/");
-}
-
-function smtpConfigured() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
-}
-
-function getSmtpTransport() {
-  if (smtpTransport) return smtpTransport;
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } =
-    process.env;
-
-  smtpTransport = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: String(SMTP_SECURE) === "true",
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
-  });
-
-  return smtpTransport;
-}
-
-async function sendMail({ to, subject, text, html }) {
-  if (!smtpConfigured()) {
-    console.warn("[admin-notification] SMTP is not configured; email skipped.");
-    return false;
-  }
-
-  const transporter = getSmtpTransport();
-  const { SMTP_USER, MAIL_FROM } = process.env;
-
-  await transporter.sendMail({
-    from: MAIL_FROM || SMTP_USER,
-    to,
-    subject,
-    text,
-    html,
-  });
-
-  return true;
 }
 
 async function getSettingsDoc() {
@@ -220,60 +167,31 @@ export async function sendAdminNotificationTest() {
   };
 }
 
+// Thin adapter over the shared shell (utils/email.js) preserving this
+// file's existing call-site shape ({eyebrow, title, body, rows, ctaUrl,
+// ctaLabel}) across all 6 templates below, instead of rewriting each call
+// site's params individually. `audience` (used to say "Meitu Paints
+// Dispatcher" vs "...Admin" in the old gradient header) has no equivalent
+// in the new shell - its fixed header is just the Meitu brand mark now, and
+// each template's title/body already makes the audience obvious.
 function buildHtmlShell({
   eyebrow,
   title,
   rows = [],
   body = "",
-  audience = "Meitu Paints Admin",
   footer = "This is an automated operational notification. It is separate from admin login credentials.",
   ctaUrl = "",
   ctaLabel = "",
 }) {
-  const rowsHtml = rows
-    .map(
-      (row) => `
-        <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#64748b;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;width:180px;">${escapeHtml(row.label)}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#0f172a;font-size:14px;font-weight:700;">${escapeHtml(row.value || "-")}</td>
-        </tr>
-      `,
-    )
-    .join("");
-
-  return `
-    <div style="margin:0;padding:24px;background:#f3f4f6;font-family:Arial,sans-serif;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
-        <tr>
-          <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
-            <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.84);">${escapeHtml(audience)}</div>
-            <div style="margin-top:8px;font-size:24px;line-height:1.2;font-weight:800;color:#ffffff;">${escapeHtml(title)}</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:24px 28px;">
-            <div style="display:inline-block;padding:6px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;letter-spacing:.10em;text-transform:uppercase;font-weight:800;">${escapeHtml(eyebrow)}</div>
-            ${
-              body
-                ? `<div style="margin-top:16px;color:#334155;font-size:14px;line-height:1.7;font-weight:600;">${escapeHtml(body)}</div>`
-                : ""
-            }
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-              ${rowsHtml}
-            </table>
-            ${
-              ctaUrl
-                ? `<div style="margin-top:20px;"><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background:#b91c1c;color:#ffffff;text-decoration:none;font-weight:800;font-size:13px;padding:12px 16px;border-radius:12px;">${escapeHtml(ctaLabel || "Review in Meitu Paints")}</a></div>`
-                : ""
-            }
-            <div style="margin-top:18px;color:#64748b;font-size:12px;line-height:1.6;">
-              ${escapeHtml(footer)}
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+  return renderEmailShell({
+    eyebrow,
+    title,
+    intro: body,
+    bodyHtml: renderDetailRows(rows),
+    ctaUrl,
+    ctaLabel,
+    footerNote: footer,
+  });
 }
 
 async function sendAdminNotification({ type, subject, text, html }) {
@@ -510,7 +428,6 @@ export async function notifyAssignedDealerOrderSubmitted(order) {
         title: "New Order Ready for Dispatcher Review",
         body: "A dealer assigned to your dispatcher account has placed a new order. Please log in to review the order details and continue the dispatcher workflow.",
         rows,
-        audience: "Meitu Paints Dispatcher",
         footer:
           "This is an automated dispatcher notification for assigned dealer orders.",
         ctaUrl: reviewUrl,
@@ -590,7 +507,6 @@ export async function notifyDispatcherDealerAssigned(dealer, dispatcherId) {
         title: "A New Dealer Was Added To Your Route",
         body: "This dealer's orders will now come to you for review and fulfillment.",
         rows,
-        audience: "Meitu Paints Dispatcher",
         footer: "This is an automated dispatcher notification for dealer routing changes.",
         ctaUrl: dealerUrl,
         ctaLabel: "View Dealer",

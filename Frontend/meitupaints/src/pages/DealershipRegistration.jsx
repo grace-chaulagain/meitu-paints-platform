@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+// `motion` is used via JSX (<motion.form>/<motion.div>) - this repo's eslint
+// config has no react/jsx-uses-vars, so no-unused-vars can't see that usage.
+// eslint-disable-next-line no-unused-vars
+import { AnimatePresence, motion } from "framer-motion";
 import NavBar from "../components/NavBar";
+import Toast from "../components/ui/Toast.jsx";
+import RegistrationSuccessCard from "../components/ui/RegistrationSuccessCard.jsx";
+import { playCompletion } from "../dealer/mobile/completionFeedback.js";
 import { api, getApiErrorMessage } from "../api/client.js";
+
+const FORM_FADE_TRANSITION = { duration: 0.22, ease: [0.23, 1, 0.32, 1] };
 
 const initialForm = {
   companyName: "",
@@ -119,9 +128,17 @@ export default function DealershipRegistrationPage() {
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
   const [emailTouched, setEmailTouched] = useState(false);
+  // "idle" | "checking" | "taken" - separate from format validity (emailValid
+  // below); reset to "idle" whenever the email field changes so a stale
+  // result never lingers against a different, not-yet-rechecked address.
+  const [emailAvailability, setEmailAvailability] = useState("idle");
+  const [toastOpen, setToastOpen] = useState(false);
 
   const emailValid = useMemo(() => isValidEmail(formData.email), [formData.email]);
-  const showEmailError = emailTouched && formData.email.trim().length > 0 && !emailValid;
+  const showEmailError =
+    emailTouched &&
+    formData.email.trim().length > 0 &&
+    (!emailValid || emailAvailability === "taken");
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
@@ -142,9 +159,34 @@ export default function DealershipRegistrationPage() {
       ...current,
       [event.target.name]: event.target.value,
     }));
+    if (event.target.name === "email") {
+      setEmailAvailability("idle");
+    }
   };
 
-  const handleEmailBlur = () => setEmailTouched(true);
+  // Backend source of truth is applyForDealership's own User.findOne gate -
+  // this only queries the lightweight check-email endpoint, so it's purely
+  // an early-feedback layer, not the real enforcement. Fails open (leaves
+  // availability as "idle") on a network hiccup rather than blocking the
+  // field on something that isn't actually the applicant's fault; the real
+  // gate still runs again at submit time regardless.
+  async function checkEmailAvailable(email) {
+    try {
+      const { data } = await api.get("/api/dealer/check-email", { params: { email } });
+      return data?.available !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  const handleEmailBlur = async () => {
+    setEmailTouched(true);
+    if (!isValidEmail(formData.email)) return;
+
+    setEmailAvailability("checking");
+    const available = await checkEmailAvailable(formData.email);
+    setEmailAvailability(available ? "idle" : "taken");
+  };
 
   const showOptional = (key) => {
     setVisibleOptional((current) => ({ ...current, [key]: true }));
@@ -165,6 +207,14 @@ export default function DealershipRegistrationPage() {
     );
   };
 
+  function triggerSuccess() {
+    setSubmitted(true);
+    setFormData(initialForm);
+    setVisibleOptional({});
+    setToastOpen(true);
+    playCompletion();
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitting) return;
@@ -178,15 +228,28 @@ export default function DealershipRegistrationPage() {
       return;
     }
 
+    // Always re-checked fresh here regardless of what the blur-triggered
+    // check already found - covers Enter-to-submit (blur may never have
+    // fired) and edits made after the last blur. applyForDealership's own
+    // User.findOne gate is still the real enforcement; this just avoids a
+    // pointless round-trip through the whole submit flow for an email that's
+    // already known to be taken.
+    setEmailAvailability("checking");
+    const available = await checkEmailAvailable(formData.email);
+    if (!available) {
+      setEmailAvailability("taken");
+      setEmailTouched(true);
+      return;
+    }
+    setEmailAvailability("idle");
+
     setSubmitting(true);
     setSubmitted(false);
     setError("");
 
     try {
       if (formData.website) {
-        setSubmitted(true);
-        setFormData(initialForm);
-        setVisibleOptional({});
+        triggerSuccess();
         return;
       }
 
@@ -220,9 +283,7 @@ export default function DealershipRegistrationPage() {
         notes: compiledNotes,
       });
 
-      setSubmitted(true);
-      setFormData(initialForm);
-      setVisibleOptional({});
+      triggerSuccess();
     } catch (err) {
       setError(getApiErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
@@ -296,41 +357,50 @@ export default function DealershipRegistrationPage() {
             </p>
           </div>
 
-          <form className="apple-dealer-card" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              name="website"
-              value={formData.website}
-              onChange={handleChange}
-              className="apple-dealer-honeypot"
-              tabIndex={-1}
-              autoComplete="off"
-            />
+          <AnimatePresence mode="wait">
+            {submitted ? (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={FORM_FADE_TRANSITION}
+              >
+                <RegistrationSuccessCard message="Application received. Check your inbox for a confirmation email — click the link to confirm your email before we can review your application." />
+              </motion.div>
+            ) : (
+              <motion.form
+                key="form"
+                className="apple-dealer-card"
+                onSubmit={handleSubmit}
+                initial={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={FORM_FADE_TRANSITION}
+              >
+                <input
+                  type="text"
+                  name="website"
+                  value={formData.website}
+                  onChange={handleChange}
+                  className="apple-dealer-honeypot"
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
 
-            <div className="apple-dealer-status-row" aria-live="polite">
-              <span className="apple-dealer-status">
-                {submitting ? "Submitting" : submitted ? "Submitted" : "Ready"}
-              </span>
-              {submitted ? (
-                <span className="apple-dealer-success">
-                  Application received. Check your inbox for a confirmation email — click the link
-                  to confirm your email before we can review your application.
-                </span>
-              ) : null}
-            </div>
+                {submitting ? (
+                  <div className="apple-dealer-loading" role="status">
+                    <svg className="apple-dealer-spinner-ring" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="#e8e8ed" strokeWidth="2" />
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="#1d1d1f" strokeWidth="2" strokeLinecap="round" strokeDasharray="34 50" />
+                    </svg>
+                    <span>Sending application to Meitu...</span>
+                  </div>
+                ) : null}
 
-            {submitting ? (
-              <div className="apple-dealer-loading" role="status">
-                <span className="apple-dealer-spinner" aria-hidden="true" />
-                <span>Sending application to Meitu...</span>
-              </div>
-            ) : null}
-
-            {error ? (
-              <div className="apple-dealer-alert" role="alert">
-                {error}
-              </div>
-            ) : null}
+                {error ? (
+                  <div className="apple-dealer-alert" role="alert">
+                    {error}
+                  </div>
+                ) : null}
 
             <div className="apple-dealer-core-fields">
               <label className="apple-dealer-field">
@@ -346,7 +416,15 @@ export default function DealershipRegistrationPage() {
               </label>
 
               <label className={`apple-dealer-field ${showEmailError ? "invalid" : ""}`}>
-                <span>Email Address</span>
+                <span className="apple-dealer-field-head">
+                  <span>Email Address</span>
+                  {emailAvailability === "checking" ? (
+                    <span className="apple-dealer-field-checking">
+                      <span className="apple-dealer-field-checking-dot" aria-hidden="true" />
+                      Checking…
+                    </span>
+                  ) : null}
+                </span>
                 <input
                   type="email"
                   name="email"
@@ -360,7 +438,9 @@ export default function DealershipRegistrationPage() {
                 />
                 {showEmailError ? (
                   <span className="apple-dealer-field-error">
-                    Enter a valid email address, e.g. name@example.com
+                    {!emailValid
+                      ? "Enter a valid email address, e.g. name@example.com"
+                      : "This email is already registered. Please use a different email or sign in instead."}
                   </span>
                 ) : null}
               </label>
@@ -434,9 +514,13 @@ export default function DealershipRegistrationPage() {
                 link.
               </p>
             </div>
-          </form>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </section>
       </main>
+
+      <Toast open={toastOpen} message="Application submitted!" onDismiss={() => setToastOpen(false)} />
 
       <style>{`
         .apple-dealer-register-page{
@@ -538,34 +622,6 @@ export default function DealershipRegistrationPage() {
           opacity:0;
         }
 
-        .apple-dealer-status-row{
-          min-height:32px;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-          margin-bottom:20px;
-        }
-
-        .apple-dealer-status{
-          display:inline-flex;
-          align-items:center;
-          min-height:28px;
-          padding:0 11px;
-          border-radius:999px;
-          background:#f5f5f7;
-          border:1px solid #e8e8ed;
-          color:#707070;
-          font-size:12px;
-          font-weight:600;
-        }
-
-        .apple-dealer-success{
-          color:#1d1d1f;
-          font-size:13px;
-          line-height:1.35;
-        }
-
         .apple-dealer-alert{
           margin-bottom:16px;
           border-radius:16px;
@@ -579,7 +635,7 @@ export default function DealershipRegistrationPage() {
         }
 
         .apple-dealer-loading{
-          margin:-4px 0 16px;
+          margin:0 0 16px;
           min-height:44px;
           border-radius:18px;
           background:#f5f5f7;
@@ -595,14 +651,28 @@ export default function DealershipRegistrationPage() {
           animation:appleDealerLoadingIn .24s ease both;
         }
 
-        .apple-dealer-spinner{
-          width:18px;
-          height:18px;
-          border-radius:999px;
-          border:2px solid #d2d2d7;
-          border-top-color:#1d1d1f;
-          animation:appleDealerSpin .72s linear infinite;
+        .apple-dealer-spinner-ring{
           flex:0 0 auto;
+          animation:appleDealerSpin .85s linear infinite;
+        }
+
+        .apple-dealer-field-checking{
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          color:#0071e3;
+          font-size:11px;
+          font-weight:600;
+          text-transform:none;
+          letter-spacing:0;
+        }
+
+        .apple-dealer-field-checking-dot{
+          width:5px;
+          height:5px;
+          border-radius:999px;
+          background:#0071e3;
+          animation:appleDealerPulse 1s ease-in-out infinite;
         }
 
         @keyframes appleDealerSpin{
@@ -612,6 +682,11 @@ export default function DealershipRegistrationPage() {
         @keyframes appleDealerLoadingIn{
           from{ opacity:0; transform:translateY(-4px); }
           to{ opacity:1; transform:translateY(0); }
+        }
+
+        @keyframes appleDealerPulse{
+          0%, 100%{ opacity:.35; transform:scale(.85); }
+          50%{ opacity:1; transform:scale(1); }
         }
 
         .apple-dealer-core-fields,
@@ -871,7 +946,6 @@ export default function DealershipRegistrationPage() {
             grid-template-columns:1fr;
           }
 
-          .apple-dealer-status-row,
           .apple-dealer-optional-head{
             display:grid;
           }

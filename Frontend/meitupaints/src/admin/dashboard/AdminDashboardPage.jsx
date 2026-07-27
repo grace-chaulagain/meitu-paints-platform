@@ -32,6 +32,12 @@ import {
   Surface,
 } from "../../components/dashboard/DashboardUI.jsx";
 import {
+  ReadOnlyAdminProvider,
+  ReadOnlyAdminStyles,
+  installReadOnlyAdminDomGuard,
+  isReadOnlyAdminUser,
+} from "../../components/dashboard/readOnlyAdminMode.jsx";
+import {
   useGetAdminDealerApplicationsQuery,
   useGetAdminDispatcherApplicationsQuery,
   useGetAdminScopedOrdersQuery,
@@ -46,6 +52,7 @@ import NotificationCenterPage from "../../notifications/NotificationCenterPage.j
 import AdminApplicationsPage from "./applications/AdminApplicationsPage.jsx";
 import AdminDealersPage from "./dealers/AdminDealersPage.jsx";
 import AdminPaintersPage from "./painters/AdminPaintersPage.jsx";
+import AdminAnnouncementsPage from "./network/AdminAnnouncementsPage.jsx";
 import AdminPainterProfilePage from "./painters/AdminPainterProfilePage.jsx";
 import AdminDispatcherProfilePage from "./dispatchers/AdminDispatcherProfilePage.jsx";
 import AdminDispatchersPage from "./dispatchers/AdminDispatchersPage.jsx";
@@ -75,6 +82,7 @@ const SECTIONS = {
   DEALERS: "dealers",
   DISPATCHERS: "dispatchers",
   PAINTERS: "painters",
+  ANNOUNCEMENTS: "announcements",
   ORDERS: "orders",
   SALES: "sales",
   COUPONS: "coupons",
@@ -90,6 +98,7 @@ const SECTION_ROUTE_MAP = {
   [SECTIONS.DEALERS]: "/admin/dashboard/dealers",
   [SECTIONS.DISPATCHERS]: "/admin/dashboard/dispatchers",
   [SECTIONS.PAINTERS]: "/admin/dashboard/painters",
+  [SECTIONS.ANNOUNCEMENTS]: "/admin/dashboard/announcements",
   [SECTIONS.ORDERS]: "/admin/dashboard/orders",
   [SECTIONS.SALES]: "/admin/dashboard/sales",
   [SECTIONS.COUPONS]: "/admin/dashboard/coupons",
@@ -543,7 +552,20 @@ export default function AdminDashboard() {
   const notificationCategories = notifications?.categories;
   const markCategoriesRead = notifications?.markCategoriesRead;
   const isMobile = useIsMobileAdmin();
+  const isReadOnlyAdmin = isReadOnlyAdminUser(user);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isReadOnlyAdmin || typeof document === "undefined") return undefined;
+
+    document.body.classList.add("admin-readonly-mode");
+    const cleanupGuard = installReadOnlyAdminDomGuard();
+
+    return () => {
+      cleanupGuard?.();
+      document.body.classList.remove("admin-readonly-mode");
+    };
+  }, [isReadOnlyAdmin, location.pathname]);
 
   const activeSection = useMemo(() => {
     const path = location.pathname;
@@ -565,6 +587,9 @@ export default function AdminDashboard() {
     }
     if (path.startsWith("/admin/dashboard/painters")) {
       return SECTIONS.PAINTERS;
+    }
+    if (path.startsWith("/admin/dashboard/announcements")) {
+      return SECTIONS.ANNOUNCEMENTS;
     }
     if (path.startsWith("/admin/dashboard/orders")) {
       return SECTIONS.ORDERS;
@@ -593,6 +618,8 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
+    if (isReadOnlyAdmin) return;
+
     const categoryMap = {
       [SECTIONS.APPLICATIONS]: [
         NOTIFICATION_CATEGORIES.DEALER_REGISTRATION,
@@ -605,7 +632,7 @@ export default function AdminDashboard() {
     if (categories?.length) {
       markCategoriesRead?.(categories).catch(() => {});
     }
-  }, [activeSection, markCategoriesRead]);
+  }, [activeSection, isReadOnlyAdmin, markCategoriesRead]);
 
   const navigationItems = useMemo(
     () => [
@@ -685,6 +712,13 @@ export default function AdminDashboard() {
         badge: "",
       },
       {
+        key: SECTIONS.ANNOUNCEMENTS,
+        title: "Announcements",
+        subtitle: "Notify the dealer/dispatcher network",
+        icon: "bell",
+        badge: "",
+      },
+      {
         key: SECTIONS.NOTIFICATIONS,
         title: "Notifications",
         subtitle: "Unread operational events",
@@ -722,7 +756,7 @@ export default function AdminDashboard() {
       {
         label: "Network",
         items: navigationItems.filter((item) =>
-          [SECTIONS.DEALERS, SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.INSIGHTS].includes(
+          [SECTIONS.DEALERS, SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.ANNOUNCEMENTS, SECTIONS.INSIGHTS].includes(
             item.key,
           ),
         ),
@@ -755,7 +789,7 @@ export default function AdminDashboard() {
       {
         label: "Network",
         items: navigationItems.filter((item) =>
-          [SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.INSIGHTS].includes(item.key),
+          [SECTIONS.DISPATCHERS, SECTIONS.PAINTERS, SECTIONS.ANNOUNCEMENTS, SECTIONS.INSIGHTS].includes(item.key),
         ),
       },
       {
@@ -911,6 +945,9 @@ export default function AdminDashboard() {
       case SECTIONS.PAINTERS:
         return <AdminPaintersPage />;
 
+      case SECTIONS.ANNOUNCEMENTS:
+        return <AdminAnnouncementsPage />;
+
       case SECTIONS.ORDERS:
         return isMobile ? <AdminOrdersMobileView /> : <AdminOrdersPage />;
 
@@ -943,11 +980,15 @@ export default function AdminDashboard() {
   };
 
   return (
-    <>
+    <ReadOnlyAdminProvider enabled={isReadOnlyAdmin}>
       <DashboardShell
         title="Admin Dashboard"
         eyebrow="Meitu Operations"
-        accountLabel={user?.email || "Meitu Paints operations"}
+        accountLabel={
+          isReadOnlyAdmin
+            ? `${user?.email || "Meitu Paints operations"} · Read only`
+            : user?.email || "Meitu Paints operations"
+        }
         navGroups={navigationGroups}
         activeKey={activeSection}
         onNavigate={(item) => handleNavigate(item.key)}
@@ -958,6 +999,7 @@ export default function AdminDashboard() {
         <AdminMobileStyles />
         <DealerMobileStylesCore />
         <DealerMobileStylesPages />
+        {isReadOnlyAdmin ? <ReadOnlyAdminStyles /> : null}
         {isMobile ? <div className="admin-m">{renderContent()}</div> : renderContent()}
       </DashboardShell>
 
@@ -986,6 +1028,6 @@ export default function AdminDashboard() {
           />
         </>
       ) : null}
-    </>
+    </ReadOnlyAdminProvider>
   );
 }

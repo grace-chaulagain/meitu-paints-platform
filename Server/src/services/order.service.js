@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
-import nodemailer from "nodemailer";
 
 import ApiError from "../utils/apiError.js";
 import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
@@ -34,6 +33,14 @@ import {
   reserveDispatcherStockForOrder,
   releaseDispatcherStockForOrder,
 } from "./dispatcherStock.service.js";
+import {
+  smtpConfigured,
+  sendMail,
+  renderEmailShell,
+  renderDetailRows,
+  renderLineItemsTable,
+  renderCallout,
+} from "../utils/email.js";
 
 function getFactorySettingsModel() {
   const model = mongoose.models.FactorySettings;
@@ -46,57 +53,6 @@ function getFactorySettingsModel() {
   }
 
   return model;
-}
-
-// ----------------------------
-// SMTP helpers
-// ----------------------------
-
-let _smtpTransport = null;
-
-function smtpConfigured() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
-}
-
-function getSmtpTransport() {
-  if (_smtpTransport) return _smtpTransport;
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } =
-    process.env;
-
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
-    throw new ApiError(500, "SMTP is not configured");
-  }
-
-  _smtpTransport = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: String(SMTP_SECURE) === "true",
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
-  });
-
-  return _smtpTransport;
-}
-
-async function sendMail({ to, subject, text, html, attachments = [] }) {
-  const { SMTP_USER, MAIL_FROM } = process.env;
-  const transporter = getSmtpTransport();
-
-  await transporter.sendMail({
-    from: MAIL_FROM || SMTP_USER,
-    to,
-    subject,
-    text,
-    html,
-    attachments,
-  });
 }
 
 // ----------------------------
@@ -119,6 +75,12 @@ function toObjectIdString(value) {
 
 function isAdmin(user) {
   return normalizeUpper(user?.role) === ROLES.ADMIN;
+}
+
+function isAdminReadScope(user) {
+  return [ROLES.ADMIN, ROLES.READ_ONLY_ADMIN].includes(
+    normalizeUpper(user?.role),
+  );
 }
 
 function isDealer(user) {
@@ -225,7 +187,7 @@ async function getDispatcherForUser(user) {
 async function assertCanAccessOrder({ order, actorUser }) {
   assertUser(actorUser);
 
-  if (isAdmin(actorUser)) return;
+  if (isAdminReadScope(actorUser)) return;
 
   if (isDealer(actorUser)) {
     if (
@@ -461,21 +423,6 @@ async function buildFactoryRecipients() {
 }
 
 function buildFactoryOrderEmail(order) {
-  const orderItemsHtml = (order.items || [])
-    .map(
-      (item, index) => `
-        <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${index + 1}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${item.name || ""}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;">${item.packLabel || item.variantLabel || item.unit || "-"}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${Number(item.quantity || 0).toLocaleString()}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${Number(item.unitPrice || 0).toLocaleString()}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${Number(item.lineTotal || 0).toLocaleString()}</td>
-        </tr>
-      `,
-    )
-    .join("");
-
   const subject = `Factory Order Bill · ${order.orderNumber}`;
 
   const text = [
@@ -499,64 +446,23 @@ function buildFactoryOrderEmail(order) {
     `Total: ${order.totals?.currency || "NPR"} ${order.totals?.total || 0}`,
   ].join("\n");
 
-  const html = `
-    <div style="margin:0;padding:24px;background:#f3f4f6;font-family:Arial,sans-serif;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:820px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
-        <tr>
-          <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
-            <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.84);">Meitu Paints</div>
-            <div style="margin-top:8px;font-size:28px;line-height:1.15;font-weight:700;color:#fff;">Factory Order Bill</div>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:26px 28px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-              <tr>
-                <td style="padding-bottom:18px;font-size:14px;line-height:1.8;color:#374151;">
-                  <strong>Order Number:</strong> ${order.orderNumber}<br/>
-                  <strong>Dealer:</strong> ${order.dealerSnapshot?.companyName || "-"}<br/>
-                  <strong>Contact:</strong> ${order.dealerSnapshot?.contactName || "-"}<br/>
-                  <strong>Phone:</strong> ${order.dealerSnapshot?.phone || "-"}<br/>
-                  <strong>Address:</strong> ${order.dealerSnapshot?.address || "-"}
-                </td>
-              </tr>
-            </table>
-
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-              <thead>
-                <tr style="background:#f8fafc;">
-                  <th style="padding:12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">#</th>
-                  <th style="padding:12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">Item</th>
-                  <th style="padding:12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">Pack / Variant</th>
-                  <th style="padding:12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">Qty</th>
-                  <th style="padding:12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">Rate</th>
-                  <th style="padding:12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#6b7280;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${orderItemsHtml}
-              </tbody>
-            </table>
-
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;">
-              <tr>
-                <td style="font-size:14px;line-height:1.9;color:#374151;">
-                  <strong>Subtotal:</strong> ${Number(order.totals?.subtotal || 0).toLocaleString()}<br/>
-                  <strong>Discount:</strong> ${Number(order.totals?.discount || 0).toLocaleString()}<br/>
-                  <strong>Tax:</strong> ${Number(order.totals?.tax || 0).toLocaleString()}<br/>
-                  <strong>Total:</strong> ${order.totals?.currency || "NPR"} ${Number(order.totals?.total || 0).toLocaleString()}
-                </td>
-              </tr>
-            </table>
-
-            <div style="margin-top:18px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #e5e7eb;color:#374151;font-size:13px;line-height:1.6;">
-              A downloadable PDF copy of this verified factory order summary is attached to this email for factory processing and records.
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+  const html = renderEmailShell({
+    preheader: `Factory order bill for ${order.orderNumber}.`,
+    eyebrow: "Factory Processing",
+    title: "Factory Order Bill",
+    bodyHtml:
+      renderDetailRows([
+        { label: "Order Number", value: order.orderNumber },
+        { label: "Dealer", value: order.dealerSnapshot?.companyName },
+        { label: "Contact", value: order.dealerSnapshot?.contactName },
+        { label: "Phone", value: order.dealerSnapshot?.phone },
+        { label: "Address", value: order.dealerSnapshot?.address },
+      ]) + renderLineItemsTable({ items: order.items || [], totals: order.totals || {} }),
+    calloutHtml: renderCallout(
+      "A downloadable PDF copy of this verified factory order summary is attached to this email for factory processing and records.",
+      { label: "Attachment" },
+    ),
+  });
 
   return { subject, text, html };
 }
@@ -710,7 +616,7 @@ export async function listOrdersForActor({
     const dispatcher = await getDispatcherForUser(actorUser);
     query.dispatcherId = dispatcher._id;
     query["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
-  } else if (!isAdmin(actorUser)) {
+  } else if (!isAdminReadScope(actorUser)) {
     throw new ApiError(403, "Access denied");
   } else if (dispatcherId) {
     if (!mongoose.Types.ObjectId.isValid(String(dispatcherId))) {
@@ -818,7 +724,7 @@ export async function getOrderForActor({ orderId, actorUser }) {
 
 export async function getOrderStockCheck({ orderId, actorUser }) {
   assertUser(actorUser);
-  if (!isAdmin(actorUser)) {
+  if (!isAdminReadScope(actorUser)) {
     throw new ApiError(403, "Admin access required");
   }
   if (!orderId) {

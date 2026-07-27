@@ -83,7 +83,11 @@ export default function PainterFormModal({ open, painter, saving, error, onClose
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <Surface className="dash-modal-surface-in" style={{ width: "min(560px, 100%)" }} padding={22}>
+      <Surface
+        className="dash-modal-surface-in"
+        style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto" }}
+        padding={22}
+      >
         <SectionHeader
           title={painter?._id ? "Edit Painter" : "Add Painter"}
           subtitle="Keep the Meitu painter directory up to date."

@@ -44,6 +44,11 @@ export const resendDealerVerificationController = asyncHandler(async (req, res) 
   res.status(200).json(out);
 });
 
+export const checkDealerEmailAvailabilityController = asyncHandler(async (req, res) => {
+  const out = await dealerService.checkDealerEmailAvailability(req.query.email);
+  res.status(200).json({ ok: true, ...out });
+});
+
 // Dealer: profile
 export const getMyProfileController = asyncHandler(async (req, res) => {
   const out = await dealerService.getMyProfile({ user: req.user });

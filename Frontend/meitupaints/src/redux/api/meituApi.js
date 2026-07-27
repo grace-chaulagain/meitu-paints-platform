@@ -192,6 +192,7 @@ export const meituApi = createApi({
     "CouponSettlement",
     "DealerPainterSearch",
     "PointsCatalogProduct",
+    "Announcement",
   ],
   keepUnusedDataFor: 60,
   // Global freshness: a stale order card is worse than a redundant fetch -
@@ -311,6 +312,33 @@ export const meituApi = createApi({
         body: { fromValue, toLabel },
       }),
       invalidatesTags: () => [listTag("Product"), listTag("ProductFamily"), listTag("ProductCategory")],
+    }),
+
+    getAdminAnnouncements: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/announcements", params }),
+      transformResponse: (response) => response?.item || { items: [], nextCursor: null },
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: (response) => [
+        listTag("Announcement"),
+        ...(response?.items || []).map((item) => ({ type: "Announcement", id: item._id })),
+      ],
+    }),
+
+    sendAdminAnnouncement: builder.mutation({
+      query: (payload) => ({
+        url: "/api/admin/announcements/send",
+        method: "POST",
+        body: payload,
+      }),
+      invalidatesTags: () => [listTag("Announcement")],
+    }),
+
+    previewAnnouncementEmail: builder.mutation({
+      query: (payload) => ({
+        url: "/api/admin/announcements/preview",
+        method: "POST",
+        body: payload,
+      }),
     }),
 
     getAdminProductFamilies: builder.query({
@@ -1678,6 +1706,9 @@ export const {
   useGetProductFamiliesQuery,
   useGetAdminProductCategoriesQuery,
   useRenameProductCategoryMutation,
+  useGetAdminAnnouncementsQuery,
+  useSendAdminAnnouncementMutation,
+  usePreviewAnnouncementEmailMutation,
   useGetAdminProductFamiliesQuery,
   useGetAdminProductsQuery,
   useCreateAdminProductMutation,

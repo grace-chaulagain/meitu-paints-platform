@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+// `motion` is used via JSX (<motion.form>/<motion.div>) - this repo's eslint
+// config has no react/jsx-uses-vars, so no-unused-vars can't see that usage.
+// eslint-disable-next-line no-unused-vars
+import { AnimatePresence, motion } from "framer-motion";
 import NavBar from "../components/NavBar.jsx";
+import Toast from "../components/ui/Toast.jsx";
+import RegistrationSuccessCard from "../components/ui/RegistrationSuccessCard.jsx";
+import { playCompletion } from "../dealer/mobile/completionFeedback.js";
 import { api, getApiErrorMessage } from "../api/client.js";
+
+const FORM_FADE_TRANSITION = { duration: 0.22, ease: [0.23, 1, 0.32, 1] };
 
 const initialForm = {
   name: "",
@@ -79,9 +88,17 @@ export default function DispatcherRegisterPage() {
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
   const [emailTouched, setEmailTouched] = useState(false);
+  // "idle" | "checking" | "taken" - separate from format validity (emailValid
+  // below); reset to "idle" whenever the email field changes so a stale
+  // result never lingers against a different, not-yet-rechecked address.
+  const [emailAvailability, setEmailAvailability] = useState("idle");
+  const [toastOpen, setToastOpen] = useState(false);
 
   const emailValid = useMemo(() => isValidEmail(formData.email), [formData.email]);
-  const showEmailError = emailTouched && formData.email.trim().length > 0 && !emailValid;
+  const showEmailError =
+    emailTouched &&
+    formData.email.trim().length > 0 &&
+    (!emailValid || emailAvailability === "taken");
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
@@ -102,9 +119,34 @@ export default function DispatcherRegisterPage() {
       ...current,
       [event.target.name]: event.target.value,
     }));
+    if (event.target.name === "email") {
+      setEmailAvailability("idle");
+    }
   };
 
-  const handleEmailBlur = () => setEmailTouched(true);
+  // Backend source of truth is createDispatcherApplication's own
+  // User.findOne gate - this only queries the lightweight check-email
+  // endpoint, so it's purely an early-feedback layer, not the real
+  // enforcement. Fails open (leaves availability as "idle") on a network
+  // hiccup rather than blocking the field on something that isn't actually
+  // the applicant's fault; the real gate still runs again at submit time.
+  async function checkEmailAvailable(email) {
+    try {
+      const { data } = await api.get("/api/dispatchers/check-email", { params: { email } });
+      return data?.available !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  const handleEmailBlur = async () => {
+    setEmailTouched(true);
+    if (!isValidEmail(formData.email)) return;
+
+    setEmailAvailability("checking");
+    const available = await checkEmailAvailable(formData.email);
+    setEmailAvailability(available ? "idle" : "taken");
+  };
 
   const showOptional = (key) => {
     setVisibleOptional((current) => ({ ...current, [key]: true }));
@@ -125,6 +167,14 @@ export default function DispatcherRegisterPage() {
     );
   };
 
+  function triggerSuccess() {
+    setSubmitted(true);
+    setFormData(initialForm);
+    setVisibleOptional({});
+    setToastOpen(true);
+    playCompletion();
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submitting) return;
@@ -138,15 +188,28 @@ export default function DispatcherRegisterPage() {
       return;
     }
 
+    // Always re-checked fresh here regardless of what the blur-triggered
+    // check already found - covers Enter-to-submit (blur may never have
+    // fired) and edits made after the last blur. createDispatcherApplication's
+    // own User.findOne gate is still the real enforcement; this just avoids a
+    // pointless round-trip through the whole submit flow for an email that's
+    // already known to be taken.
+    setEmailAvailability("checking");
+    const available = await checkEmailAvailable(formData.email);
+    if (!available) {
+      setEmailAvailability("taken");
+      setEmailTouched(true);
+      return;
+    }
+    setEmailAvailability("idle");
+
     setSubmitting(true);
     setSubmitted(false);
     setError("");
 
     try {
       if (formData.website) {
-        setSubmitted(true);
-        setFormData(initialForm);
-        setVisibleOptional({});
+        triggerSuccess();
         return;
       }
 
@@ -159,9 +222,7 @@ export default function DispatcherRegisterPage() {
         notes: formData.notes.trim(),
       });
 
-      setSubmitted(true);
-      setFormData(initialForm);
-      setVisibleOptional({});
+      triggerSuccess();
     } catch (err) {
       setError(getApiErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
@@ -222,34 +283,44 @@ export default function DispatcherRegisterPage() {
             </p>
           </div>
 
-          <form className="apple-dispatcher-card" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              name="website"
-              value={formData.website}
-              onChange={handleChange}
-              className="apple-dispatcher-honeypot"
-              tabIndex={-1}
-              autoComplete="off"
-            />
+          <AnimatePresence mode="wait">
+            {submitted ? (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={FORM_FADE_TRANSITION}
+              >
+                <RegistrationSuccessCard message="Application received. Check your email after admin review." />
+              </motion.div>
+            ) : (
+              <motion.form
+                key="form"
+                className="apple-dispatcher-card"
+                onSubmit={handleSubmit}
+                initial={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={FORM_FADE_TRANSITION}
+              >
+                <input
+                  type="text"
+                  name="website"
+                  value={formData.website}
+                  onChange={handleChange}
+                  className="apple-dispatcher-honeypot"
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
 
-            <div className="apple-dispatcher-status-row" aria-live="polite">
-              <span className="apple-dispatcher-status">
-                {submitting ? "Submitting" : submitted ? "Submitted" : "Ready"}
-              </span>
-              {submitted ? (
-                <span className="apple-dispatcher-success">
-                  Application received. Check your email after admin review.
-                </span>
-              ) : null}
-            </div>
-
-            {submitting ? (
-              <div className="apple-dispatcher-loading" role="status">
-                <span className="apple-dispatcher-spinner" aria-hidden="true" />
-                <span>Sending application to Meitu...</span>
-              </div>
-            ) : null}
+                {submitting ? (
+                  <div className="apple-dispatcher-loading" role="status">
+                    <svg className="apple-dispatcher-spinner-ring" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="#e8e8ed" strokeWidth="2" />
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="#1d1d1f" strokeWidth="2" strokeLinecap="round" strokeDasharray="34 50" />
+                    </svg>
+                    <span>Sending application to Meitu...</span>
+                  </div>
+                ) : null}
 
             {error ? (
               <div className="apple-dispatcher-alert" role="alert">
@@ -271,7 +342,15 @@ export default function DispatcherRegisterPage() {
               </label>
 
               <label className={`apple-dispatcher-field ${showEmailError ? "invalid" : ""}`}>
-                <span>Email Address</span>
+                <span className="apple-dispatcher-field-head">
+                  <span>Email Address</span>
+                  {emailAvailability === "checking" ? (
+                    <span className="apple-dispatcher-field-checking">
+                      <span className="apple-dispatcher-field-checking-dot" aria-hidden="true" />
+                      Checking…
+                    </span>
+                  ) : null}
+                </span>
                 <input
                   type="email"
                   name="email"
@@ -285,7 +364,9 @@ export default function DispatcherRegisterPage() {
                 />
                 {showEmailError ? (
                   <span className="apple-dispatcher-field-error">
-                    Enter a valid email address, e.g. name@example.com
+                    {!emailValid
+                      ? "Enter a valid email address, e.g. name@example.com"
+                      : "This email is already registered. Please use a different email or sign in instead."}
                   </span>
                 ) : null}
               </label>
@@ -359,9 +440,13 @@ export default function DispatcherRegisterPage() {
                 link.
               </p>
             </div>
-          </form>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </section>
       </main>
+
+      <Toast open={toastOpen} message="Application submitted!" onDismiss={() => setToastOpen(false)} />
 
       <style>{`
         .apple-dispatcher-register-page{
@@ -463,34 +548,6 @@ export default function DispatcherRegisterPage() {
           opacity:0;
         }
 
-        .apple-dispatcher-status-row{
-          min-height:32px;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap:12px;
-          margin-bottom:20px;
-        }
-
-        .apple-dispatcher-status{
-          display:inline-flex;
-          align-items:center;
-          min-height:28px;
-          padding:0 11px;
-          border-radius:999px;
-          background:#f5f5f7;
-          border:1px solid #e8e8ed;
-          color:#707070;
-          font-size:12px;
-          font-weight:600;
-        }
-
-        .apple-dispatcher-success{
-          color:#1d1d1f;
-          font-size:13px;
-          line-height:1.35;
-        }
-
         .apple-dispatcher-alert{
           margin-bottom:16px;
           border-radius:16px;
@@ -504,7 +561,7 @@ export default function DispatcherRegisterPage() {
         }
 
         .apple-dispatcher-loading{
-          margin:-4px 0 16px;
+          margin:0 0 16px;
           min-height:44px;
           border-radius:18px;
           background:#f5f5f7;
@@ -520,14 +577,28 @@ export default function DispatcherRegisterPage() {
           animation:appleDispatcherLoadingIn .24s ease both;
         }
 
-        .apple-dispatcher-spinner{
-          width:18px;
-          height:18px;
-          border-radius:999px;
-          border:2px solid #d2d2d7;
-          border-top-color:#1d1d1f;
-          animation:appleDispatcherSpin .72s linear infinite;
+        .apple-dispatcher-spinner-ring{
           flex:0 0 auto;
+          animation:appleDispatcherSpin .85s linear infinite;
+        }
+
+        .apple-dispatcher-field-checking{
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          color:#0071e3;
+          font-size:11px;
+          font-weight:600;
+          text-transform:none;
+          letter-spacing:0;
+        }
+
+        .apple-dispatcher-field-checking-dot{
+          width:5px;
+          height:5px;
+          border-radius:999px;
+          background:#0071e3;
+          animation:appleDispatcherPulse 1s ease-in-out infinite;
         }
 
         @keyframes appleDispatcherSpin{
@@ -537,6 +608,11 @@ export default function DispatcherRegisterPage() {
         @keyframes appleDispatcherLoadingIn{
           from{ opacity:0; transform:translateY(-4px); }
           to{ opacity:1; transform:translateY(0); }
+        }
+
+        @keyframes appleDispatcherPulse{
+          0%, 100%{ opacity:.35; transform:scale(.85); }
+          50%{ opacity:1; transform:scale(1); }
         }
 
         .apple-dispatcher-core-fields,
@@ -793,7 +869,6 @@ export default function DispatcherRegisterPage() {
             grid-template-columns:1fr;
           }
 
-          .apple-dispatcher-status-row,
           .apple-dispatcher-optional-head{
             display:grid;
           }

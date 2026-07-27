@@ -1,5 +1,6 @@
 import {
   createDispatcherApplication,
+  checkDispatcherEmailAvailability,
   getAllDispatchers,
   getPendingDispatchers,
   getDispatcherById,
@@ -38,6 +39,15 @@ export async function createDispatcherApplicationController(req, res, next) {
       message: "Dispatcher application submitted successfully.",
       item: dispatcher,
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function checkDispatcherEmailAvailabilityController(req, res, next) {
+  try {
+    const out = await checkDispatcherEmailAvailability(req.query.email);
+    return res.status(200).json({ ok: true, ...out });
   } catch (error) {
     next(error);
   }

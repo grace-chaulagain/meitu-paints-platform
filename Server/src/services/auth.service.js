@@ -1,7 +1,6 @@
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
 
 import ApiError from "../utils/apiError.js";
 import User, { USER_ACCOUNT_STATUS } from "../models/User.model.js";
@@ -13,6 +12,14 @@ import PasswordResetToken, {
 
 import { signAccessToken, signRefreshToken } from "../utils/tokens.js";
 import { buildPublicAppUrl } from "../utils/publicUrl.js";
+import {
+  smtpConfigured,
+  getSmtpTransport,
+  sendMail,
+  renderEmailShell,
+  renderCallout,
+  renderParagraph,
+} from "../utils/email.js";
 import { ROLES } from "../constants/roles.js";
 import { DEALER_STATUS } from "../constants/statuses.js";
 import { IS_PRODUCTION, JWT_REFRESH_SECRET } from "../config/env.js";
@@ -94,15 +101,6 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
 }
 
-function escapeHtml(value = "") {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function verifyRefreshJwt(token) {
   const secret = JWT_REFRESH_SECRET;
   if (!secret) throw new ApiError(500, "Missing REFRESH_TOKEN_SECRET");
@@ -152,48 +150,6 @@ const toPublicDealerProfile = (dealer) => {
   };
 };
 
-let _smtpTransport = null;
-
-function smtpConfigured() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS);
-}
-
-function getSmtpTransport() {
-  if (_smtpTransport) return _smtpTransport;
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS } =
-    process.env;
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
-    throw new ApiError(500, "SMTP is not configured (missing env vars)");
-  }
-
-  _smtpTransport = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: Number(SMTP_PORT),
-    secure: String(SMTP_SECURE) === "true",
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
-  });
-
-  return _smtpTransport;
-}
-
-async function sendMail({ to, subject, text, html }) {
-  const { SMTP_USER, MAIL_FROM } = process.env;
-  const transporter = getSmtpTransport();
-
-  await transporter.sendMail({
-    from: MAIL_FROM || SMTP_USER,
-    to,
-    subject,
-    text,
-    html,
-  });
-}
-
 function buildPasswordSetupLink(token) {
   return buildPublicAppUrl(
     `/set-password?token=${encodeURIComponent(String(token))}`,
@@ -220,8 +176,6 @@ function passwordSetupEmailTemplate({
   const accountLabel = isDispatcher ? "dispatcher" : "dealer";
   const accountLabelTitle = isDispatcher ? "Dispatcher" : "Dealer";
   const recipientName = displayName || `Meitu ${accountLabelTitle}`;
-  const safeRecipientName = escapeHtml(recipientName);
-  const safeLink = escapeHtml(link);
 
   const subject = `Set your Meitu Paints ${accountLabel} password`;
 
@@ -236,102 +190,22 @@ function passwordSetupEmailTemplate({
     "If you did not expect this email, you can safely ignore it.",
   ].join("\n");
 
-  const html = `
-    <div style="margin:0;padding:0;background-color:#f3f4f6;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f4f6;margin:0;padding:24px 0;">
-        <tr>
-          <td align="center">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
-              <tr>
-                <td style="padding:0 16px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-                    <tr>
-                      <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.82);margin:0;">
-                          Meitu Paints
-                        </div>
-                        <div style="font-family:Arial,sans-serif;font-size:28px;line-height:1.15;font-weight:700;color:#ffffff;margin:10px 0 0 0;">
-                          ${accountLabelTitle} Account Approved
-                        </div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:28px;">
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                          <tr>
-                            <td>
-                              <div style="display:inline-block;font-family:Arial,sans-serif;font-size:11px;line-height:1.2;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#b42318;background:#fef2f2;border:1px solid #fecaca;border-radius:999px;padding:8px 12px;">
-                                Secure Access Setup
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:18px;font-family:Arial,sans-serif;font-size:16px;line-height:1.7;color:#111827;">
-                              Hello <strong>${safeRecipientName}</strong>,
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:14px;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#4b5563;">
-                              Your Meitu Paints ${accountLabel} account has been approved. To activate access, please set your password using the secure button below. This link will remain valid for <strong>24 hours</strong>.
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:26px;">
-                              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                                <tr>
-                                  <td align="center" bgcolor="#c40000" style="border-radius:12px;">
-                                    <a href="${safeLink}" style="display:inline-block;padding:14px 22px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:12px;background:linear-gradient(135deg,#c40000 0%,#ff5b2e 100%);">
-                                      Set Password
-                                    </a>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:24px;">
-                              <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
-                                Backup Link
-                              </div>
-                              <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;word-break:break-all;">
-                                <a href="${safeLink}" style="color:#b42318;text-decoration:none;">${safeLink}</a>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:20px;">
-                              <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f9fafb;border-left:4px solid #f97316;border-radius:10px;padding:14px 16px;">
-                                After setting your password, you can sign in and continue with your assigned workflow. If you did not expect this email, you may safely ignore it.
-                              </div>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#6b7280;">
-                          This is an automated message from Meitu Paints. Please do not reply directly to this email.
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+  const html = renderEmailShell({
+    preheader: `Your Meitu Paints ${accountLabel} account has been approved.`,
+    eyebrow: "Secure Access Setup",
+    title: `${accountLabelTitle} Account Approved`,
+    intro: `Hello ${recipientName}, your Meitu Paints ${accountLabel} account has been approved. To activate access, set your password using the button below. This link stays valid for 24 hours.`,
+    calloutHtml: renderCallout(
+      "After setting your password, you can sign in and continue with your assigned workflow. If you did not expect this email, you may safely ignore it.",
+    ),
+    ctaLabel: "Set Password",
+    ctaUrl: link,
+  });
 
   return { subject, text, html };
 }
 
-// Mirrors passwordSetupEmailTemplate's exact visual style (same brand
-// header gradient, same badge-pill/callout language) so an applicant's
+// Mirrors passwordSetupEmailTemplate's exact visual style so an applicant's
 // approval and rejection emails read as the same professional
 // correspondence, not two different systems. No link/button here - a
 // rejection has nothing to click through to.
@@ -346,9 +220,6 @@ function applicationRejectionEmailTemplate({
   const accountLabel = isDispatcher ? "dispatcher" : "dealer";
   const accountLabelTitle = isDispatcher ? "Dispatcher" : "Dealer";
   const recipientName = contactName || companyName || `Meitu ${accountLabelTitle} applicant`;
-  const safeRecipientName = escapeHtml(recipientName);
-  const safeCompanyName = escapeHtml(companyName || "");
-  const safeReason = escapeHtml(reason || "");
 
   const subject = `Update on your Meitu Paints ${accountLabel} application`;
 
@@ -365,85 +236,15 @@ function applicationRejectionEmailTemplate({
     .filter(Boolean)
     .join("\n");
 
-  const html = `
-    <div style="margin:0;padding:0;background-color:#f3f4f6;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f4f6;margin:0;padding:24px 0;">
-        <tr>
-          <td align="center">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
-              <tr>
-                <td style="padding:0 16px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-                    <tr>
-                      <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.82);margin:0;">
-                          Meitu Paints
-                        </div>
-                        <div style="font-family:Arial,sans-serif;font-size:28px;line-height:1.15;font-weight:700;color:#ffffff;margin:10px 0 0 0;">
-                          Application Update
-                        </div>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:28px;">
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                          <tr>
-                            <td>
-                              <div style="display:inline-block;font-family:Arial,sans-serif;font-size:11px;line-height:1.2;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:8px 12px;">
-                                ${accountLabelTitle} Application
-                              </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:18px;font-family:Arial,sans-serif;font-size:16px;line-height:1.7;color:#111827;">
-                              Hello <strong>${safeRecipientName}</strong>,
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding-top:14px;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#4b5563;">
-                              Thank you for your interest in becoming a Meitu Paints ${accountLabel} partner${safeCompanyName ? ` (<strong>${safeCompanyName}</strong>)` : ""}. After reviewing your application, we're not able to move forward with it at this time.
-                            </td>
-                          </tr>
-                          ${
-                            safeReason
-                              ? `<tr>
-                            <td style="padding-top:20px;">
-                              <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
-                                Reason
-                              </div>
-                              <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#374151;background:#f9fafb;border-left:4px solid #b91c1c;border-radius:10px;padding:14px 16px;white-space:pre-wrap;">
-                                ${safeReason}
-                              </div>
-                            </td>
-                          </tr>`
-                              : ""
-                          }
-                          <tr>
-                            <td style="padding-top:20px;font-family:Arial,sans-serif;font-size:14px;line-height:1.8;color:#4b5563;">
-                              If you believe this was a mistake, or if your circumstances change, you're welcome to submit a new application in the future.
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-
-                    <tr>
-                      <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#6b7280;">
-                          This is an automated message from Meitu Paints. Please do not reply directly to this email.
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+  const html = renderEmailShell({
+    preheader: `An update on your Meitu Paints ${accountLabel} application.`,
+    eyebrow: `${accountLabelTitle} Application`,
+    title: "Application Update",
+    intro: `Hello ${recipientName}, thank you for your interest in becoming a Meitu Paints ${accountLabel} partner${companyName ? ` (${companyName})` : ""}. After reviewing your application, we're not able to move forward with it at this time.`,
+    calloutHtml:
+      renderCallout(reason, { label: "Reason" }) +
+      renderParagraph("If you believe this was a mistake, or if your circumstances change, you're welcome to submit a new application in the future."),
+  });
 
   return { subject, text, html };
 }
@@ -475,8 +276,6 @@ export async function sendApplicationRejectionEmail({
 
 function passwordResetEmailTemplate({ token, displayName = "Meitu User" }) {
   const link = buildPasswordResetLink(token);
-  const safeDisplayName = escapeHtml(displayName || "Meitu User");
-  const safeLink = escapeHtml(link);
   const subject = "Reset your Meitu Paints password";
 
   const text = [
@@ -489,70 +288,15 @@ function passwordResetEmailTemplate({ token, displayName = "Meitu User" }) {
     "If you did not request this reset, you can safely ignore this email.",
   ].join("\n");
 
-  const html = `
-    <div style="margin:0;padding:0;background-color:#f3f4f6;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f4f6;margin:0;padding:24px 0;">
-        <tr>
-          <td align="center">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;width:100%;">
-              <tr>
-                <td style="padding:0 16px;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-                    <tr>
-                      <td style="background:linear-gradient(135deg,#b91c1c 0%,#dd5127 100%);padding:22px 28px;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.2;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.82);margin:0;">
-                          Meitu Paints
-                        </div>
-                        <div style="font-family:Arial,sans-serif;font-size:28px;line-height:1.15;font-weight:700;color:#ffffff;margin:10px 0 0 0;">
-                          Password Reset
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:28px;">
-                        <div style="display:inline-block;font-family:Arial,sans-serif;font-size:11px;line-height:1.2;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#b42318;background:#fef2f2;border:1px solid #fecaca;border-radius:999px;padding:8px 12px;">
-                          Secure Recovery
-                        </div>
-                        <div style="padding-top:18px;font-family:Arial,sans-serif;font-size:16px;line-height:1.7;color:#111827;">
-                          Hello <strong>${safeDisplayName}</strong>,
-                        </div>
-                        <div style="padding-top:14px;font-family:Arial,sans-serif;font-size:15px;line-height:1.8;color:#4b5563;">
-                          Use the button below to reset your password. This link is single-use and expires in <strong>30 minutes</strong>.
-                        </div>
-                        <div style="padding-top:26px;">
-                          <a href="${safeLink}" style="display:inline-block;padding:14px 22px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;border-radius:12px;background:linear-gradient(135deg,#c40000 0%,#ff5b2e 100%);">
-                            Reset Password
-                          </a>
-                        </div>
-                        <div style="padding-top:24px;">
-                          <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;">
-                            Backup Link
-                          </div>
-                          <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;word-break:break-all;">
-                            <a href="${safeLink}" style="color:#b42318;text-decoration:none;">${safeLink}</a>
-                          </div>
-                        </div>
-                        <div style="margin-top:20px;font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#4b5563;background:#f9fafb;border-left:4px solid #f97316;border-radius:10px;padding:14px 16px;">
-                          If you did not request this reset, you can safely ignore this email.
-                        </div>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;">
-                        <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#6b7280;">
-                          This is an automated message from Meitu Paints. Please do not reply directly to this email.
-                        </div>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
+  const html = renderEmailShell({
+    preheader: "Reset your Meitu Paints password.",
+    eyebrow: "Secure Recovery",
+    title: "Password Reset",
+    intro: `Hello ${displayName || "Meitu User"}, use the button below to reset your password. This link is single-use and expires in 30 minutes.`,
+    calloutHtml: renderCallout("If you did not request this reset, you can safely ignore this email."),
+    ctaLabel: "Reset Password",
+    ctaUrl: link,
+  });
 
   return { subject, text, html };
 }
@@ -718,7 +462,13 @@ async function loginCore({
 
   const wantedRole = normalizeRole(role);
   if (wantedRole) {
-    const allowed = [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER, ROLES.FACTORY];
+    const allowed = [
+      ROLES.ADMIN,
+      ROLES.READ_ONLY_ADMIN,
+      ROLES.DEALER,
+      ROLES.DISPATCHER,
+      ROLES.FACTORY,
+    ];
     if (!allowed.includes(wantedRole)) {
       throw new ApiError(400, "Invalid role");
     }
@@ -970,7 +720,15 @@ export async function requestPasswordReset(email) {
   const user = await User.findOne({
     email: normalizedEmail,
     isActive: true,
-    role: { $in: [ROLES.ADMIN, ROLES.DEALER, ROLES.DISPATCHER, ROLES.FACTORY] },
+    role: {
+      $in: [
+        ROLES.ADMIN,
+        ROLES.READ_ONLY_ADMIN,
+        ROLES.DEALER,
+        ROLES.DISPATCHER,
+        ROLES.FACTORY,
+      ],
+    },
     accountStatus: { $ne: USER_ACCOUNT_STATUS.SUSPENDED },
   }).select(
     "username email role dealerId dispatcherId isActive accountStatus +passwordHash",

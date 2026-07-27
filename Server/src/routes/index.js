@@ -7,6 +7,7 @@ import userRoutes from "./user.routes.js";
 import productRoutes from "./product.routes.js";
 import productFamilyRoutes from "./productFamily.routes.js";
 import adminCatalogRoutes from "./admin.catalog.routes.js";
+import announcementRoutes from "./announcement.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
 import orderRoutes from "./order.routes.js";
 import notificationRoutes from "./notification.routes.js";
@@ -17,10 +18,15 @@ import {
   applyForDealershipController,
   verifyDealerEmailController,
   resendDealerVerificationController,
+  checkDealerEmailAvailabilityController,
 } from "../controllers/dealer.controller.js";
 
 import { auth } from "../middlewares/auth.middleware.js";
-import { applicationRateLimit, passwordResetRateLimit } from "../middlewares/rateLimit.middleware.js";
+import {
+  applicationRateLimit,
+  passwordResetRateLimit,
+  publicReadRateLimit,
+} from "../middlewares/rateLimit.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
 import { validateBody } from "../middlewares/validate.middleware.js";
 import {
@@ -36,6 +42,7 @@ router.use("/auth", authRoutes);
 
 // Admin
 router.use("/admin/catalog", adminCatalogRoutes);
+router.use("/admin/announcements", announcementRoutes);
 router.use("/admin", adminRoutes);
 
 // Dealer
@@ -56,6 +63,11 @@ router.post(
   passwordResetRateLimit,
   validateBody(dealerResendVerificationBodySchema),
   resendDealerVerificationController,
+);
+router.get(
+  "/dealer/check-email",
+  publicReadRateLimit,
+  checkDealerEmailAvailabilityController,
 );
 router.use("/dealer", auth, requireRole("DEALER"), dealerRoutes);
 
