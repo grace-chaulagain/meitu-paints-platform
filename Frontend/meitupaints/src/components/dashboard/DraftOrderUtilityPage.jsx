@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGetProductsQuery } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
+import { useMediaQuery } from "../../hooks/useMediaQuery.js";
 import {
   buildCart,
   calculateCartTotals,
@@ -89,6 +90,32 @@ function resolveFamilyImage(family) {
   }
 
   return null;
+}
+
+function rowsPerColumnFor(count) {
+  if (count <= 2) return 1;
+  if (count <= 8) return 2;
+  return 3;
+}
+
+function chunkIntoColumns(items, rowsPerColumn) {
+  const columns = [];
+  for (let i = 0; i < items.length; i += rowsPerColumn) {
+    columns.push(items.slice(i, i + rowsPerColumn));
+  }
+  return columns;
+}
+
+function lowestPackPrice(family) {
+  const prices = (family.items || [])
+    .map((item) => {
+      const tiers = item?.pricing?.tiers || [];
+      const first = tiers[0];
+      return first ? Number(first.pricePerPack ?? first.priceInclTax ?? first.priceExclTax ?? 0) : null;
+    })
+    .filter((price) => price !== null && Number.isFinite(price));
+
+  return prices.length ? Math.min(...prices) : null;
 }
 
 function QtyStepper({ value, onChange, selected = false }) {
@@ -214,6 +241,148 @@ function ProductFamilyCard({ family, quantities, cartBySku, onQtyChange, setLine
   );
 }
 
+function MobileProductFamilyCard({
+  family,
+  quantities,
+  cartBySku,
+  expanded,
+  onToggle,
+  onQtyChange,
+  setLineRef,
+}) {
+  const sortedItems = family.items.slice().sort((a, b) => Number(b?.pack?.size || 0) - Number(a?.pack?.size || 0));
+  const artwork = resolveFamilyImage(family);
+  const price = lowestPackPrice(family);
+  const isPriceless = price === null;
+  const familyLines = sortedItems
+    .map((product) => cartBySku[product.sku])
+    .filter(Boolean);
+  const familyQuantity = familyLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+  const selected = familyQuantity > 0;
+
+  return (
+    <div className={`draft-mobile-product ${expanded ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className={`dealer-m-catalog-card draft-mobile-catalog-card ${selected ? "selected" : ""} ${isPriceless ? "priceless" : ""}`}
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        <span className="dealer-m-catalog-card-image">
+          {artwork?.url ? (
+            <img src={artwork.url} alt="" loading="lazy" />
+          ) : (
+            <DashboardIcon name="package" size={28} strokeWidth={1.4} />
+          )}
+        </span>
+
+        <span className="dealer-m-catalog-card-body">
+          <span className="dealer-m-catalog-card-name">{family.name}</span>
+          <span className="dealer-m-catalog-card-category">{categoryLabel(family.category)}</span>
+          <span className={`dealer-m-catalog-card-price ${isPriceless ? "priceless" : ""}`}>
+            {isPriceless
+              ? "Pricing pending"
+              : `From ${money(price)} · ${sortedItems.length} size${sortedItems.length === 1 ? "" : "s"}`}
+          </span>
+        </span>
+
+        {selected ? (
+          <span className="dealer-m-catalog-card-chip" role="status" aria-label={`${familyQuantity} packs selected`}>
+            ×{familyQuantity}
+          </span>
+        ) : (
+          <span className="dealer-m-catalog-card-add" aria-hidden="true">
+            <DashboardIcon name="plus" size={16} strokeWidth={2.2} />
+          </span>
+        )}
+      </button>
+
+      {expanded ? (
+        <div className="draft-mobile-variant-panel">
+          {sortedItems.map((product) => (
+            <VariantRow
+              key={product.sku}
+              product={product}
+              quantity={quantities[product.sku] || ""}
+              cartLine={cartBySku[product.sku] || null}
+              onQtyChange={onQtyChange}
+              setLineRef={setLineRef}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileDraftCatalog({
+  activeCategory,
+  familyGroups,
+  families,
+  quantities,
+  cartBySku,
+  openFamilyCode,
+  onToggleFamily,
+  onQtyChange,
+  setLineRef,
+}) {
+  if (activeCategory === "ALL") {
+    return (
+      <div className="dealer-m-catalog-groups draft-mobile-groups">
+        {familyGroups.map((group) => {
+          const rowsPerColumn = rowsPerColumnFor(group.items.length);
+          const columns = chunkIntoColumns(group.items, rowsPerColumn);
+
+          return (
+            <div key={group.key || "uncategorized"} className="dealer-m-catalog-group draft-mobile-group">
+              <div className="dealer-m-catalog-group-header draft-mobile-group-header" aria-hidden="true">
+                <span className="dealer-m-catalog-group-label">{group.label}</span>
+                <DashboardIcon name="chevron" size={14} strokeWidth={2.4} className="dealer-m-catalog-group-chevron" />
+              </div>
+
+              <div className="dealer-m-catalog-scroll-row draft-mobile-scroll-row">
+                {columns.map((column, index) => (
+                  <div key={index} className="dealer-m-catalog-scroll-column">
+                    {column.map((family) => (
+                      <MobileProductFamilyCard
+                        key={family.code}
+                        family={family}
+                        quantities={quantities}
+                        cartBySku={cartBySku}
+                        expanded={openFamilyCode === family.code}
+                        onToggle={() => onToggleFamily(family.code)}
+                        onQtyChange={onQtyChange}
+                        setLineRef={setLineRef}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="dealer-m-catalog-list draft-mobile-list">
+      {families.map((family) => (
+        <MobileProductFamilyCard
+          key={family.code}
+          family={family}
+          quantities={quantities}
+          cartBySku={cartBySku}
+          expanded={openFamilyCode === family.code}
+          onToggle={() => onToggleFamily(family.code)}
+          onQtyChange={onQtyChange}
+          setLineRef={setLineRef}
+        />
+      ))}
+    </div>
+  );
+}
+
 function SelectedProductsList({ cart, onQtyChange, onLineSelect }) {
   if (cart.length === 0) {
     return (
@@ -316,6 +485,7 @@ export default function DraftOrderUtilityPage({
   subtitle = "Select product quantities to calculate a draft total. This utility does not submit an order.",
   enableOfficeExport = false,
 }) {
+  const isMobile = useMediaQuery("(max-width: 768px)");
   const productsQuery = useGetProductsQuery();
   const products = useMemo(
     () => (productsQuery.data || []).filter((item) => item?.isActive !== false),
@@ -332,6 +502,7 @@ export default function DraftOrderUtilityPage({
   const [category, setCategory] = useState("ALL");
   const [draftOpen, setDraftOpen] = useState(false);
   const [badgeBump, setBadgeBump] = useState(false);
+  const [mobileOpenFamilyCode, setMobileOpenFamilyCode] = useState(null);
   const previousQtyRef = useRef(0);
   const productLineRefs = useRef(new Map());
 
@@ -397,6 +568,10 @@ export default function DraftOrderUtilityPage({
 
   const currency = cart[0]?.currency || products[0]?.currency || "NPR";
 
+  useEffect(() => {
+    setMobileOpenFamilyCode(null);
+  }, [activeCategory, search]);
+
   function handleQtyChange(sku, nextValue) {
     setQuantities((prev) => {
       const next = { ...prev, [sku]: nextValue };
@@ -442,11 +617,15 @@ export default function DraftOrderUtilityPage({
     downloadDraftOrderPdf({ cart, totals, currency, roleLabel, search, category: activeCategory });
   }
 
+  function handleToggleMobileFamily(code) {
+    setMobileOpenFamilyCode((current) => (current === code ? null : code));
+  }
+
   return (
     <div
       className="draft-catalog-shell"
       style={{
-        marginRight: draftOpen ? 340 : 0,
+        marginRight: draftOpen && !isMobile ? 340 : 0,
         transition: "margin-right 300ms cubic-bezier(.23,1,.32,1)",
       }}
     >
@@ -476,6 +655,18 @@ export default function DraftOrderUtilityPage({
         <LoadingGrid />
       ) : familyGroups.length === 0 ? (
         <EmptyState icon="search" title="No products found" subtitle="Try clearing the search or selecting a broader category." />
+      ) : isMobile ? (
+        <MobileDraftCatalog
+          activeCategory={activeCategory}
+          familyGroups={familyGroups}
+          families={families}
+          quantities={quantities}
+          cartBySku={cartBySku}
+          openFamilyCode={mobileOpenFamilyCode}
+          onToggleFamily={handleToggleMobileFamily}
+          onQtyChange={handleQtyChange}
+          setLineRef={setProductLineRef}
+        />
       ) : (
         <div style={{ marginTop: 24, display: "grid", gap: 40 }}>
           {familyGroups.map((group) => (
@@ -932,6 +1123,38 @@ export default function DraftOrderUtilityPage({
           background:rgba(15,23,42,.16);
         }
 
+        .draft-mobile-groups,
+        .draft-mobile-list{
+          margin-top:18px;
+        }
+
+        .draft-mobile-group-header{
+          pointer-events:none;
+        }
+
+        .draft-mobile-product{
+          display:grid;
+          gap:8px;
+        }
+
+        .draft-mobile-catalog-card{
+          box-shadow:none;
+        }
+
+        .draft-mobile-catalog-card[aria-expanded="true"]{
+          border-color:rgba(0,113,227,.34);
+          background:rgba(0,113,227,.045);
+        }
+
+        .draft-mobile-variant-panel{
+          display:grid;
+          gap:6px;
+          padding:8px;
+          border-radius:18px;
+          background:var(--color-snow, #fff);
+          border:1px solid rgba(29,29,31,.08);
+        }
+
         @keyframes draftLineFocus{
           0%{
             box-shadow:0 0 0 0 rgba(0,113,227,.28);
@@ -959,6 +1182,26 @@ export default function DraftOrderUtilityPage({
             bottom:calc(64px + env(safe-area-inset-bottom, 0px) + 72px);
             right:16px;
             transform-origin:bottom right;
+          }
+          .draft-catalog-shell{
+            margin-right:0!important;
+          }
+          .draft-mobile-groups{
+            padding-bottom:96px;
+          }
+          .draft-mobile-list{
+            padding-bottom:96px;
+          }
+          .draft-mobile-variant-panel .draft-variant-row{
+            grid-template-columns:22px minmax(0,1fr) auto;
+            padding:8px;
+            border-radius:14px;
+          }
+          .draft-mobile-variant-panel .draft-variant-pack{
+            font-size:12px;
+          }
+          .draft-mobile-variant-panel .draft-variant-price{
+            max-width:126px;
           }
         }
 

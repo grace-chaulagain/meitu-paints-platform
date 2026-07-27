@@ -9,6 +9,7 @@ import {
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
 import {
   AdminOrderCardStyles,
+  AdminOrderTabs,
   AdminOrderTimelineRow,
 } from "../orders/AdminOrdersPage.jsx";
 import { groupOrdersByDay } from "../orders/orderFormatting.js";
@@ -21,40 +22,40 @@ import {
   Pill,
   SearchField,
   SectionHeader,
-  SegmentedControl,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
 
-// Mirrors AdminOrdersPage.jsx's own status tabs (ALL is a real, distinct
-// server-side scope there - "no status/archive param at all" quietly
-// defaults to SUBMITTED-only, see listOrdersForActor in order.service.js -
-// so this list must pass status:"ALL" explicitly or a dealer's own "full
-// order history" would silently only ever show their still-pending orders).
-const STATUS_FILTERS = [
+const VIEW_FILTERS = [
+  { key: "PENDING", label: "Pending" },
+  { key: "ARCHIVE", label: "Archive" },
   { key: "ALL", label: "All" },
-  { key: "SUBMITTED", label: "Pending" },
-  { key: "VERIFIED", label: "Verified" },
-  { key: "DISPATCHED", label: "Dispatched" },
-  { key: "COMPLETED", label: "Completed" },
-  { key: "REJECTED", label: "Rejected" },
-  { key: "CANCELLED", label: "Cancelled" },
 ];
 
-const LIST_DEFAULTS = { search: "", status: "ALL" };
+const LIST_DEFAULTS = { search: "", view: "PENDING" };
+
+function normalizeView(value) {
+  const normalized = String(value || "").toUpperCase();
+  if (VIEW_FILTERS.some((option) => option.key === normalized)) return normalized;
+  if (normalized === "SUBMITTED") return "PENDING";
+  if (["VERIFIED", "DISPATCHED", "COMPLETED", "REJECTED", "CANCELLED"].includes(normalized)) {
+    return "ARCHIVE";
+  }
+  return "";
+}
 
 function parseListState(search) {
   const params = new URLSearchParams(search || "");
-  const status = params.get("status") || LIST_DEFAULTS.status;
+  const view = normalizeView(params.get("view")) || normalizeView(params.get("status")) || LIST_DEFAULTS.view;
   return {
     search: params.get("q") || LIST_DEFAULTS.search,
-    status: STATUS_FILTERS.some((option) => option.key === status) ? status : LIST_DEFAULTS.status,
+    view,
   };
 }
 
 function buildListSearch(state) {
   const params = new URLSearchParams();
   if (state.search) params.set("q", state.search);
-  if (state.status && state.status !== LIST_DEFAULTS.status) params.set("status", state.status);
+  if (state.view && state.view !== LIST_DEFAULTS.view) params.set("view", state.view);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -100,7 +101,7 @@ export default function AdminDealerOrdersPage() {
   }, [location.pathname]);
 
   const listState = useMemo(() => parseListState(location.search), [location.search]);
-  const { search, status } = listState;
+  const { search, view } = listState;
 
   const updateListState = useCallback(
     (patch) => {
@@ -114,7 +115,7 @@ export default function AdminDealerOrdersPage() {
   );
 
   const setSearch = useCallback((value) => updateListState({ search: value }), [updateListState]);
-  const setStatus = useCallback((value) => updateListState({ status: value }), [updateListState]);
+  const setView = useCallback((value) => updateListState({ view: value }), [updateListState]);
 
   const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
   // No status param at all - admin.service.js's listOrders (the backend for
@@ -183,20 +184,21 @@ export default function AdminDealerOrdersPage() {
   }, [allDealerOrders, search]);
 
   const filteredOrders = useMemo(() => {
-    if (status === "ALL") return searchedOrders;
-    return searchedOrders.filter((order) => String(order.status || "").toUpperCase() === status);
-  }, [searchedOrders, status]);
-
-  const countsByStatus = useMemo(() => {
-    const counts = { ALL: allDealerOrders.length };
-    for (const option of STATUS_FILTERS) {
-      if (option.key === "ALL") continue;
-      counts[option.key] = allDealerOrders.filter(
-        (order) => String(order.status || "").toUpperCase() === option.key,
-      ).length;
+    if (view === "ALL") return searchedOrders;
+    if (view === "ARCHIVE") {
+      return searchedOrders.filter((order) => String(order.status || "").toUpperCase() !== "SUBMITTED");
     }
-    return counts;
-  }, [allDealerOrders]);
+    return searchedOrders.filter((order) => String(order.status || "").toUpperCase() === "SUBMITTED");
+  }, [searchedOrders, view]);
+
+  const countsByView = useMemo(
+    () => ({
+      PENDING: view === "PENDING" ? filteredOrders.length : undefined,
+      ARCHIVE: view === "ARCHIVE" ? filteredOrders.length : undefined,
+      ALL: view === "ALL" ? filteredOrders.length : undefined,
+    }),
+    [filteredOrders.length, view],
+  );
 
   const dayGroups = useMemo(() => groupOrdersByDay(filteredOrders), [filteredOrders]);
 
@@ -235,10 +237,10 @@ export default function AdminDealerOrdersPage() {
           <div style={{ maxWidth: 320, flex: "1 1 240px" }}>
             <SearchField value={search} onChange={setSearch} placeholder="Search order number, payment, notes…" />
           </div>
-          <SegmentedControl
-            options={STATUS_FILTERS.map((option) => ({ ...option, count: countsByStatus[option.key] }))}
-            value={status}
-            onChange={setStatus}
+          <AdminOrderTabs
+            options={VIEW_FILTERS.map((option) => ({ ...option, count: countsByView[option.key] }))}
+            value={view}
+            onChange={setView}
           />
         </div>
 
@@ -261,7 +263,7 @@ export default function AdminDealerOrdersPage() {
             subtitle={dealer?.companyName ? `No matching order records were found for ${dealer.companyName}.` : "No matching order records were found for this dealer."}
           />
           <div style={{ marginTop: 4 }}>
-            <GhostButton onClick={() => updateListState({ search: "", status: "ALL" })}>Clear filters</GhostButton>
+            <GhostButton onClick={() => updateListState({ search: "", view: LIST_DEFAULTS.view })}>Clear filters</GhostButton>
           </div>
         </Surface>
       ) : (

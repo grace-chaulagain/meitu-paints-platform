@@ -5,7 +5,6 @@ import {
   useDeleteAdminDealerMutation,
   useGetAdminDealerAnalyticsQuery,
   useGetAdminDealerQuery,
-  useGetAdminOrdersQuery,
   useGetAdminSalesQuery,
   useGetAdminScopedOrdersQuery,
   useGetVerifiedDispatchersQuery,
@@ -954,14 +953,11 @@ export default function AdminDealerProfilePage() {
   const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
   const analyticsQuery = useGetAdminDealerAnalyticsQuery(dealerId, { skip: !dealerId });
-  const ordersQuery = useGetAdminOrdersQuery({ dealerId, limit: 8 }, { skip: !dealerId });
+  const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId, limit: 5 }, { skip: !dealerId });
   const isHistoryTab = activeTab === "history";
-  // The underlying "/api/orders" (and "/api/admin/orders") listing defaults
-  // to SUBMITTED-only unless `archive: true` is passed, and it never
-  // scopes by dealerId server-side - so the full per-dealer order history
-  // needs both branches fetched and then filtered/deduped client-side
-  // (same defensive dealerId filter already used on the dedicated Order
-  // History page for this dealer).
+  // Keep the full per-dealer history defensively scoped and deduped
+  // client-side too. Some older order records only have dealer identity in
+  // dealerSnapshot, while newer populated records expose dealerId directly.
   const historySubmittedOrdersQuery = useGetAdminScopedOrdersQuery({ dealerId, limit: 100 }, { skip: !dealerId || !isHistoryTab });
   const historyArchivedOrdersQuery = useGetAdminScopedOrdersQuery({ dealerId, archive: true, limit: 100 }, { skip: !dealerId || !isHistoryTab });
   const historySalesQuery = useGetAdminSalesQuery({ dealerId, limit: 200 }, { skip: !dealerId || !isHistoryTab });
@@ -975,7 +971,17 @@ export default function AdminDealerProfilePage() {
   const dealer = dealerQuery.data?.item || null;
   const dispatchers = dispatchersQuery.data?.items || [];
   const analytics = analyticsQuery.data || null;
-  const recentOrders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
+  const recentOrders = useMemo(() => {
+    const scoped = (ordersQuery.data?.items || []).filter((order) => {
+      const directDealerId = String(order?.dealerId?._id || order?.dealerId || "");
+      const snapshotDealerId = String(order?.dealerSnapshot?._id || "");
+      return directDealerId === dealerId || snapshotDealerId === dealerId;
+    });
+
+    return scoped
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 5);
+  }, [ordersQuery.data, dealerId]);
   const loading = !dealer && (dealerQuery.isLoading || dispatchersQuery.isLoading || analyticsQuery.isLoading);
   const loadError = dealerQuery.error?.message || dispatchersQuery.error?.message || analyticsQuery.error?.message || "";
 
@@ -1324,11 +1330,6 @@ export default function AdminDealerProfilePage() {
             icon="orders"
             title="Orders"
             subtitle="Most recent orders from this dealer."
-            action={
-              <GhostButton onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}/orders`)}>
-                Full Order History
-              </GhostButton>
-            }
           />
           <div style={{ marginTop: 12 }}>
             {ordersQuery.isLoading ? (
@@ -1336,7 +1337,17 @@ export default function AdminDealerProfilePage() {
             ) : recentOrders.length === 0 ? (
               <EmptyState icon="orders" title="No orders yet" subtitle="Orders placed by this dealer will show up here." />
             ) : (
-              recentOrders.map((order) => <OrderActivityRow key={order._id} order={order} onOpen={openOrder} />)
+              <>
+                {recentOrders.map((order) => <OrderActivityRow key={order._id} order={order} onOpen={openOrder} />)}
+                <button
+                  type="button"
+                  className="dealer-profile-history-link"
+                  onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}/orders`)}
+                >
+                  <span>Full Order History</span>
+                  <DashboardIcon name="chevron" size={13} strokeWidth={2.1} aria-hidden="true" />
+                </button>
+              </>
             )}
           </div>
         </Surface>
@@ -1546,6 +1557,43 @@ export default function AdminDealerProfilePage() {
           font-size:13.5px;
           font-weight:700;
           color:var(--color-ink,#1d1d1f);
+        }
+        .dealer-profile-history-link{
+          margin:14px 0 0 auto;
+          padding:2px 0;
+          border:0;
+          background:transparent;
+          color:var(--color-azure,#0071e3);
+          display:inline-flex;
+          align-items:center;
+          gap:5px;
+          font-size:13.5px;
+          line-height:1.35;
+          font-weight:600;
+          letter-spacing:-.01em;
+          cursor:pointer;
+        }
+        .dealer-profile-history-link span{
+          background-image:linear-gradient(currentColor,currentColor);
+          background-position:0 100%;
+          background-size:0 1px;
+          background-repeat:no-repeat;
+          transition:background-size .18s ease;
+        }
+        .dealer-profile-history-link svg{
+          transform:translateX(0);
+          transition:transform .18s ease;
+        }
+        .dealer-profile-history-link:hover span,
+        .dealer-profile-history-link:focus-visible span{
+          background-size:100% 1px;
+        }
+        .dealer-profile-history-link:hover svg,
+        .dealer-profile-history-link:focus-visible svg{
+          transform:translateX(2px);
+        }
+        .dealer-profile-history-link:active{
+          opacity:.72;
         }
         .dealer-profile-more-wrap{
           position:relative;

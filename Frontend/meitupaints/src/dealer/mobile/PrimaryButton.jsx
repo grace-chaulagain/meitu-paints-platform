@@ -1,4 +1,8 @@
 import { AppleSpinner } from "./AppleSpinner.jsx";
+import {
+  getReadOnlyButtonState,
+  useReadOnlyAdminMode,
+} from "../../components/dashboard/readOnlyAdminMode.jsx";
 
 // The one azure button per mobile screen (spec §5/§8: "exactly one azure
 // element visible per screen" - V2 amends this to "one azure CTA + the
@@ -17,12 +21,23 @@ export function PrimaryButton({
   variant = "primary",
   style = {},
 }) {
+  const readOnly = useReadOnlyAdminMode();
+  const readOnlyState = getReadOnlyButtonState({
+    readOnly,
+    disabled,
+    loading,
+    children,
+    danger: variant === "danger",
+  });
+
   return (
     <button
       type={type}
-      className={`dealer-m-primary-btn ${variant === "secondary" ? "dealer-m-primary-btn-secondary" : ""} ${variant === "danger" ? "dealer-m-primary-btn-danger" : ""}`}
+      className={`dealer-m-primary-btn ${variant === "secondary" ? "dealer-m-primary-btn-secondary" : ""} ${variant === "danger" ? "dealer-m-primary-btn-danger" : ""} ${readOnlyState.locked ? "admin-readonly-action-locked" : ""}`}
       onClick={onClick}
-      disabled={disabled || loading}
+      disabled={readOnlyState.disabled}
+      data-readonly-write-action={readOnlyState.locked ? "true" : undefined}
+      title={readOnlyState.title || undefined}
       style={style}
     >
       <span className="dealer-m-primary-btn-content" style={{ opacity: loading ? 0 : 1 }}>

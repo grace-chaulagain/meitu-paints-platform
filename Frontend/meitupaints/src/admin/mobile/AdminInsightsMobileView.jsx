@@ -43,10 +43,11 @@ const PERIODS = [
 ];
 
 const STATUSES = [
-  { key: "APPROVED", label: "Approved" },
-  { key: "SUBMITTED", label: "Submitted" },
-  { key: "REJECTED", label: "Rejected" },
   { key: "ALL", label: "All" },
+  { key: "ACCEPTED", label: "Accepted" },
+  { key: "SUBMITTED", label: "Pending" },
+  { key: "COMPLETED", label: "Completed" },
+  { key: "REJECTED", label: "Rejected" },
 ];
 
 function KpiCard({ icon, label, value, helper, tone }) {
@@ -120,8 +121,8 @@ function HomeSection({ data, currency }) {
     <>
       <KpiRow
         tiles={[
-          { icon: "invoice", label: "Approved Revenue", value: money(kpis.approvedRevenue, currency), tone: "accent" },
-          { icon: "orders", label: "Approved Orders", value: number(kpis.approvedOrders) },
+          { icon: "invoice", label: "Accepted Revenue", value: money(kpis.approvedRevenue, currency), tone: "accent" },
+          { icon: "orders", label: "Accepted Orders", value: number(kpis.approvedOrders) },
           { icon: "chart", label: "Avg Order Value", value: money(kpis.averageOrderValue, currency) },
           { icon: "trend", label: "Revenue Growth", value: percent(kpis.revenueGrowth) },
         ]}
@@ -153,9 +154,9 @@ function OrdersSection({ data, currency }) {
       <KpiRow
         tiles={[
           { icon: "orders", label: "Total Orders", value: number(summary.totalOrders) },
-          { icon: "checkmark", label: "Approved", value: number(summary.approvedOrders), tone: "accent" },
-          { icon: "invoice", label: "Approved Revenue", value: money(summary.totalApprovedRevenue, currency), tone: "accent" },
-          { icon: "chart", label: "Approval Rate", value: percent(summary.approvalRate) },
+          { icon: "checkmark", label: "Accepted", value: number(summary.approvedOrders), tone: "accent" },
+          { icon: "invoice", label: "Accepted Revenue", value: money(summary.totalApprovedRevenue, currency), tone: "accent" },
+          { icon: "chart", label: "Acceptance Rate", value: percent(summary.acceptanceRate ?? summary.approvalRate) },
         ]}
       />
       <ChartCard title="Revenue over time">
@@ -165,7 +166,7 @@ function OrdersSection({ data, currency }) {
         <RankedBarList items={data.orders?.distribution?.valueBuckets || []} labelKey="label" valueKey="revenue" formatValue={(v) => money(v, currency)} />
       </ChartCard>
       <TopRowsCard
-        title="Largest Approved Orders"
+        title="Largest Accepted Orders"
         rows={data.orders?.rankings?.largestOrders || []}
         primary={{ label: (row) => row.dealerName || row.orderNumber, value: (row) => money(row.total, currency) }}
         secondary={(row) => `${row.orderNumber} · ${formatDate(row.createdAt)}`}
@@ -199,7 +200,7 @@ function DealersSection({ data, currency }) {
           signals={[
             {
               title: "Top 5 contribution",
-              body: `${percent(dealers.signals?.topFiveRevenueShare)} of approved revenue is concentrated in the top five dealers.`,
+              body: `${percent(dealers.signals?.topFiveRevenueShare)} of accepted revenue is concentrated in the top five dealers.`,
               tone: Number(dealers.signals?.topFiveRevenueShare || 0) > 60 ? "watch" : "positive",
             },
             {
@@ -282,7 +283,7 @@ function DispatchersSection({ data, currency }) {
         title="Dispatcher Performance"
         rows={data.dispatchers?.rows || []}
         primary={{ label: (row) => row.dispatcherName, value: (row) => money(row.approvedRevenue, currency) }}
-        secondary={(row) => `${number(row.assignedDealerCount)} dealers · ${percent(row.approvalRate)} approval`}
+        secondary={(row) => `${number(row.assignedDealerCount)} dealers · ${percent(row.approvalRate)} acceptance`}
       />
     </>
   );
@@ -310,7 +311,7 @@ function RoutingSection({ data, currency }) {
           formatValue={(v) => money(v, currency)}
         />
       </ChartCard>
-      <ChartCard title="Approval Rate by Route">
+      <ChartCard title="Acceptance Rate by Route">
         <RankedBarList
           items={[
             { label: "Factory", value: summary.factoryApprovalRate || 0 },
@@ -345,7 +346,7 @@ const SECTION_RENDERERS = {
 export function AdminInsightsMobileView() {
   const [section, setSection] = useState("home");
   const [period, setPeriod] = useState("30d");
-  const [status, setStatus] = useState("APPROVED");
+  const [status, setStatus] = useState("ALL");
 
   const range = useMemo(() => rangeForPreset(period), [period]);
   const queryParams = useMemo(() => {

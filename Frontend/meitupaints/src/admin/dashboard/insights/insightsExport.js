@@ -40,7 +40,7 @@ export function buildReportRows(section, data, currency) {
       Dealers: row.assignedDealerCount,
       Revenue: money(row.approvedRevenue, currency),
       Orders: row.routedOrders,
-      Approval: percent(row.approvalRate),
+      Acceptance: percent(row.approvalRate),
     }));
   }
   if (section === "routing") {
@@ -53,8 +53,8 @@ export function buildReportRows(section, data, currency) {
     }));
   }
   return [
-    { Metric: "Approved revenue", Value: money(data.home?.kpis?.approvedRevenue, currency) },
-    { Metric: "Approved orders", Value: number(data.home?.kpis?.approvedOrders) },
+    { Metric: "Accepted revenue", Value: money(data.home?.kpis?.approvedRevenue, currency) },
+    { Metric: "Accepted orders", Value: number(data.home?.kpis?.approvedOrders) },
     { Metric: "Average order value", Value: money(data.home?.kpis?.averageOrderValue, currency) },
     { Metric: "Active dealers", Value: number(data.home?.kpis?.activeDealers) },
     { Metric: "Revenue growth", Value: percent(data.home?.kpis?.revenueGrowth) },
@@ -75,14 +75,14 @@ export function buildComparisonRows(key, data, currency) {
         Revenue: money(summary.factoryApprovedRevenue, currency),
         Orders: number(summary.factoryOrderCount),
         AOV: money(summary.factoryAverageOrderValue, currency),
-        Approval: percent(summary.factoryApprovalRate),
+        Acceptance: percent(summary.factoryApprovalRate),
       },
       {
         Route: "Dispatcher",
         Revenue: money(summary.dispatcherApprovedRevenue, currency),
         Orders: number(summary.dispatcherOrderCount),
         AOV: money(summary.dispatcherAverageOrderValue, currency),
-        Approval: percent(summary.dispatcherApprovalRate),
+        Acceptance: percent(summary.dispatcherApprovalRate),
       },
     ];
   }
@@ -92,9 +92,9 @@ export function buildComparisonRows(key, data, currency) {
   const current = Number(kpis.approvedRevenue || 0);
   const previous = growthRate <= -100 ? 0 : current / (1 + growthRate / 100);
   return [
-    { Period: "Current", "Approved Revenue": money(current, currency) },
-    { Period: "Previous (estimated)", "Approved Revenue": money(previous, currency) },
-    { Period: "Growth", "Approved Revenue": percent(growthRate) },
+    { Period: "Current", "Accepted Revenue": money(current, currency) },
+    { Period: "Previous (estimated)", "Accepted Revenue": money(previous, currency) },
+    { Period: "Growth", "Accepted Revenue": percent(growthRate) },
   ];
 }
 
@@ -145,7 +145,7 @@ export function downloadInsightsPdf({ data, section, currency }) {
   write(`Section: ${section.label}`, margin, y, { size: 11, color: [112, 112, 112] });
   y += 16;
   write(
-    `Filters: ${data.reports?.filterSummary?.period || "Selected period"} | ${data.reports?.filterSummary?.routing || "ALL"} | ${data.reports?.filterSummary?.status || "APPROVED"}`,
+    `Filters: ${data.reports?.filterSummary?.period || "Selected period"} | ${data.reports?.filterSummary?.routing || "ALL"} | ${data.reports?.filterSummary?.status || "All statuses"}`,
     margin,
     y,
     { size: 10, color: [112, 112, 112] },
@@ -159,8 +159,8 @@ export function downloadInsightsPdf({ data, section, currency }) {
   if (section.key === "home") {
     const kpis = data.home?.kpis || {};
     [
-      ["Approved revenue", money(kpis.approvedRevenue, currency)],
-      ["Approved orders", number(kpis.approvedOrders)],
+      ["Accepted revenue", money(kpis.approvedRevenue, currency)],
+      ["Accepted orders", number(kpis.approvedOrders)],
       ["Average order value", money(kpis.averageOrderValue, currency)],
       ["Active dealers", number(kpis.activeDealers)],
       ["Revenue growth", percent(kpis.revenueGrowth)],

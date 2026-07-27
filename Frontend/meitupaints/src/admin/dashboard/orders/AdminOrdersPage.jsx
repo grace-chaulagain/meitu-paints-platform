@@ -564,7 +564,7 @@ function buildPageList(current, total) {
   return result;
 }
 
-function AdminOrderTabs({ options, value, onChange }) {
+export function AdminOrderTabs({ options, value, onChange }) {
   return (
     <div className="admin-order-tabs" role="tablist">
       {options.map((option) => {
@@ -869,11 +869,28 @@ export function AdminOrderCardStyles() {
       .admin-order-card > .orderflow-rail{ margin-top:10px; }
       .admin-order-thumb{ width:28px; height:28px; border-radius:7px; overflow:hidden; background:var(--color-fog, #f5f5f7); display:grid; place-items:center; flex-shrink:0; border:1px solid rgba(29,29,31,.04); }
       .admin-order-thumb-more{ font-size:10px; font-weight:700; color:var(--color-graphite, #707070); }
+      .admin-order-tabs{ display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid rgba(29,29,31,.1); overflow-x:auto; scrollbar-width:none; }
+      .admin-order-tabs::-webkit-scrollbar{ display:none; }
+      .admin-order-tab{ min-width:max-content; display:flex; align-items:center; gap:10px; padding:12px 18px 15px; border:none; background:transparent; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px; white-space:nowrap; border-radius:14px 14px 0 0; }
+      .admin-order-tab:not(.is-active):hover{ background:rgba(29,29,31,.045); }
+      .admin-order-tab:not(.is-active):active{ background:rgba(29,29,31,.075); transform:translateY(1px) scale(.985); }
+      .admin-order-tab span:first-child{ font-size:13.5px; font-weight:650; color:var(--color-graphite, #707070); }
+      .admin-order-tab-count{ display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:22px; padding:0 8px; border-radius:999px; font-size:11px; font-weight:750; background:rgba(29,29,31,.06); color:var(--color-graphite, #707070); }
+      .admin-order-tab.is-active{ --tab-accent:var(--color-azure, #0071e3); border-bottom-color:var(--tab-accent); }
+      .admin-order-tab.is-active:hover{ background:color-mix(in srgb, var(--tab-accent) 7%, transparent); }
+      .admin-order-tab.is-active:active{ background:color-mix(in srgb, var(--tab-accent) 10%, transparent); transform:translateY(1px) scale(.985); }
+      .admin-order-tab[data-status="ARCHIVE"].is-active{ --tab-accent:#707070; }
+      .admin-order-tab[data-status="ALL"].is-active{ --tab-accent:var(--color-ink, #1d1d1f); }
+      .admin-order-tab.is-active span:first-child{ color:var(--tab-accent); font-weight:700; }
+      .admin-order-tab.is-active .admin-order-tab-count{ background:color-mix(in srgb, var(--tab-accent) 12%, transparent); color:var(--tab-accent); }
       @media (prefers-reduced-motion: reduce){
-        .admin-order-card{ transition:none!important; }
-        .admin-order-card:hover{ transform:none!important; }
+        .admin-order-card,
+        .admin-order-tab{ transition:none!important; }
+        .admin-order-card:hover,
+        .admin-order-tab:active{ transform:none!important; }
       }
       @media (max-width:760px){
+        .admin-order-tab{ padding-left:10px; padding-right:10px; }
         .admin-order-card{ padding:12px 14px; }
         .admin-order-card-top{ align-items:flex-start; }
       }

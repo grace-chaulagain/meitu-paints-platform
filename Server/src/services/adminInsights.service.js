@@ -6,7 +6,27 @@ import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Order from "../models/Order.model.js";
 
 const DAY_MS = 86400000;
-const APPROVED_STATUS = "VERIFIED";
+const ACCEPTED_ORDER_STATUSES = ["VERIFIED", "DISPATCHED", "COMPLETED"];
+const FULFILLED_ORDER_STATUSES = ["DISPATCHED", "COMPLETED"];
+const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT"];
+
+function isAcceptedOrder(order) {
+  return ACCEPTED_ORDER_STATUSES.includes(normalizeUpper(order?.status));
+}
+
+function statusFilterLabel(status) {
+  const normalized = normalizeUpper(status);
+  if (normalized === "ACCEPTED" || normalized === "APPROVED") return "Accepted lifecycle";
+  if (normalized === "FULFILLED") return "Fulfilled";
+  if (normalized === "SUBMITTED") return "Submitted";
+  if (normalized === "VERIFIED") return "Verified";
+  if (normalized === "DISPATCHED") return "Dispatched";
+  if (normalized === "COMPLETED") return "Completed";
+  if (normalized === "REJECTED") return "Rejected";
+  if (normalized === "CANCELLED") return "Cancelled";
+  if (normalized === "ARCHIVED") return "Archived";
+  return "All statuses";
+}
 
 function normalize(value = "") {
   return String(value || "").trim();
@@ -83,6 +103,9 @@ function resolveDateRange(filters = {}) {
 }
 
 function getOrderTotal(order) {
+  if (order && order.__insightTotal !== undefined) {
+    return numberValue(order.__insightTotal);
+  }
   return numberValue(order?.totals?.total);
 }
 
@@ -111,20 +134,38 @@ function getDispatcherName(dispatcher, fallback = "Unassigned dispatcher") {
 
 function getDealerForOrder(order, dealerMap) {
   const dealerId = idOf(order?.dealerId);
-  return dealerMap.get(dealerId) || order?.dealerId || {
+  const populatedDealer =
+    order?.dealerId && typeof order.dealerId === "object" && order.dealerId.companyName
+      ? order.dealerId
+      : null;
+
+  return dealerMap.get(dealerId) || populatedDealer || {
     _id: dealerId,
     companyName: order?.dealerSnapshot?.companyName || "Unknown dealer",
     contactName: order?.dealerSnapshot?.contactName || "",
+    email: order?.dealerSnapshot?.email || "",
+    phone: order?.dealerSnapshot?.phone || "",
     fulfillmentMode: order?.dealerSnapshot?.fulfillmentMode || getRoute(order),
   };
 }
 
 function getDispatcherForOrder(order, dispatcherMap) {
   const dispatcherId = idOf(order?.dispatcherId);
-  return dispatcherMap.get(dispatcherId) || order?.dispatcherId || {
+  const populatedDispatcher =
+    order?.dispatcherId && typeof order.dispatcherId === "object" && (
+      order.dispatcherId.companyName ||
+      order.dispatcherId.name ||
+      order.dispatcherId.email
+    )
+      ? order.dispatcherId
+      : null;
+
+  return dispatcherMap.get(dispatcherId) || populatedDispatcher || {
     _id: dispatcherId,
     companyName: order?.dispatcherSnapshot?.companyName || "",
     name: order?.dispatcherSnapshot?.name || "Unassigned dispatcher",
+    email: order?.dispatcherSnapshot?.email || "",
+    phone: order?.dispatcherSnapshot?.phone || "",
   };
 }
 
@@ -138,6 +179,29 @@ function itemName(item) {
 
 function itemCategory(item) {
   return normalize(item?.category || "Uncategorized") || "Uncategorized";
+}
+
+function categoryFilterValue(filters = {}) {
+  const category = normalize(filters.category);
+  return category && normalizeUpper(category) !== "ALL" ? category : "";
+}
+
+function scopeOrderToCategory(order, category) {
+  if (!category) return order;
+  const items = (order.items || []).filter((item) => itemCategory(item) === category);
+  if (!items.length) return null;
+  return {
+    ...order,
+    items,
+    __insightTotal: items.reduce((sum, item) => sum + numberValue(item.lineTotal), 0),
+  };
+}
+
+function scopeOrdersToCategory(orders = [], category = "") {
+  if (!category) return orders;
+  return orders
+    .map((order) => scopeOrderToCategory(order, category))
+    .filter(Boolean);
 }
 
 function paymentMethod(order) {
@@ -253,6 +317,7 @@ function pushSignal(signals, title, body, tone = "neutral") {
 function buildOrderQuery({ filters, range, dealerScopeIds }) {
   const q = {
     isDeleted: { $ne: true },
+    orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
   };
 
   if (!range?.isAllTime) {
@@ -260,9 +325,14 @@ function buildOrderQuery({ filters, range, dealerScopeIds }) {
   }
 
   const status = normalizeUpper(filters.status);
-  if (status === "APPROVED" || status === "VERIFIED") q.status = APPROVED_STATUS;
+  if (status === "ACCEPTED" || status === "APPROVED") q.status = { $in: ACCEPTED_ORDER_STATUSES };
+  else if (status === "FULFILLED") q.status = { $in: FULFILLED_ORDER_STATUSES };
   else if (status === "SUBMITTED") q.status = "SUBMITTED";
+  else if (status === "VERIFIED") q.status = "VERIFIED";
+  else if (status === "DISPATCHED") q.status = "DISPATCHED";
+  else if (status === "COMPLETED") q.status = "COMPLETED";
   else if (status === "REJECTED") q.status = "REJECTED";
+  else if (status === "CANCELLED") q.status = "CANCELLED";
   else if (status === "ARCHIVED") q.archivedAt = { $ne: null };
 
   const routing = normalizeUpper(filters.routing);
@@ -279,8 +349,8 @@ function buildOrderQuery({ filters, range, dealerScopeIds }) {
   if (dealerObjectId) q.dealerId = dealerObjectId;
   else if (Array.isArray(dealerScopeIds)) q.dealerId = { $in: dealerScopeIds };
 
-  const category = normalize(filters.category);
-  if (category && normalizeUpper(category) !== "ALL") q["items.category"] = category;
+  const category = categoryFilterValue(filters);
+  if (category) q["items.category"] = category;
 
   return q;
 }
@@ -304,7 +374,7 @@ function buildTrend(orders, range) {
     };
 
     entry.orders += 1;
-    if (order.status === APPROVED_STATUS) {
+    if (isAcceptedOrder(order)) {
       entry.approvedOrders += 1;
       entry.revenue += getOrderTotal(order);
       if (getRoute(order) === "FACTORY") {
@@ -378,7 +448,7 @@ function buildDistribution(approvedOrders) {
 
 function summarizeDealers({ dealers, orders, previousOrders, dealerActivityMap }) {
   const previousByDealer = new Map();
-  for (const order of previousOrders.filter((item) => item.status === APPROVED_STATUS)) {
+  for (const order of previousOrders.filter(isAcceptedOrder)) {
     const dealerId = idOf(order.dealerId);
     previousByDealer.set(dealerId, (previousByDealer.get(dealerId) || 0) + getOrderTotal(order));
   }
@@ -435,7 +505,7 @@ function summarizeDealers({ dealers, orders, previousOrders, dealerActivityMap }
 
     if (order.status === "SUBMITTED") entry.submittedOrders += 1;
     if (order.status === "REJECTED") entry.rejectedOrders += 1;
-    if (order.status === APPROVED_STATUS) {
+    if (isAcceptedOrder(order)) {
       const total = getOrderTotal(order);
       entry.approvedSales += total;
       entry.approvedOrders += 1;
@@ -492,7 +562,7 @@ function summarizeDealers({ dealers, orders, previousOrders, dealerActivityMap }
     { label: "500K-1M", count: rows.filter((row) => row.approvedSales >= 500000 && row.approvedSales < 1000000).length },
     { label: "150K-500K", count: rows.filter((row) => row.approvedSales >= 150000 && row.approvedSales < 500000).length },
     { label: "<150K", count: rows.filter((row) => row.approvedSales > 0 && row.approvedSales < 150000).length },
-    { label: "No approved sales", count: rows.filter((row) => !row.approvedSales).length },
+    { label: "No accepted sales", count: rows.filter((row) => !row.approvedSales).length },
   ];
 
   const active = rows.filter((row) => row.activityState === "ACTIVE").length;
@@ -706,7 +776,7 @@ function summarizeDispatchers({ dispatchers, dealers, orders }) {
     entry.allRoutedOrders += 1;
     if (order.status === "SUBMITTED") entry.submittedOrders += 1;
     if (order.status === "REJECTED") entry.rejectedOrders += 1;
-    if (order.status === APPROVED_STATUS) {
+    if (isAcceptedOrder(order)) {
       const total = getOrderTotal(order);
       const dealerName = order?.dealerSnapshot?.companyName || getDealerName(order.dealerId);
       entry.approvedRevenue += total;
@@ -843,7 +913,11 @@ export async function getAdminInsights(filters = {}) {
       })
       .lean(),
     Dispatcher.find({}).sort({ createdAt: -1 }).lean(),
-    Order.find({ isDeleted: { $ne: true }, status: APPROVED_STATUS })
+    Order.find({
+      isDeleted: { $ne: true },
+      orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+      status: { $in: ACCEPTED_ORDER_STATUSES },
+    })
       .select("dealerId createdAt")
       .lean(),
   ]);
@@ -884,35 +958,25 @@ export async function getAdminInsights(filters = {}) {
         createdAt: { $gte: range.previousStart, $lte: range.previousEnd },
       };
 
-  const [orders, previousOrders] = await Promise.all([
+  const [rawOrders, rawPreviousOrders] = await Promise.all([
     Order.find(currentQuery)
       .sort({ createdAt: -1 })
-      .populate({
-        path: "dealerId",
-        select: "companyName contactName email phone status fulfillmentMode dispatcherId createdAt",
-        populate: {
-          path: "dispatcherId",
-          select: "name companyName email phone status isActive",
-        },
-      })
-      .populate({
-        path: "dispatcherId",
-        select: "name companyName email phone status isActive",
-      })
       .lean(),
     previousQuery
       ? Order.find(previousQuery)
           .sort({ createdAt: -1 })
-          .populate({ path: "dealerId", select: "companyName contactName email phone status fulfillmentMode dispatcherId" })
-          .populate({ path: "dispatcherId", select: "name companyName email phone status isActive" })
           .lean()
       : Promise.resolve([]),
   ]);
 
+  const scopedCategory = categoryFilterValue(filters);
+  const orders = scopeOrdersToCategory(rawOrders, scopedCategory);
+  const previousOrders = scopeOrdersToCategory(rawPreviousOrders, scopedCategory);
+
   const dealerMap = new Map(dealers.map((dealer) => [idOf(dealer), dealer]));
   const dispatcherMap = new Map(dispatchers.map((dispatcher) => [idOf(dispatcher), dispatcher]));
-  const approvedOrders = orders.filter((order) => order.status === APPROVED_STATUS);
-  const previousApprovedOrders = previousOrders.filter((order) => order.status === APPROVED_STATUS);
+  const approvedOrders = orders.filter(isAcceptedOrder);
+  const previousApprovedOrders = previousOrders.filter(isAcceptedOrder);
   const currency = getCurrency(orders);
   const approvedRevenue = approvedOrders.reduce((sum, order) => sum + getOrderTotal(order), 0);
   const previousApprovedRevenue = previousApprovedOrders.reduce((sum, order) => sum + getOrderTotal(order), 0);
@@ -952,15 +1016,18 @@ export async function getAdminInsights(filters = {}) {
   const ordersSummary = {
     totalOrders: orders.length,
     approvedOrders: approvedOrders.length,
+    acceptedOrders: approvedOrders.length,
     submittedOrders: orders.filter((order) => order.status === "SUBMITTED").length,
     rejectedOrders: orders.filter((order) => order.status === "REJECTED").length,
     archivedOrders: orders.filter((order) => order.archivedAt).length,
     totalApprovedRevenue: approvedRevenue,
+    totalAcceptedRevenue: approvedRevenue,
     averageOrderValue: approvedOrders.length ? approvedRevenue / approvedOrders.length : 0,
     medianOrderValue: median(approvedTotals),
     largestOrder: largestOrder?.total || 0,
     smallestOrder: approvedTotals.length ? Math.min(...approvedTotals) : 0,
     approvalRate: percentage(approvedOrders.length, orders.length),
+    acceptanceRate: percentage(approvedOrders.length, orders.length),
     rejectionRate: percentage(orders.filter((order) => order.status === "REJECTED").length, orders.length),
   };
 
@@ -997,7 +1064,7 @@ export async function getAdminInsights(filters = {}) {
     signals,
     "Revenue movement",
     range.isAllTime
-      ? "All verified history is included in the current insight view."
+      ? "All accepted dealer-order history is included in the current insight view."
       : `${growth(approvedRevenue, previousApprovedRevenue).toFixed(1)}% versus the previous comparable period.`,
     growth(approvedRevenue, previousApprovedRevenue) >= 0 ? "positive" : "risk",
   );
@@ -1005,14 +1072,14 @@ export async function getAdminInsights(filters = {}) {
     signals,
     "Dominant route",
     routingSummary.summary.factoryApprovedRevenue >= routingSummary.summary.dispatcherApprovedRevenue
-      ? "Factory routing is currently carrying the larger approved revenue lane."
-      : "Dispatcher routing is currently carrying the larger approved revenue lane.",
+      ? "Factory routing is currently carrying the larger accepted revenue lane."
+      : "Dispatcher routing is currently carrying the larger accepted revenue lane.",
   );
   pushSignal(
     signals,
     "Strongest dealer",
     dealerSummary.leadership.topBySales[0]
-      ? `${dealerSummary.leadership.topBySales[0].dealerName} leads approved sales for this filter.`
+      ? `${dealerSummary.leadership.topBySales[0].dealerName} leads accepted sales for this filter.`
       : "No dealer sales signal is available for the selected filters.",
   );
   pushSignal(
@@ -1035,7 +1102,7 @@ export async function getAdminInsights(filters = {}) {
       range: range.isAllTime ? "all" : filters.range || filters.preset || "custom",
       from: range.isAllTime ? "" : range.start.toISOString(),
       to: range.isAllTime ? "" : range.end.toISOString(),
-      status: filters.status || "APPROVED",
+      status: filters.status || "ALL",
       routing: filters.routing || "ALL",
       dispatcherId: filters.dispatcherId || "",
       dealerId: filters.dealerId || "",
@@ -1046,6 +1113,8 @@ export async function getAdminInsights(filters = {}) {
       generatedAt: new Date().toISOString(),
       currency,
       orderCount: orders.length,
+      acceptedOrderCount: approvedOrders.length,
+      acceptedRevenue: approvedRevenue,
       dealerCount: dealers.length,
       dispatcherCount: dispatchers.length,
     },
@@ -1072,7 +1141,9 @@ export async function getAdminInsights(filters = {}) {
     home: {
       kpis: {
         approvedRevenue,
+        acceptedRevenue: approvedRevenue,
         approvedOrders: approvedOrders.length,
+        acceptedOrders: approvedOrders.length,
         averageOrderValue: ordersSummary.averageOrderValue,
         activeDealers: dealerSummary.segmentation.activity.find((item) => item.label === "Active")?.count || 0,
         factoryRevenueShare: routingSummary.summary.factoryRevenueShare,
@@ -1096,11 +1167,11 @@ export async function getAdminInsights(filters = {}) {
       rankings: orderRankings,
       notes: [
         routingSummary.summary.factoryAverageOrderValue >= routingSummary.summary.dispatcherAverageOrderValue
-          ? "Factory-routed approved orders currently carry the higher average value."
-          : "Dispatcher-routed approved orders currently carry the higher average value.",
-        ordersSummary.approvalRate >= 70
-          ? "Approval throughput is healthy for the selected filter."
-          : "Approval throughput is below the target band for the selected filter.",
+          ? "Factory-routed accepted orders currently carry the higher average value."
+          : "Dispatcher-routed accepted orders currently carry the higher average value.",
+        ordersSummary.acceptanceRate >= 70
+          ? "Accepted-order throughput is healthy for the selected filter."
+          : "Accepted-order throughput is below the target band for the selected filter.",
         trend.length >= 2 && trend[trend.length - 1].orders < trend[0].orders
           ? "Order count is lower at the end of the period than the beginning."
           : "Order count is stable or improving across the selected period.",
@@ -1113,14 +1184,14 @@ export async function getAdminInsights(filters = {}) {
       ...routingSummary,
       notes: [
         routingSummary.summary.factoryRevenueShare >= 60
-          ? "Factory routing still dominates approved revenue."
-          : "Dispatcher routing is materially contributing to approved revenue.",
+          ? "Factory routing still dominates accepted revenue."
+          : "Dispatcher routing is materially contributing to accepted revenue.",
         routingSummary.efficiency.higherValueRoute === "FACTORY"
           ? "Factory route is handling higher average-value orders."
           : "Dispatcher route is handling higher average-value orders.",
         dispatcherSummary.summary.lowestActivityDispatcher
-          ? `${dispatcherSummary.summary.lowestActivityDispatcher.dispatcherName} is the lowest activity verified dispatcher lane.`
-          : "No verified dispatcher lane risk detected.",
+          ? `${dispatcherSummary.summary.lowestActivityDispatcher.dispatcherName} is the lowest activity dispatcher lane.`
+          : "No dispatcher lane risk detected.",
       ],
     },
     reports: {
@@ -1134,7 +1205,7 @@ export async function getAdminInsights(filters = {}) {
       ],
       filterSummary: {
         period: `${range.start.toISOString().slice(0, 10)} to ${range.end.toISOString().slice(0, 10)}`,
-        status: filters.status || "APPROVED",
+        status: statusFilterLabel(filters.status || "ALL"),
         routing: filters.routing || "ALL",
         dealer:
           filters.dealerId && dealerMap.get(String(filters.dealerId))

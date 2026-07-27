@@ -10,6 +10,15 @@ function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+function safeNumber(value, fallback = 0) {
+  const next = Number(value ?? fallback);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+function count(value) {
+  return safeNumber(value).toLocaleString();
+}
+
 function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -60,6 +69,15 @@ export function AdminDealerProfileMobileView({
   const isVerified = dealer?.status === "VERIFIED";
   const assignedDispatcher = dealer?.dispatcherId && typeof dealer.dispatcherId === "object" ? dealer.dispatcherId : null;
   const busy = Boolean(busyAction);
+  const totalOrders = safeNumber(
+    performanceSummary?.totalOrdersAllTime,
+    recentOrders?.length || performanceSummary?.totalApprovedOrders || 0,
+  );
+  const completedOrders = safeNumber(performanceSummary?.totalApprovedOrders);
+  const totalOrderValue = safeNumber(performanceSummary?.totalSalesAllTime, performanceSummary?.totalSalesApproved || 0);
+  const completedOrderValue = safeNumber(performanceSummary?.totalSalesApproved);
+  const averageCompletedOrderValue = safeNumber(performanceSummary?.averageApprovedOrderValue);
+  const unitsDelivered = safeNumber(productIntelligence?.totalUnitsOrdered);
 
   function openRoutingSheet() {
     setRoutingChoice(assignedDispatcher ? String(assignedDispatcher._id) : "FACTORY");
@@ -102,26 +120,35 @@ export function AdminDealerProfileMobileView({
             {error ? <div className="dealer-m-newsale-error" style={{ marginTop: 12 }}>{error}</div> : null}
 
             <div className="admin-m-card" style={{ marginTop: 16 }}>
-              <div className="admin-m-section-title">Performance</div>
+              <div className="admin-m-section-title">Order Statistics</div>
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{performanceSummary.totalApprovedOrders || 0}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{count(totalOrders)}</div>
                   <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Total Orders</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>
-                    {Number(productIntelligence.totalUnitsOrdered || 0).toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Units Sold</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-azure, #0071e3)" }}>{money(totalOrderValue)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Order Value</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-azure, #0071e3)" }}>{money(performanceSummary.totalSalesApproved)}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Total Sales</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{count(completedOrders)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Completed</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-azure, #0071e3)" }}>{money(performanceSummary.averageApprovedOrderValue)}</div>
-                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Avg. Order Value</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-azure, #0071e3)" }}>{money(completedOrderValue)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Completed Value</div>
                 </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-ink, #1d1d1f)" }}>{count(unitsDelivered)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Units Delivered</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--color-azure, #0071e3)" }}>{money(averageCompletedOrderValue)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>Avg. Completed</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.45, color: "var(--color-graphite, #707070)" }}>
+                Order value includes every non-deleted order. Completed value and units count delivered orders only.
               </div>
             </div>
 

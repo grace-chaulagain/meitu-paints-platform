@@ -56,8 +56,8 @@ const QUICK_ACTIONS = [
 // from a real endpoint already used elsewhere in the admin app (see the
 // research trail in this session: no "Fulfillment %" or "Painter
 // verifications" field exists anywhere in the codebase, so neither is
-// invented here - the hero's third stat is "Verified Today" instead of a
-// fabricated fulfillment rate, and the attention shelf uses 5 real queues
+// invented here - the hero's third stat is accepted dealer-order count instead
+// of a fabricated fulfillment rate, and the attention shelf uses 5 real queues
 // (including dispatcher applications, alongside the dealer one
 // DashboardOverview already fetches) rather than a 5th fake "painter
 // verification" card - painters have no approval workflow, only account
@@ -108,7 +108,7 @@ export function AdminHomeMobileView({ onNavigate }) {
   const todayData = todayInsightsQuery.data;
   const ordersToday = todayData?.orders?.summary?.totalOrders ?? 0;
   const revenueToday = todayData?.home?.kpis?.approvedRevenue ?? 0;
-  const verifiedToday = todayData?.home?.kpis?.approvedOrders ?? 0;
+  const acceptedToday = todayData?.home?.kpis?.approvedOrders ?? 0;
 
   const attentionCards = useMemo(() => {
     const cards = [
@@ -237,7 +237,7 @@ export function AdminHomeMobileView({ onNavigate }) {
           <div className="dealer-m-home-stats-row">
             <HomeStat value={ordersToday} label="Orders Today" />
             <HomeStat value={revenueToday} label="Revenue Today" format={(v) => money(v)} />
-            <HomeStat value={verifiedToday} label="Verified Today" />
+            <HomeStat value={acceptedToday} label="Accepted Today" />
           </div>
         </div>
 

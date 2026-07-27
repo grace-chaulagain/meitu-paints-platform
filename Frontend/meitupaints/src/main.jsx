@@ -117,7 +117,8 @@ function RequireAdmin({ children }) {
   const { recoveringSession, user, sessionExpired } = useAuth();
   if (recoveringSession) return null;
   if (!user) return sessionExpired ? <SessionExpiredPrompt /> : <LoginRedirect />;
-  if (String(user.role || "").toUpperCase() !== "ADMIN")
+  const role = String(user.role || "").toUpperCase();
+  if (role !== "ADMIN" && role !== "READ_ONLY_ADMIN")
     return <NotFoundPage />;
   return children;
 }

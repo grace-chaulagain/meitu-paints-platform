@@ -1,9 +1,13 @@
 export const STATUS_OPTIONS = [
-  { key: "APPROVED", label: "Approved" },
-  { key: "SUBMITTED", label: "Submitted" },
-  { key: "REJECTED", label: "Rejected" },
-  { key: "ARCHIVED", label: "Archived" },
   { key: "ALL", label: "All statuses" },
+  { key: "ACCEPTED", label: "Accepted" },
+  { key: "SUBMITTED", label: "Pending" },
+  { key: "VERIFIED", label: "Verified" },
+  { key: "DISPATCHED", label: "Dispatched" },
+  { key: "COMPLETED", label: "Completed" },
+  { key: "REJECTED", label: "Rejected" },
+  { key: "CANCELLED", label: "Cancelled" },
+  { key: "ARCHIVED", label: "Archived" },
 ];
 
 export const ROUTING_OPTIONS = [

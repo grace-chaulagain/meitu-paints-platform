@@ -191,14 +191,19 @@ function currentNodeKey(order) {
   if (status === "SUBMITTED") return "submitted";
   if (status === "VERIFIED") return "verified";
   if (status === "DISPATCHED") return "dispatched";
-  return "delivered"; // COMPLETED
+  if (status === "COMPLETED") return "delivered";
+  return "submitted";
 }
 
 function buildActiveRail(order, defs) {
   const activeKey = currentNodeKey(order);
   const owner = getOwner(order);
-  return defs.map((def) => {
-    const reached = def.reached(order);
+  const activeIndex = defs.findIndex((def) => def.key === activeKey);
+  return defs.map((def, index) => {
+    // Older orders do not always carry every timestamp field even though the
+    // canonical status has advanced. The rail is a progress visualization, so
+    // status rank is a valid fallback for painting reached checkpoints.
+    const reached = def.reached(order) || (activeIndex >= 0 && index <= activeIndex);
     const isCurrent = def.key === activeKey;
     let state;
     if (isCurrent) {

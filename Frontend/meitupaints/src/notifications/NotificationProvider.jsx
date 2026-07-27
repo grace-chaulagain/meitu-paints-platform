@@ -30,7 +30,12 @@ function emptySummary() {
 
 function canUseNotifications(user) {
   const role = String(user?.role || "").toUpperCase();
-  return role === "ADMIN" || role === "DISPATCHER" || role === "FACTORY";
+  return (
+    role === "ADMIN" ||
+    role === "READ_ONLY_ADMIN" ||
+    role === "DISPATCHER" ||
+    role === "FACTORY"
+  );
 }
 
 // Desktop (native OS) notifications - admin and factory only for now

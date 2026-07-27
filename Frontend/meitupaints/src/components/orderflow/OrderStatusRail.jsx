@@ -214,9 +214,9 @@ export function OrderFlowRailStyles() {
         background:rgba(29,29,31,.1);
         transition:background-color 300ms var(--ease-in-out-strong, ease);
       }
-      .orderflow-rail-sm .orderflow-rail-line-half{ height:1.5px; min-width:4px; }
+      .orderflow-rail-sm .orderflow-rail-line-half{ height:1px; min-width:4px; }
       .orderflow-rail-line-hidden{ visibility:hidden; }
-      .orderflow-rail-line-filled{ background:rgba(29,29,31,.1); }
+      .orderflow-rail-line-filled{ background:var(--color-azure, #0071e3); }
       .orderflow-rail-line-filled[data-revealed="true"]{
         background:var(--color-azure, #0071e3);
       }
@@ -233,7 +233,7 @@ export function OrderFlowRailStyles() {
         color:transparent;
         transition:background-color 260ms var(--ease-out-strong, ease), color 260ms var(--ease-out-strong, ease), box-shadow 260ms ease;
       }
-      .orderflow-rail-sm .orderflow-rail-dot{ width:10px; height:10px; }
+      .orderflow-rail-sm .orderflow-rail-dot{ width:16px; height:16px; }
 
       .orderflow-rail-dot-done{ background:var(--color-azure, #0071e3); color:#fff; }
       .orderflow-rail-dot-current{

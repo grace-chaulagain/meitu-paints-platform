@@ -35,7 +35,7 @@ export function EmptyNote({ children }) {
 
 // ----------------------------------------------------------------------
 // Filters: a plain-language chip strip that is always visible (so the
-// active scope - e.g. "Approved orders only, last 30 days" - is never a
+// active scope - e.g. "Accepted orders only, last 30 days" - is never a
 // silent surprise) which expands into the actual controls on demand.
 // ----------------------------------------------------------------------
 
@@ -148,7 +148,7 @@ export function InsightsFilterBar({ filters, setFilters, options, loading, onRef
           />
         </button>
 
-        <Pill tone="accent" size="small">{STATUS_OPTIONS.find((o) => o.key === filters.status)?.label || "Approved"}</Pill>
+        <Pill tone="accent" size="small">{STATUS_OPTIONS.find((o) => o.key === filters.status)?.label || "All statuses"}</Pill>
         <Pill tone="neutral" size="small">{rangeChipLabel(filters)}</Pill>
         {filters.routing !== "ALL" || filters.dispatcherId ? (
           <Pill tone="neutral" size="small">{routingChipLabel(filters, dispatchers)}</Pill>

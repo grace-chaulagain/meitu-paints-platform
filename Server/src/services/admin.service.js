@@ -945,6 +945,8 @@ export async function undoDealerApplicationDeletion({ applicationId }) {
 // Dealers
 // ----------------------------
 
+const DEALER_APPROVED_ORDER_STATUSES = ["VERIFIED", "DISPATCHED", "COMPLETED"];
+
 export async function listDealers({ status, page = 1, limit = 20 } = {}) {
   await purgeExpiredAccountDeletions();
 
@@ -983,7 +985,11 @@ export async function listDealers({ status, page = 1, limit = 20 } = {}) {
             totalOrdersAllTime: { $sum: 1 },
             totalApprovedOrders: {
               $sum: {
-                $cond: [{ $eq: ["$status", "VERIFIED"] }, 1, 0],
+                $cond: [
+                  { $in: ["$status", DEALER_APPROVED_ORDER_STATUSES] },
+                  1,
+                  0,
+                ],
               },
             },
             totalSubmittedOrders: {
@@ -998,19 +1004,31 @@ export async function listDealers({ status, page = 1, limit = 20 } = {}) {
             },
             totalApprovedSales: {
               $sum: {
-                $cond: [{ $eq: ["$status", "VERIFIED"] }, "$totals.total", 0],
+                $cond: [
+                  { $in: ["$status", DEALER_APPROVED_ORDER_STATUSES] },
+                  "$totals.total",
+                  0,
+                ],
               },
             },
             totalSalesAllTime: { $sum: "$totals.total" },
             largestApprovedOrderValue: {
               $max: {
-                $cond: [{ $eq: ["$status", "VERIFIED"] }, "$totals.total", 0],
+                $cond: [
+                  { $in: ["$status", DEALER_APPROVED_ORDER_STATUSES] },
+                  "$totals.total",
+                  0,
+                ],
               },
             },
             lastActivity: { $max: "$createdAt" },
             lastApprovedOrderAt: {
               $max: {
-                $cond: [{ $eq: ["$status", "VERIFIED"] }, "$createdAt", null],
+                $cond: [
+                  { $in: ["$status", DEALER_APPROVED_ORDER_STATUSES] },
+                  "$createdAt",
+                  null,
+                ],
               },
             },
           },
@@ -2535,7 +2553,33 @@ export async function listOrders({
     .skip(skip)
     .limit(perPage)
     .select(
-      "orderNumber dealerId dispatcherId totals payment.method status createdAt updatedAt",
+      [
+        "orderNumber",
+        "serialNumber",
+        "orderOrigin",
+        "dealerId",
+        "dealerSnapshot",
+        "dispatcherId",
+        "dispatcherSnapshot",
+        "dispatcherCustomerId",
+        "items",
+        "totals",
+        "payment",
+        "dealerNote",
+        "internalNote",
+        "status",
+        "statusHistory",
+        "review",
+        "factory",
+        "rejection",
+        "stockReservation.status",
+        "stockReservation.items",
+        "stockCheck.checkedAt",
+        "stockCheck.items",
+        "createdAt",
+        "updatedAt",
+        "archivedAt",
+      ].join(" "),
     )
     .populate({
       path: "dealerId",

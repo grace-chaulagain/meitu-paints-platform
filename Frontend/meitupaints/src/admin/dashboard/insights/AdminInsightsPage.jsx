@@ -96,8 +96,8 @@ function HomeSection({ data, currency, onNavigate }) {
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={kpiRowStyle()}>
-        <KpiTile icon="invoice" label="Approved Revenue" value={money(kpis.approvedRevenue, currency)} tone="accent" />
-        <KpiTile icon="orders" label="Approved Orders" value={number(kpis.approvedOrders)} />
+        <KpiTile icon="invoice" label="Accepted Revenue" value={money(kpis.approvedRevenue, currency)} tone="accent" />
+        <KpiTile icon="orders" label="Accepted Orders" value={number(kpis.approvedOrders)} />
         <KpiTile icon="chart" label="Avg Order Value" value={money(kpis.averageOrderValue, currency)} />
         <KpiTile icon="store" label="Active Dealers" value={number(kpis.activeDealers)} />
         <KpiTile
@@ -157,9 +157,9 @@ function OrdersSection({ data, currency }) {
     <div style={{ display: "grid", gap: 14 }}>
       <div style={kpiRowStyle()}>
         <KpiTile icon="orders" label="Total Orders" value={number(summary.totalOrders)} />
-        <KpiTile icon="checkmark" label="Approved" value={number(summary.approvedOrders)} tone="accent" />
-        <KpiTile icon="invoice" label="Approved Revenue" value={money(summary.totalApprovedRevenue, currency)} tone="accent" />
-        <KpiTile icon="chart" label="Approval Rate" value={percent(summary.approvalRate)} />
+        <KpiTile icon="checkmark" label="Accepted" value={number(summary.approvedOrders)} tone="accent" />
+        <KpiTile icon="invoice" label="Accepted Revenue" value={money(summary.totalApprovedRevenue, currency)} tone="accent" />
+        <KpiTile icon="chart" label="Acceptance Rate" value={percent(summary.acceptanceRate ?? summary.approvalRate)} />
         <KpiTile icon="list" label="Median Order" value={money(summary.medianOrderValue, currency)} />
       </div>
 
@@ -190,7 +190,7 @@ function OrdersSection({ data, currency }) {
       </div>
 
       <Surface padding={0}>
-        <PanelHead eyebrow="Ranked intelligence" icon="list" title="Largest approved orders" />
+        <PanelHead eyebrow="Ranked intelligence" icon="list" title="Largest accepted orders" />
         <div style={{ padding: "0 18px 18px" }}>
           <InsightTable
             rows={rankings.largestOrders || []}
@@ -269,7 +269,7 @@ function DealersSection({ data, currency }) {
             signals={[
               {
                 title: "Top 5 contribution",
-                body: `${percent(dealers.signals?.topFiveRevenueShare)} of approved revenue is concentrated in the top five dealers.`,
+                body: `${percent(dealers.signals?.topFiveRevenueShare)} of accepted revenue is concentrated in the top five dealers.`,
                 tone: Number(dealers.signals?.topFiveRevenueShare || 0) > 60 ? "watch" : "positive",
               },
               {
@@ -411,7 +411,7 @@ function DispatchersSection({ data, currency }) {
               { key: "assignedDealerCount", label: "Dealers", render: (row) => number(row.assignedDealerCount) },
               { key: "approvedRevenue", label: "Revenue", render: (row) => money(row.approvedRevenue, currency) },
               { key: "routedOrders", label: "Orders", render: (row) => number(row.routedOrders) },
-              { key: "approvalRate", label: "Approval", render: (row) => percent(row.approvalRate) },
+              { key: "approvalRate", label: "Acceptance", render: (row) => percent(row.approvalRate) },
               { key: "lastActivity", label: "Last activity", render: (row) => formatDate(row.lastActivity), sortValue: (row) => new Date(row.lastActivity || 0).getTime() },
               { key: "largestOrder", label: "Biggest order", render: (row) => money(row.largestOrder, currency) },
               { key: "bestDealer", label: "Best dealer" },
@@ -451,7 +451,7 @@ function RoutingSection({ data, currency }) {
           />
         </Surface>
         <Surface padding={0}>
-          <PanelHead eyebrow="Approval" icon="checkmark" title="Approval rate by route" />
+          <PanelHead eyebrow="Acceptance" icon="checkmark" title="Acceptance rate by route" />
           <RankedBarList
             items={[
               { label: "Factory", value: summary.factoryApprovalRate || 0 },
@@ -565,13 +565,13 @@ function ReportsSection({ data, currency, exporting, onExportSection, onExportRe
           <button type="button" disabled={exporting} onClick={() => onExportComparison("PERIOD")} style={reportCardStyle()}>
             <strong style={{ fontSize: 13, fontWeight: 600 }}>Current vs previous period</strong>
             <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-              Approved revenue, current period vs the prior comparable period.
+              Accepted revenue, current period vs the prior comparable period.
             </span>
           </button>
           <button type="button" disabled={exporting} onClick={() => onExportComparison("ROUTE")} style={reportCardStyle()}>
             <strong style={{ fontSize: 13, fontWeight: 600 }}>Factory vs dispatcher</strong>
             <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-              Revenue, orders, AOV, and approval rate by route.
+              Revenue, orders, AOV, and acceptance rate by route.
             </span>
           </button>
         </div>
@@ -624,7 +624,7 @@ function AdminInsightsPageDesktop() {
     dispatcherId: "",
     dealerId: "",
     dealerState: "ALL",
-    status: "APPROVED",
+    status: "ALL",
     category: "ALL",
   });
   const [exporting, setExporting] = useState(false);
@@ -669,7 +669,7 @@ function AdminInsightsPageDesktop() {
       dispatcherId: "",
       dealerId: "",
       dealerState: "ALL",
-      status: "APPROVED",
+      status: "ALL",
       category: "ALL",
     });
   }
@@ -703,8 +703,8 @@ function AdminInsightsPageDesktop() {
           ? (data.dealers?.leadership?.mostDormant || []).map((row) => ({
               Dealer: row.dealerName,
               "Last activity": formatDate(row.lastActivity),
-              "Approved sales": money(row.approvedSales, currency),
-              "Approved orders": number(row.approvedOrders),
+              "Accepted sales": money(row.approvedSales, currency),
+              "Accepted orders": number(row.approvedOrders),
             }))
           : buildReportRows(target, data, currency);
       downloadCsv(`meitu-insights-${reportName.toLowerCase().replace(/\s+/g, "-")}.csv`, rows);

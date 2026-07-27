@@ -51,14 +51,27 @@ function getActorUserId(user) {
 
 function getActorRole(user) {
   const role = normalizeRole(user?.role);
-  if (![ROLES.ADMIN, ROLES.DISPATCHER, ROLES.FACTORY].includes(role)) {
+  if (
+    ![
+      ROLES.ADMIN,
+      ROLES.READ_ONLY_ADMIN,
+      ROLES.DISPATCHER,
+      ROLES.FACTORY,
+    ].includes(role)
+  ) {
     throw new ApiError(403, "Notification access requires an operations role");
   }
   return role;
 }
 
+function notificationRecipientRole(role) {
+  return role === ROLES.READ_ONLY_ADMIN ? ROLES.ADMIN : role;
+}
+
 function getRoleCategories(role) {
-  if (role === ROLES.ADMIN) return ADMIN_CATEGORIES;
+  if (role === ROLES.ADMIN || role === ROLES.READ_ONLY_ADMIN) {
+    return ADMIN_CATEGORIES;
+  }
   if (role === ROLES.FACTORY) return FACTORY_CATEGORIES;
   return DISPATCHER_CATEGORIES;
 }
@@ -72,11 +85,12 @@ function assertCategoryForRole(category, role) {
 }
 
 function buildRecipientQuery({ role, userId }) {
+  const recipientRole = notificationRecipientRole(role);
   const query = {
-    recipientRole: role,
+    recipientRole,
   };
 
-  if (role === ROLES.ADMIN || role === ROLES.FACTORY) {
+  if (recipientRole === ROLES.ADMIN || recipientRole === ROLES.FACTORY) {
     query.$or = [{ recipientUserId: null }, { recipientUserId: userId }];
     return query;
   }
