@@ -17,6 +17,7 @@ import {
   adminAuthUtilityRateLimit,
   loginRateLimit,
   passwordResetRateLimit,
+  passwordTokenStatusRateLimit,
   refreshRateLimit,
 } from "../middlewares/rateLimit.middleware.js";
 import { validateBody } from "../middlewares/validate.middleware.js";
@@ -67,7 +68,7 @@ router.post(
 // POST /api/auth/password-token-status
 router.post(
   "/password-token-status",
-  passwordResetRateLimit,
+  passwordTokenStatusRateLimit,
   validateBody(passwordTokenStatusBodySchema),
   passwordTokenStatusController,
 );

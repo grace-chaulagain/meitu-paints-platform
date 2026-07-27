@@ -512,7 +512,7 @@ function SetNewPasswordPage({ purpose, endpoint, title, description, expiredLink
   const [state, setState] = useState({ loading: false, ok: false, err: "" });
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     async function checkToken() {
       if (!token) {
@@ -521,25 +521,30 @@ function SetNewPasswordPage({ purpose, endpoint, title, description, expiredLink
       }
 
       try {
-        const { data } = await api.post("/api/auth/password-token-status", { token, purpose });
+        const { data } = await api.post(
+          "/api/auth/password-token-status",
+          { token, purpose },
+          { signal: controller.signal },
+        );
 
-        if (!cancelled) {
-          setTokenState({
-            loading: false,
-            valid: Boolean(data?.valid),
-            reason: data?.reason || "",
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          setTokenState({ loading: false, valid: false, reason: "INVALID" });
-        }
+        setTokenState({
+          loading: false,
+          valid: Boolean(data?.valid),
+          reason: data?.reason || "",
+        });
+      } catch (error) {
+        if (error?.code === "ERR_CANCELED") return;
+        setTokenState({ loading: false, valid: false, reason: "INVALID" });
       }
     }
 
     checkToken();
+    // Aborts the in-flight request on cleanup (not just ignoring its result)
+    // so React StrictMode's dev-only double-invoke doesn't fire this twice
+    // against the server - it shares a rate limit with the actual reset/
+    // setup endpoints, so a wasted duplicate call isn't free.
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [purpose, token]);
 
