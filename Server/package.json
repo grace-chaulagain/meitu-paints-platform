@@ -23,6 +23,7 @@
     "append:products": "node src/seed/appendProducts.js",
     "append:families": "node src/seed/appendProductFamilies.js",
     "staging:seed:admin": "DOTENV_CONFIG_PATH=.env.staging node src/scripts/seed-admin.js",
+    "staging:seed:readonly-admin": "DOTENV_CONFIG_PATH=.env.staging node src/scripts/seed-readonly-admin.js",
     "staging:seed:factory": "DOTENV_CONFIG_PATH=.env.staging node src/scripts/seed-factory-user.js",
     "staging:seed:products": "DOTENV_CONFIG_PATH=.env.staging node src/seed/seedProducts.js",
     "staging:seed:families": "DOTENV_CONFIG_PATH=.env.staging node src/seed/seedProductFamilies.js",
@@ -50,6 +51,7 @@
     "nodemailer": "^8.0.1",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.7",
+    "sanitize-html": "^2.17.6",
     "streamifier": "^0.1.1",
     "web-push": "^3.6.7",
     "zod": "^4.3.6"
