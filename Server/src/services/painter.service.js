@@ -15,6 +15,7 @@ function actorId(actorUser) {
 function sortSpec(sort) {
   if (sort === "name-desc") return { name: -1 };
   if (sort === "recent") return { createdAt: -1 };
+  if (sort === "oldest") return { createdAt: 1 };
   return { name: 1 };
 }
 

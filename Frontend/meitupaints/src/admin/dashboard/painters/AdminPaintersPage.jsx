@@ -49,6 +49,18 @@ const ID_STATUS_FILTER_OPTIONS = [
   { key: "NO_ID", label: "No ID" },
 ];
 
+// Finder-style "Sort By" list (a flat set of criterion+direction pairs with
+// a checkmark on the active one, same interaction as macOS's View menu) -
+// resolved server-side in painter.service.js's sortSpec so it stays correct
+// even once this list stops being fully loaded client-side in one page.
+const SORT_OPTIONS = [
+  { key: "name-asc", label: "Name A–Z" },
+  { key: "name-desc", label: "Name Z–A" },
+  { key: "recent", label: "Newest Added" },
+  { key: "oldest", label: "Oldest Added" },
+];
+const DEFAULT_SORT = "name-asc";
+
 function painterIdStatusKey(painter) {
   if (painter.type !== "TTP") return "NO_ID";
   return painter.idCardPhotoAddedAt ? "ID_READY" : "PHOTO_NEEDED";
@@ -106,7 +118,7 @@ function hashString(value) {
 // by pathname on browser-back, this just makes sure the filters that produced
 // that scroll position are restored too. Mirrors AdminOrdersPage.jsx's
 // listState/updateListState pattern.
-const PAINTER_LIST_DEFAULTS = { search: "", type: "ALL", idStatus: "ALL" };
+const PAINTER_LIST_DEFAULTS = { search: "", type: "ALL", idStatus: "ALL", sort: DEFAULT_SORT };
 
 function parsePainterListState(search) {
   const params = new URLSearchParams(search || "");
@@ -114,6 +126,7 @@ function parsePainterListState(search) {
     search: params.get("q") || PAINTER_LIST_DEFAULTS.search,
     type: params.get("type") || PAINTER_LIST_DEFAULTS.type,
     idStatus: params.get("idStatus") || PAINTER_LIST_DEFAULTS.idStatus,
+    sort: params.get("sort") || PAINTER_LIST_DEFAULTS.sort,
   };
 }
 
@@ -124,6 +137,7 @@ function buildPainterListSearch(state) {
   if (state.idStatus && state.idStatus !== PAINTER_LIST_DEFAULTS.idStatus) {
     params.set("idStatus", state.idStatus);
   }
+  if (state.sort && state.sort !== PAINTER_LIST_DEFAULTS.sort) params.set("sort", state.sort);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -297,7 +311,7 @@ export default function AdminPaintersPage() {
   const isMobile = useIsMobileAdmin();
 
   const listState = useMemo(() => parsePainterListState(location.search), [location.search]);
-  const { search, type, idStatus } = listState;
+  const { search, type, idStatus, sort } = listState;
 
   const updateListState = useCallback(
     (patch) => {
@@ -313,6 +327,7 @@ export default function AdminPaintersPage() {
   const setSearch = useCallback((value) => updateListState({ search: value }), [updateListState]);
   const setType = useCallback((value) => updateListState({ type: value }), [updateListState]);
   const setIdStatus = useCallback((value) => updateListState({ idStatus: value }), [updateListState]);
+  const setSort = useCallback((value) => updateListState({ sort: value }), [updateListState]);
 
   const [view, setView] = useState(getInitialView);
   const [formPainter, setFormPainter] = useState(null);
@@ -329,7 +344,7 @@ export default function AdminPaintersPage() {
     }
   }
 
-  const paintersQuery = useGetAdminPaintersQuery({ q: search, type, limit: 1000 });
+  const paintersQuery = useGetAdminPaintersQuery({ q: search, type, sort, limit: 1000 });
   const [createPainter, { isLoading: creating }] = useCreatePainterMutation();
   const [updatePainter, { isLoading: updating }] = useUpdatePainterMutation();
   const [deletePainter, { isLoading: deleting }] = useDeletePainterMutation();
@@ -447,6 +462,13 @@ export default function AdminPaintersPage() {
           <div className="painter-nav-filters-left">
             <AppleDropdown value={type} options={TYPE_FILTER_OPTIONS} onChange={setType} style={{ width: 160 }} />
             <AppleDropdown value={idStatus} options={ID_STATUS_FILTER_OPTIONS} onChange={setIdStatus} style={{ width: 170 }} />
+            <AppleDropdown
+              value={sort}
+              options={SORT_OPTIONS}
+              onChange={setSort}
+              icon="sort"
+              style={{ width: 165 }}
+            />
           </div>
           <div className="painter-nav-filters-right">
             <span className="painter-nav-count">
