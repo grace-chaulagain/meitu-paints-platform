@@ -711,18 +711,37 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
     }
   }
 
-  if (this.orderOrigin === ORDER_ORIGIN.DISPATCHER_REPLENISHMENT) {
-    if (!this.dispatcherCustomerId) {
-      throw new Error(
-        "dispatcherCustomerId is required for DISPATCHER_REPLENISHMENT orders",
-      );
+  // Guarded by isNew/isModified so these checks only run when the fields
+  // they inspect are actually being created or changed - a save that loaded
+  // the document via a restrictive .select() (e.g. admin.service.js's
+  // hardDeleteOrder/undoOrderDeletion, which only touch isDeleted/deletion)
+  // would otherwise see orderOrigin/dealerId/dispatcherId as `undefined`
+  // (deselected, not their real DB value), misclassify a legitimate
+  // DISPATCHER_REPLENISHMENT order as a DEALER order missing its dealerId,
+  // and throw here on every such save regardless of what was actually
+  // being updated.
+  if (
+    this.isNew ||
+    this.isModified("orderOrigin") ||
+    this.isModified("dealerId") ||
+    this.isModified("dispatcherCustomerId")
+  ) {
+    if (this.orderOrigin === ORDER_ORIGIN.DISPATCHER_REPLENISHMENT) {
+      if (!this.dispatcherCustomerId) {
+        throw new Error(
+          "dispatcherCustomerId is required for DISPATCHER_REPLENISHMENT orders",
+        );
+      }
+      this.dealerId = null;
+    } else if (!this.dealerId) {
+      throw new Error("dealerId is required for DEALER orders");
     }
-    this.dealerId = null;
-  } else if (!this.dealerId) {
-    throw new Error("dealerId is required for DEALER orders");
   }
 
   if (
+    (this.isNew ||
+      this.isModified("dealerSnapshot.fulfillmentMode") ||
+      this.isModified("dispatcherId")) &&
     this.dealerSnapshot?.fulfillmentMode === "DISPATCHER" &&
     !this.dispatcherId
   ) {
