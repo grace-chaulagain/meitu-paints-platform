@@ -655,9 +655,6 @@ export default function RateCalculator() {
                       Final quotation may vary by surface condition, application
                       method, and site requirement.
                     </p>
-                    <Link to="/inquiry" className="rate-inquiry-link">
-                      Request confirmed quotation <ArrowIcon />
-                    </Link>
                   </section>
                 </div>
               </aside>
@@ -764,9 +761,6 @@ export default function RateCalculator() {
                   Final quotation may vary by surface condition, application
                   method, and site requirement.
                 </p>
-                <Link to="/inquiry" className="rate-inquiry-link">
-                  Request confirmed quotation <ArrowIcon />
-                </Link>
               </section>
 
               {/* Bottom padding so the sticky summary bar never overlaps the
@@ -980,8 +974,7 @@ export default function RateCalculator() {
           transform: translateY(-1px);
         }
 
-        .apple-text-link,
-        .rate-inquiry-link {
+        .apple-text-link {
           display: inline-flex;
           align-items: center;
           gap: 7px;
@@ -992,7 +985,6 @@ export default function RateCalculator() {
         }
 
         .apple-text-link svg,
-        .rate-inquiry-link svg,
         .rate-view-button svg {
           width: 17px;
           height: 17px;
@@ -1328,10 +1320,6 @@ export default function RateCalculator() {
           color: var(--color-graphite, #707070);
           font-size: 14px;
           line-height: 1.45;
-        }
-
-        .rate-inquiry-link {
-          margin-top: 18px;
         }
 
         .rate-input-card {
