@@ -64,6 +64,13 @@ const DealerApplicationSchema = new mongoose.Schema(
       tokenHash: { type: String, default: null, index: true },
       expiresAt: { type: Date, default: null },
       sentAt: { type: Date, default: null },
+      // How many confirmation emails have gone out in the current rolling
+      // window (see EMAIL_SEND_WINDOW_MS in dealer.service.js) - caps how
+      // many times an applicant can resend before being asked to wait,
+      // independent of the short double-click cooldown sentAt already
+      // guards against.
+      resendCount: { type: Number, default: 0 },
+      windowStartedAt: { type: Date, default: null },
     },
   },
   { timestamps: true },

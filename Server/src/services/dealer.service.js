@@ -245,6 +245,17 @@ const EMAIL_VERIFICATION_TTL_MS = 48 * 60 * 60 * 1000; // 48h
 // applicationRateLimit (12/hr/IP) at the route level, not this.
 const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 8 * 1000;
 
+// Beyond the double-click cooldown above: an applicant gets at most
+// MAX_EMAIL_SENDS_PER_WINDOW confirmation emails (the original send plus
+// resends) within a rolling EMAIL_SEND_WINDOW_MS window before being asked
+// to wait - each resend also immediately invalidates the previous link
+// (issueAndSendDealerEmailVerification overwrites emailVerification.tokenHash
+// rather than appending to it, so an old link 404s the moment a new one is
+// issued). The window is anchored to the first send in the sequence and
+// only resets once it's fully elapsed, not on every send within it.
+const MAX_EMAIL_SENDS_PER_WINDOW = 3;
+const EMAIL_SEND_WINDOW_MS = 60 * 60 * 1000; // 1h
+
 function hashToken(token) {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
 }
@@ -285,11 +296,17 @@ function dealerEmailConfirmationTemplate({ token, companyName }) {
 // worst case is a resubmit/resend re-triggers this from scratch).
 async function issueAndSendDealerEmailVerification(app) {
   const rawToken = crypto.randomBytes(32).toString("hex");
+  const now = Date.now();
+
+  const previousWindowStart = app.emailVerification?.windowStartedAt?.getTime?.() || 0;
+  const windowExpired = !previousWindowStart || now - previousWindowStart >= EMAIL_SEND_WINDOW_MS;
 
   app.emailVerification = {
     tokenHash: hashToken(rawToken),
-    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
-    sentAt: new Date(),
+    expiresAt: new Date(now + EMAIL_VERIFICATION_TTL_MS),
+    sentAt: new Date(now),
+    windowStartedAt: windowExpired ? new Date(now) : app.emailVerification.windowStartedAt,
+    resendCount: windowExpired ? 1 : (app.emailVerification?.resendCount || 0) + 1,
   };
   app.emailVerifiedAt = null;
   await app.save();
@@ -350,16 +367,35 @@ export async function applyForDealership(payload = {}) {
 
     let resentToken;
     let emailSent = false;
+    // One of: SENT, TERMINAL (already verified/rejected - nothing to
+    // resend), COOLDOWN (near-instant double-submit), LIMIT_REACHED (used
+    // up all MAX_EMAIL_SENDS_PER_WINDOW sends for the current window) -
+    // lets the frontend show an accurate reason instead of a blanket
+    // "check your inbox" either way.
+    let resendReason = "TERMINAL";
+
     if (!isTerminal && !existing.emailVerifiedAt) {
       // Applicant likely never got the first email (typo, spam filter) and is
       // retrying - reissue and resend rather than silently no-op'ing, which is
       // the whole point of this feature. Small cooldown guards against a
       // double-submit double-firing the send; applicationRateLimit (12/hr/IP
-      // at the route level) is the primary throttle.
+      // at the route level) is the primary throttle on top.
       const sentAt = existing.emailVerification?.sentAt?.getTime?.() || 0;
-      if (Date.now() - sentAt > EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+      const withinDoubleClickCooldown = Date.now() - sentAt < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS;
+
+      const windowStartedAt = existing.emailVerification?.windowStartedAt?.getTime?.() || 0;
+      const windowActive = windowStartedAt && Date.now() - windowStartedAt < EMAIL_SEND_WINDOW_MS;
+      const sendsUsed = existing.emailVerification?.resendCount || 0;
+      const limitReached = windowActive && sendsUsed >= MAX_EMAIL_SENDS_PER_WINDOW;
+
+      if (withinDoubleClickCooldown) {
+        resendReason = "COOLDOWN";
+      } else if (limitReached) {
+        resendReason = "LIMIT_REACHED";
+      } else {
         resentToken = await issueAndSendDealerEmailVerification(existing);
         emailSent = true;
+        resendReason = "SENT";
       }
     }
 
@@ -368,10 +404,8 @@ export async function applyForDealership(payload = {}) {
       applicationId: existing._id,
       status: existing.status,
       token: IS_PRODUCTION ? undefined : resentToken,
-      // Lets the frontend tell a real resend apart from a no-op (cooldown
-      // hit, already verified/rejected) instead of showing the same
-      // "check your inbox" success card either way.
       emailSent,
+      resendReason,
     };
   }
 

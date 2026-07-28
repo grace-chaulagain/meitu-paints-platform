@@ -12,6 +12,19 @@ import { api, getApiErrorMessage } from "../api/client.js";
 
 const FORM_FADE_TRANSITION = { duration: 0.22, ease: [0.23, 1, 0.32, 1] };
 
+// Mirrors applyForDealership's resendReason - one message per real backend
+// outcome instead of a single "check your inbox" that's misleading whenever
+// nothing was actually (re)sent.
+const SUCCESS_MESSAGES = {
+  SENT: "Application received. Check your inbox for a confirmation email — click the link to confirm your email before we can review your application.",
+  COOLDOWN:
+    "You already have an application on file for this email with a confirmation link already on its way. Check your inbox and spam folder — if it's been a few minutes and you still don't see it, submit again and we'll send a fresh one.",
+  LIMIT_REACHED:
+    "You've reached the maximum number of confirmation emails for this application. Please check your inbox and spam folder for the most recent link, or try again in about an hour.",
+  TERMINAL:
+    "You already have an application on file for this email that's already been reviewed. If you believe this is a mistake, please contact us directly.",
+};
+
 const initialForm = {
   companyName: "",
   contactName: "",
@@ -125,13 +138,12 @@ export default function DealershipRegistrationPage() {
   const [formData, setFormData] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  // Whether the most recent submission actually sent a fresh confirmation
-  // email vs. was a no-op (the applicant already has a pending application
-  // and hit the internal resend cooldown, or their application is already
-  // verified/rejected) - applyForDealership's ok:true response looks
-  // identical either way, so this drives which success message to show
-  // instead of always claiming a fresh email is on its way.
-  const [emailWasSent, setEmailWasSent] = useState(true);
+  // Mirrors the backend's resendReason: "SENT" | "COOLDOWN" |
+  // "LIMIT_REACHED" | "TERMINAL" - applyForDealership's ok:true response
+  // looks identical whether or not a fresh email actually went out, so this
+  // drives which success message to show instead of always claiming one is
+  // on its way.
+  const [resendReason, setResendReason] = useState("SENT");
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
   const [emailTouched, setEmailTouched] = useState(false);
@@ -214,9 +226,9 @@ export default function DealershipRegistrationPage() {
     );
   };
 
-  function triggerSuccess(emailSent = true) {
+  function triggerSuccess(reason = "SENT") {
     setSubmitted(true);
-    setEmailWasSent(emailSent);
+    setResendReason(reason);
     setFormData(initialForm);
     setVisibleOptional({});
     setToastOpen(true);
@@ -291,7 +303,7 @@ export default function DealershipRegistrationPage() {
         notes: compiledNotes,
       });
 
-      triggerSuccess(response?.data?.emailSent !== false);
+      triggerSuccess(response?.data?.resendReason || "SENT");
     } catch (err) {
       setError(getApiErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
@@ -373,13 +385,7 @@ export default function DealershipRegistrationPage() {
                 animate={{ opacity: 1 }}
                 transition={FORM_FADE_TRANSITION}
               >
-                <RegistrationSuccessCard
-                  message={
-                    emailWasSent
-                      ? "Application received. Check your inbox for a confirmation email — click the link to confirm your email before we can review your application."
-                      : "You already have an application on file for this email with a confirmation link already on its way. Check your inbox and spam folder — if it's been a few minutes and you still don't see it, submit again and we'll send a fresh one."
-                  }
-                />
+                <RegistrationSuccessCard message={SUCCESS_MESSAGES[resendReason] || SUCCESS_MESSAGES.SENT} />
               </motion.div>
             ) : (
               <motion.form
