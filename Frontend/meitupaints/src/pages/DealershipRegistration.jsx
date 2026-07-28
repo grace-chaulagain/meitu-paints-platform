@@ -125,6 +125,13 @@ export default function DealershipRegistrationPage() {
   const [formData, setFormData] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Whether the most recent submission actually sent a fresh confirmation
+  // email vs. was a no-op (the applicant already has a pending application
+  // and hit the internal resend cooldown, or their application is already
+  // verified/rejected) - applyForDealership's ok:true response looks
+  // identical either way, so this drives which success message to show
+  // instead of always claiming a fresh email is on its way.
+  const [emailWasSent, setEmailWasSent] = useState(true);
   const [error, setError] = useState("");
   const [visibleOptional, setVisibleOptional] = useState({});
   const [emailTouched, setEmailTouched] = useState(false);
@@ -207,8 +214,9 @@ export default function DealershipRegistrationPage() {
     );
   };
 
-  function triggerSuccess() {
+  function triggerSuccess(emailSent = true) {
     setSubmitted(true);
+    setEmailWasSent(emailSent);
     setFormData(initialForm);
     setVisibleOptional({});
     setToastOpen(true);
@@ -273,7 +281,7 @@ export default function DealershipRegistrationPage() {
         .filter(Boolean)
         .join("");
 
-      await api.post("/api/dealer/apply", {
+      const response = await api.post("/api/dealer/apply", {
         companyName: formData.companyName,
         contactName: formData.contactName,
         phone: formData.phone,
@@ -283,7 +291,7 @@ export default function DealershipRegistrationPage() {
         notes: compiledNotes,
       });
 
-      triggerSuccess();
+      triggerSuccess(response?.data?.emailSent !== false);
     } catch (err) {
       setError(getApiErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
@@ -365,7 +373,13 @@ export default function DealershipRegistrationPage() {
                 animate={{ opacity: 1 }}
                 transition={FORM_FADE_TRANSITION}
               >
-                <RegistrationSuccessCard message="Application received. Check your inbox for a confirmation email — click the link to confirm your email before we can review your application." />
+                <RegistrationSuccessCard
+                  message={
+                    emailWasSent
+                      ? "Application received. Check your inbox for a confirmation email — click the link to confirm your email before we can review your application."
+                      : "You already have an application on file for this email with a confirmation link already on its way. Check your inbox and spam folder — if it's been a few minutes and you still don't see it, submit again and we'll send a fresh one."
+                  }
+                />
               </motion.div>
             ) : (
               <motion.form

@@ -235,7 +235,15 @@ function normalizeOrderForReport(order, dealer = null) {
 // proven for password-setup links.
 
 const EMAIL_VERIFICATION_TTL_MS = 48 * 60 * 60 * 1000; // 48h
-const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+// Only meant to absorb an accidental double-click/double form-submit
+// (network hiccup, double tap) - not to block a genuinely impatient
+// applicant who resubmits a minute later because the first email never
+// showed up. It was previously 60s, which routinely ate a real second
+// attempt: applyForDealership still returned ok:true either way, so the
+// applicant saw the same "check your inbox" success card whether or not
+// anything was actually resent. The real anti-abuse throttle is
+// applicationRateLimit (12/hr/IP) at the route level, not this.
+const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 8 * 1000;
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
@@ -341,6 +349,7 @@ export async function applyForDealership(payload = {}) {
       existing.status === DEALER_APPLICATION_STATUS.REJECTED;
 
     let resentToken;
+    let emailSent = false;
     if (!isTerminal && !existing.emailVerifiedAt) {
       // Applicant likely never got the first email (typo, spam filter) and is
       // retrying - reissue and resend rather than silently no-op'ing, which is
@@ -350,6 +359,7 @@ export async function applyForDealership(payload = {}) {
       const sentAt = existing.emailVerification?.sentAt?.getTime?.() || 0;
       if (Date.now() - sentAt > EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
         resentToken = await issueAndSendDealerEmailVerification(existing);
+        emailSent = true;
       }
     }
 
@@ -358,6 +368,10 @@ export async function applyForDealership(payload = {}) {
       applicationId: existing._id,
       status: existing.status,
       token: IS_PRODUCTION ? undefined : resentToken,
+      // Lets the frontend tell a real resend apart from a no-op (cooldown
+      // hit, already verified/rejected) instead of showing the same
+      // "check your inbox" success card either way.
+      emailSent,
     };
   }
 
@@ -379,6 +393,7 @@ export async function applyForDealership(payload = {}) {
     applicationId: app._id,
     status: app.status,
     token: IS_PRODUCTION ? undefined : rawToken,
+    emailSent: true,
   };
 }
 
