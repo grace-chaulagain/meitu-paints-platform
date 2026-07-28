@@ -224,6 +224,18 @@
     "src": "Realstone/Meitu Real Stone (20L).webp"
   },
   {
+    "id": 28,
+    "name": "Advanced Paint",
+    "category": "Granite (Exterior and Interior)",
+    "rates": {
+      "2D": 225,
+      "Realstone": 240,
+      "3D": 255,
+      "Regular": 130
+    },
+    "src": ""
+  },
+  {
     "id": 26,
     "name": "Meitu Wood Primer + Enamel",
     "category": "Enamel",

@@ -1,15 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import NavBar from "../components/NavBar";
 import paintRates from "../ProductsList/ratesData.json";
 import SYSTEMS from "../ProductsList/ratecalculatorSystems.json";
+import { useMediaQuery } from "../hooks/useMediaQuery.js";
 import {
   ArrowIcon,
   CalculatorIcon,
+  IconShell,
   PaletteIcon,
   ShieldIcon,
   StoreIcon,
 } from "../components/ui/ApplePageIcons.jsx";
+
+const CloseIcon = () => (
+  <IconShell>
+    <path d="M6 6l12 12" />
+    <path d="M18 6L6 18" />
+  </IconShell>
+);
+
+const ChevronDownIcon = () => (
+  <IconShell>
+    <path d="m6 9 6 6 6-6" />
+  </IconShell>
+);
 
 const CATEGORIES = [
   "All",
@@ -37,6 +53,199 @@ function getStartingRate(rates = {}) {
   return values.length ? Math.min(...values) : null;
 }
 
+// iOS-Safari-proof body lock (plain overflow:hidden doesn't stop iOS's
+// touch-scroll chaining) - module-level ref count so two sheets stacking
+// briefly during a close/open handoff never unlock the body prematurely.
+let rateSheetLockCount = 0;
+let rateSheetSavedScrollY = 0;
+
+function useRateSheetScrollLock(active) {
+  useEffect(() => {
+    if (!active) return undefined;
+    if (rateSheetLockCount === 0) {
+      rateSheetSavedScrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${rateSheetSavedScrollY}px`;
+      document.body.style.width = "100%";
+    }
+    rateSheetLockCount++;
+    return () => {
+      rateSheetLockCount--;
+      if (rateSheetLockCount === 0) {
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        window.scrollTo({ top: rateSheetSavedScrollY, left: 0, behavior: "instant" });
+      }
+    };
+  }, [active]);
+}
+
+const SHEET_EXIT_MS = 220;
+const SHEET_VELOCITY_DISMISS = 0.11;
+const SHEET_DISTANCE_DISMISS_RATIO = 0.3;
+const SHEET_RUBBER_BAND_FACTOR = 0.15;
+const SHEET_RUBBER_BAND_MAX_PX = 24;
+
+// Native-feeling bottom sheet: scrim + slide-up panel, drag-to-dismiss on
+// the handle (or the body once scrolled to top, so list-scrolling inside
+// never fights the dismiss gesture), momentum + distance based release
+// per emil-design-eng's gesture guidance. Self-contained (own class names,
+// own hooks) rather than importing the dealer app's MobileSheet - this
+// page has no dependency on the dashboard styling/hooks bundle today and
+// public pages intentionally stay decoupled from role-dashboard code.
+function RateSheet({ open, onClose, title, children }) {
+  const [phase, setPhase] = useState(open ? "open" : "closed");
+  const sheetRef = useRef(null);
+  const scrimRef = useRef(null);
+  const scrollRef = useRef(null);
+  const dragRef = useRef(null);
+  const unmountTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (open) {
+      if (unmountTimerRef.current) {
+        clearTimeout(unmountTimerRef.current);
+        unmountTimerRef.current = null;
+      }
+      if (sheetRef.current) sheetRef.current.style.cssText = "";
+      if (scrimRef.current) scrimRef.current.style.cssText = "";
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPhase("open");
+    } else {
+      setPhase((prev) => {
+        if (prev === "closed") return prev;
+        unmountTimerRef.current = setTimeout(() => setPhase("closed"), SHEET_EXIT_MS);
+        return "closing";
+      });
+    }
+  }, [open]);
+
+  useEffect(() => () => clearTimeout(unmountTimerRef.current), []);
+
+  useRateSheetScrollLock(phase !== "closed");
+
+  function getHeight() {
+    return sheetRef.current?.getBoundingClientRect().height || 1;
+  }
+
+  function onPointerDown(event) {
+    if (event.target.closest?.(".rate-sheet-close")) return;
+    if (dragRef.current) return;
+    const isHandle = Boolean(event.target.closest?.(".rate-sheet-handle"));
+    const atTop = !scrollRef.current || scrollRef.current.scrollTop <= 0;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startTime: Date.now(),
+      atTop,
+      dragging: isHandle,
+      offset: 0,
+    };
+    if (isHandle && sheetRef.current) {
+      sheetRef.current.style.transition = "none";
+    }
+  }
+
+  function onPointerMove(event) {
+    const state = dragRef.current;
+    if (!state || event.pointerId !== state.pointerId) return;
+    const deltaY = event.clientY - state.startY;
+
+    if (!state.dragging) {
+      if (deltaY > 8 && state.atTop) {
+        state.dragging = true;
+        if (sheetRef.current) sheetRef.current.style.transition = "none";
+      } else {
+        return;
+      }
+    }
+
+    const offset =
+      deltaY < 0
+        ? -Math.min(SHEET_RUBBER_BAND_MAX_PX, Math.abs(deltaY) * SHEET_RUBBER_BAND_FACTOR)
+        : deltaY;
+    state.offset = offset;
+    if (sheetRef.current) sheetRef.current.style.transform = `translateY(${offset}px)`;
+    if (scrimRef.current) {
+      const ratio = Math.max(0, Math.min(1, 1 - offset / getHeight()));
+      scrimRef.current.style.opacity = String(ratio);
+    }
+  }
+
+  function onPointerUp(event) {
+    const state = dragRef.current;
+    if (!state || event.pointerId !== state.pointerId) return;
+    dragRef.current = null;
+    if (!state.dragging) return;
+
+    const elapsedMs = Math.max(1, Date.now() - state.startTime);
+    const velocity = Math.abs(state.offset) / elapsedMs;
+    const height = getHeight();
+    const shouldDismiss =
+      state.offset > 0 &&
+      (velocity > SHEET_VELOCITY_DISMISS || state.offset > height * SHEET_DISTANCE_DISMISS_RATIO);
+
+    if (shouldDismiss) {
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = "transform 200ms cubic-bezier(0.23,1,0.32,1)";
+        sheetRef.current.style.transform = `translateY(${height}px)`;
+      }
+      if (scrimRef.current) {
+        scrimRef.current.style.transition = "opacity 200ms cubic-bezier(0.23,1,0.32,1)";
+        scrimRef.current.style.opacity = "0";
+      }
+      setPhase("closed");
+      onClose();
+    } else {
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = "transform 300ms cubic-bezier(0.32,0.72,0,1)";
+        sheetRef.current.style.transform = "translateY(0)";
+      }
+      if (scrimRef.current) {
+        scrimRef.current.style.transition = "opacity 300ms cubic-bezier(0.32,0.72,0,1)";
+        scrimRef.current.style.opacity = "1";
+      }
+    }
+  }
+
+  if (phase === "closed" || typeof document === "undefined") return null;
+
+  const closing = phase === "closing";
+
+  return createPortal(
+    <div
+      ref={scrimRef}
+      className={`rate-sheet-scrim ${closing ? "closing" : ""}`}
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div
+        ref={sheetRef}
+        className={`rate-sheet ${closing ? "closing" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <div className="rate-sheet-handle" />
+        <div className="rate-sheet-head">
+          <strong>{title}</strong>
+          <button type="button" className="rate-sheet-close" onClick={onClose} aria-label="Close">
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="rate-sheet-scroll" ref={scrollRef}>
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function normalizeAreaValue(value) {
   if (value === "") return "";
   const next = Number(value);
@@ -52,6 +261,9 @@ export default function RateCalculator() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [activeProductId, setActiveProductId] = useState(null);
   const [activeSystemKey, setActiveSystemKey] = useState("");
+  const [productSheetOpen, setProductSheetOpen] = useState(false);
+  const [systemSheetOpen, setSystemSheetOpen] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 720px)");
 
   const activeProduct = useMemo(
     () => paintRates.find((product) => product.id === activeProductId) || null,
@@ -137,6 +349,22 @@ export default function RateCalculator() {
     if (["-", "+", "e", "E"].includes(event.key)) {
       event.preventDefault();
     }
+  };
+
+  const selectProduct = (product) => {
+    setActiveProductId(product.id);
+    setActiveSystemKey("");
+    setProductSheetOpen(false);
+    // Auto-advance to the system sheet if there's more than one option -
+    // one fewer deliberate tap for the common case, still lets a
+    // single-system product just land on the field row untouched.
+    const nextAvailable = SYSTEMS.filter((system) => product.rates?.[system.key] != null);
+    if (nextAvailable.length > 1) setSystemSheetOpen(true);
+  };
+
+  const selectSystem = (system) => {
+    setActiveSystemKey(system.key);
+    setSystemSheetOpen(false);
   };
 
   return (
@@ -236,204 +464,404 @@ export default function RateCalculator() {
             </span>
           </header>
 
-          <div className="rate-layout">
-            <section className="rate-catalog-panel" aria-label="Product catalog">
-              <div className="rate-section">
-                <div className="rate-section-title">
-                  <PaletteIcon />
-                  <span>Filter catalog</span>
+          {!isMobile ? (
+            <div className="rate-layout">
+              <section className="rate-catalog-panel" aria-label="Product catalog">
+                <div className="rate-section">
+                  <div className="rate-section-title">
+                    <PaletteIcon />
+                    <span>Filter catalog</span>
+                  </div>
+                  <div className="rate-segments">
+                    {categoryStats.map((category) => {
+                      const active = category.value === activeCategory;
+                      return (
+                        <button
+                          key={category.value}
+                          type="button"
+                          className={active ? "active" : ""}
+                          onClick={() => {
+                            setActiveCategory(category.value);
+                            setActiveProductId(null);
+                            setActiveSystemKey("");
+                          }}
+                        >
+                          <span>{category.label}</span>
+                          <b>{category.count}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="rate-segments">
-                  {categoryStats.map((category) => {
-                    const active = category.value === activeCategory;
-                    return (
-                      <button
-                        key={category.value}
-                        type="button"
-                        className={active ? "active" : ""}
-                        onClick={() => {
-                          setActiveCategory(category.value);
-                          setActiveProductId(null);
-                          setActiveSystemKey("");
-                        }}
-                      >
-                        <span>{category.label}</span>
-                        <b>{category.count}</b>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
-              <div className="rate-section">
-                <div className="rate-guide" aria-label="Estimate calculation steps">
-                  <span>
-                    <b>1</b>
-                    Add area
-                  </span>
-                  <span>
-                    <b>2</b>
-                    Select product
-                  </span>
-                  <span>
-                    <b>3</b>
-                    Select system
-                  </span>
+                <div className="rate-section">
+                  <div className="rate-guide" aria-label="Estimate calculation steps">
+                    <span>
+                      <b>1</b>
+                      Add area
+                    </span>
+                    <span>
+                      <b>2</b>
+                      Select product
+                    </span>
+                    <span>
+                      <b>3</b>
+                      Select system
+                    </span>
+                  </div>
+                  <div className="rate-section-title">
+                    <StoreIcon />
+                    <span>Select product</span>
+                    <small>{visibleProducts.length} options</small>
+                  </div>
+                  <div className="rate-product-grid">
+                    {visibleProducts.map((product) => {
+                      const active = product.id === activeProductId;
+                      const productStartingRate = getStartingRate(product.rates);
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className={`rate-product-card ${active ? "active" : ""}`}
+                          onClick={() => {
+                            setActiveProductId(product.id);
+                            setActiveSystemKey("");
+                          }}
+                        >
+                          <span className="rate-product-thumb">
+                            {product.src ? (
+                              <img
+                                src={assetPath(product.src)}
+                                alt=""
+                                loading="lazy"
+                              />
+                            ) : null}
+                          </span>
+                          <span>
+                            <small>{product.category}</small>
+                            <strong>{product.name}</strong>
+                            <em>
+                              {productStartingRate != null
+                                ? `From Rs.${productStartingRate}/sqft`
+                                : "Rate pending"}
+                            </em>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="rate-section-title">
-                  <StoreIcon />
-                  <span>Select product</span>
-                  <small>{visibleProducts.length} options</small>
-                </div>
-                <div className="rate-product-grid">
-                  {visibleProducts.map((product) => {
-                    const active = product.id === activeProductId;
-                    const productStartingRate = getStartingRate(product.rates);
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        className={`rate-product-card ${active ? "active" : ""}`}
-                        onClick={() => {
-                          setActiveProductId(product.id);
-                          setActiveSystemKey("");
-                        }}
-                      >
-                        <span className="rate-product-thumb">
-                          {product.src ? (
-                            <img
-                              src={assetPath(product.src)}
-                              alt=""
-                              loading="lazy"
-                            />
-                          ) : null}
-                        </span>
-                        <span>
-                          <small>{product.category}</small>
-                          <strong>{product.name}</strong>
-                          <em>
-                            {productStartingRate != null
-                              ? `From Rs.${productStartingRate}/sqft`
-                              : "Rate pending"}
-                          </em>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
+              </section>
 
-            <aside className="rate-estimate-panel">
-              <div className="rate-estimate-card">
-                <section className="rate-system-panel" aria-label="System selection">
-                  <div className="rate-input-card">
-                    <div>
+              <aside className="rate-estimate-panel">
+                <div className="rate-estimate-card">
+                  <section className="rate-system-panel" aria-label="System selection">
+                    <div className="rate-input-card">
+                      <div>
+                        <CalculatorIcon />
+                        <label htmlFor="rate-area">Add area</label>
+                      </div>
+                      <div className="rate-stepper" role="group" aria-label="Area stepper">
+                        <button
+                          type="button"
+                          aria-label="Decrease area"
+                          onClick={() => stepArea(-AREA_STEP)}
+                          disabled={!area || Number(area) <= 0}
+                        >
+                          -
+                        </button>
+                        <input
+                          id="rate-area"
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          step={AREA_STEP}
+                          placeholder="e.g. 1200"
+                          value={area}
+                          onKeyDown={preventNegativeAreaInput}
+                          onChange={(event) => updateArea(event.target.value)}
+                          onBlur={(event) => updateArea(event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          aria-label="Increase area"
+                          onClick={() => stepArea(AREA_STEP)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rate-section">
+                      <div className="rate-section-title">
+                        <ShieldIcon />
+                        <span>Select system</span>
+                      </div>
+                      {activeProduct ? (
+                        <div className="rate-system-grid">
+                          {availableSystems.map((system) => {
+                            const active = system.key === activeSystemKey;
+                            const price = activeProduct.rates[system.key];
+                            return (
+                              <button
+                                key={system.key}
+                                type="button"
+                                className={`rate-system-card ${active ? "active" : ""}`}
+                                onClick={() => setActiveSystemKey(system.key)}
+                              >
+                                <span>
+                                  <strong>{system.title}</strong>
+                                </span>
+                                <b>Rs.{price}/sqft</b>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rate-empty">
+                          Choose a product from the catalog to reveal compatible
+                          systems.
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="rate-view-button"
+                      disabled={!canCalculate}
+                      onClick={scrollResult}
+                    >
+                      {canCalculate
+                        ? "View estimate"
+                        : "Enter area, product, and system"}
+                      <ArrowIcon />
+                    </button>
+                  </section>
+
+                  <section
+                    className="rate-result-card"
+                    ref={resultRef}
+                    aria-label="Total price preview"
+                  >
+                    <div className="rate-result-head">
                       <CalculatorIcon />
-                      <label htmlFor="rate-area">Add area</label>
+                      <span>Total price</span>
                     </div>
-                    <div className="rate-stepper" role="group" aria-label="Area stepper">
-                      <button
-                        type="button"
-                        aria-label="Decrease area"
-                        onClick={() => stepArea(-AREA_STEP)}
-                        disabled={!area || Number(area) <= 0}
-                      >
-                        -
-                      </button>
-                      <input
-                        id="rate-area"
-                        type="number"
-                        inputMode="numeric"
-                        min="0"
-                        step={AREA_STEP}
-                        placeholder="e.g. 1200"
-                        value={area}
-                        onKeyDown={preventNegativeAreaInput}
-                        onChange={(event) => updateArea(event.target.value)}
-                        onBlur={(event) => updateArea(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        aria-label="Increase area"
-                        onClick={() => stepArea(AREA_STEP)}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
+                    <strong>
+                      {total != null ? `Rs. ${total.toLocaleString()}` : "Rs. 0"}
+                    </strong>
+                    <p>
+                      Final quotation may vary by surface condition, application
+                      method, and site requirement.
+                    </p>
+                    <Link to="/inquiry" className="rate-inquiry-link">
+                      Request confirmed quotation <ArrowIcon />
+                    </Link>
+                  </section>
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <div className="rate-mobile-flow">
+              <div className="rate-mobile-categories" aria-label="Filter catalog">
+                {categoryStats.map((category) => {
+                  const active = category.value === activeCategory;
+                  return (
+                    <button
+                      key={category.value}
+                      type="button"
+                      className={active ? "active" : ""}
+                      onClick={() => {
+                        setActiveCategory(category.value);
+                        setActiveProductId(null);
+                        setActiveSystemKey("");
+                      }}
+                    >
+                      {category.label}
+                      <b>{category.count}</b>
+                    </button>
+                  );
+                })}
+              </div>
 
-                  <div className="rate-section">
-                    <div className="rate-section-title">
-                      <ShieldIcon />
-                      <span>Select system</span>
-                    </div>
-                    {activeProduct ? (
-                      <div className="rate-system-grid">
-                        {availableSystems.map((system) => {
-                          const active = system.key === activeSystemKey;
-                          const price = activeProduct.rates[system.key];
-                          return (
-                            <button
-                              key={system.key}
-                              type="button"
-                              className={`rate-system-card ${active ? "active" : ""}`}
-                              onClick={() => setActiveSystemKey(system.key)}
-                            >
-                              <span>
-                                <strong>{system.title}</strong>
-                              </span>
-                              <b>Rs.{price}/sqft</b>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="rate-empty">
-                        Choose a product from the catalog to reveal compatible
-                        systems.
-                      </div>
-                    )}
-                  </div>
-
+              <div className="rate-input-card">
+                <div>
+                  <CalculatorIcon />
+                  <label htmlFor="rate-area-mobile">Add area</label>
+                </div>
+                <div className="rate-stepper" role="group" aria-label="Area stepper">
                   <button
                     type="button"
-                    className="rate-view-button"
-                    disabled={!canCalculate}
-                    onClick={scrollResult}
+                    aria-label="Decrease area"
+                    onClick={() => stepArea(-AREA_STEP)}
+                    disabled={!area || Number(area) <= 0}
                   >
-                    {canCalculate
-                      ? "View estimate"
-                      : "Enter area, product, and system"}
-                    <ArrowIcon />
+                    -
                   </button>
-                </section>
-
-                <section
-                  className="rate-result-card"
-                  ref={resultRef}
-                  aria-label="Total price preview"
-                >
-                  <div className="rate-result-head">
-                    <CalculatorIcon />
-                    <span>Total price</span>
-                  </div>
-                  <strong>
-                    {total != null ? `Rs. ${total.toLocaleString()}` : "Rs. 0"}
-                  </strong>
-                  <p>
-                    Final quotation may vary by surface condition, application
-                    method, and site requirement.
-                  </p>
-                  <Link to="/inquiry" className="rate-inquiry-link">
-                    Request confirmed quotation <ArrowIcon />
-                  </Link>
-                </section>
+                  <input
+                    id="rate-area-mobile"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    step={AREA_STEP}
+                    placeholder="e.g. 1200"
+                    value={area}
+                    onKeyDown={preventNegativeAreaInput}
+                    onChange={(event) => updateArea(event.target.value)}
+                    onBlur={(event) => updateArea(event.target.value)}
+                  />
+                  <button type="button" aria-label="Increase area" onClick={() => stepArea(AREA_STEP)}>
+                    +
+                  </button>
+                </div>
               </div>
-            </aside>
-          </div>
+
+              <button
+                type="button"
+                className="rate-mobile-field"
+                onClick={() => setProductSheetOpen(true)}
+              >
+                <span className="rate-mobile-field-icon">
+                  <StoreIcon />
+                </span>
+                <span className="rate-mobile-field-copy">
+                  <small>Product</small>
+                  <strong>{activeProduct ? activeProduct.name : "Choose a product"}</strong>
+                </span>
+                <ChevronDownIcon />
+              </button>
+
+              <button
+                type="button"
+                className="rate-mobile-field"
+                disabled={!activeProduct}
+                onClick={() => setSystemSheetOpen(true)}
+              >
+                <span className="rate-mobile-field-icon">
+                  <ShieldIcon />
+                </span>
+                <span className="rate-mobile-field-copy">
+                  <small>System</small>
+                  <strong>{selectedSystem ? selectedSystem.title : "Choose a system"}</strong>
+                </span>
+                <ChevronDownIcon />
+              </button>
+
+              <section
+                className="rate-result-card"
+                ref={resultRef}
+                aria-label="Total price preview"
+              >
+                <div className="rate-result-head">
+                  <CalculatorIcon />
+                  <span>Total price</span>
+                </div>
+                <strong>
+                  {total != null ? `Rs. ${total.toLocaleString()}` : "Rs. 0"}
+                </strong>
+                <p>
+                  Final quotation may vary by surface condition, application
+                  method, and site requirement.
+                </p>
+                <Link to="/inquiry" className="rate-inquiry-link">
+                  Request confirmed quotation <ArrowIcon />
+                </Link>
+              </section>
+
+              {/* Bottom padding so the sticky summary bar never overlaps the
+                  result card's own content while scrolled to the very end. */}
+              <div className="rate-mobile-bar-spacer" aria-hidden="true" />
+            </div>
+          )}
         </section>
       </main>
+
+      {isMobile ? (
+        <div className={`rate-mobile-bar ${canCalculate ? "" : "muted"}`}>
+          <div className="rate-mobile-bar-copy">
+            <small>{canCalculate ? "Estimated total" : "Add area, product & system"}</small>
+            <strong>{total != null ? `Rs. ${total.toLocaleString()}` : "Rs. 0"}</strong>
+          </div>
+          <button type="button" onClick={scrollResult} disabled={!canCalculate}>
+            View
+            <ArrowIcon />
+          </button>
+        </div>
+      ) : null}
+
+      <RateSheet open={productSheetOpen} onClose={() => setProductSheetOpen(false)} title="Select product">
+        <div className="rate-sheet-categories" aria-label="Filter catalog">
+          {categoryStats.map((category) => {
+            const active = category.value === activeCategory;
+            return (
+              <button
+                key={category.value}
+                type="button"
+                className={active ? "active" : ""}
+                onClick={() => {
+                  setActiveCategory(category.value);
+                  setActiveProductId(null);
+                  setActiveSystemKey("");
+                }}
+              >
+                {category.label}
+                <b>{category.count}</b>
+              </button>
+            );
+          })}
+        </div>
+        <div className="rate-product-grid rate-sheet-product-grid">
+          {visibleProducts.map((product) => {
+            const active = product.id === activeProductId;
+            const productStartingRate = getStartingRate(product.rates);
+            return (
+              <button
+                key={product.id}
+                type="button"
+                className={`rate-product-card ${active ? "active" : ""}`}
+                onClick={() => selectProduct(product)}
+              >
+                <span className="rate-product-thumb">
+                  {product.src ? <img src={assetPath(product.src)} alt="" loading="lazy" /> : null}
+                </span>
+                <span>
+                  <small>{product.category}</small>
+                  <strong>{product.name}</strong>
+                  <em>
+                    {productStartingRate != null ? `From Rs.${productStartingRate}/sqft` : "Rate pending"}
+                  </em>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </RateSheet>
+
+      <RateSheet open={systemSheetOpen} onClose={() => setSystemSheetOpen(false)} title="Select system">
+        {activeProduct ? (
+          <div className="rate-system-grid rate-sheet-system-grid">
+            {availableSystems.map((system) => {
+              const active = system.key === activeSystemKey;
+              const price = activeProduct.rates[system.key];
+              return (
+                <button
+                  key={system.key}
+                  type="button"
+                  className={`rate-system-card ${active ? "active" : ""}`}
+                  onClick={() => selectSystem(system)}
+                >
+                  <span>
+                    <strong>{system.title}</strong>
+                  </span>
+                  <b>Rs.{price}/sqft</b>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rate-empty">Choose a product first to see its systems.</div>
+        )}
+      </RateSheet>
 
       <style>{`
         .apple-rate-page {
@@ -1423,6 +1851,390 @@ export default function RateCalculator() {
             height: 58px;
             flex-basis: 58px;
             border-radius: 18px;
+          }
+        }
+
+        /* ---------------------------------------
+           Mobile flow (<=720px) - field rows that open bottom sheets
+           instead of the desktop's long inline grids, plus a sticky
+           summary bar so the live total is never scrolled out of view.
+        ---------------------------------------- */
+
+        .rate-mobile-flow {
+          display: grid;
+          gap: 12px;
+        }
+
+        .rate-mobile-categories {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 2px;
+        }
+
+        .rate-mobile-categories::-webkit-scrollbar {
+          display: none;
+        }
+
+        .rate-mobile-categories button {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          min-height: 38px;
+          border: 0;
+          border-radius: 999px;
+          padding: 8px 14px;
+          background: var(--apple-control-frost, rgba(210,210,215,.64));
+          color: var(--color-ink, #1d1d1f);
+          font: inherit;
+          font-size: 13.5px;
+          font-weight: 500;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: background-color .16s ease, color .16s ease;
+        }
+
+        .rate-mobile-categories button.active {
+          background: var(--color-ink, #1d1d1f);
+          color: #fff;
+        }
+
+        .rate-mobile-categories button b {
+          min-width: 20px;
+          min-height: 18px;
+          display: inline-grid;
+          place-items: center;
+          border-radius: 999px;
+          background: rgba(255,255,255,.72);
+          color: inherit;
+          font-size: 11px;
+        }
+
+        .rate-mobile-categories button.active b {
+          background: rgba(255,255,255,.18);
+        }
+
+        .rate-mobile-field {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          min-height: 66px;
+          border: 1px solid var(--color-silver-mist, #e8e8ed);
+          border-radius: 20px;
+          background: #fff;
+          padding: 12px 16px;
+          text-align: left;
+          font: inherit;
+          cursor: pointer;
+          transition: border-color .16s ease, transform .12s ease;
+        }
+
+        .rate-mobile-field:active:not(:disabled) {
+          transform: scale(.98);
+        }
+
+        .rate-mobile-field:disabled {
+          opacity: .48;
+          cursor: not-allowed;
+        }
+
+        .rate-mobile-field-icon {
+          width: 40px;
+          height: 40px;
+          flex: 0 0 40px;
+          display: grid;
+          place-items: center;
+          border-radius: 14px;
+          background: var(--color-fog, #f5f5f7);
+          color: var(--color-graphite, #707070);
+        }
+
+        .rate-mobile-field-icon svg {
+          width: 18px;
+          height: 18px;
+        }
+
+        .rate-mobile-field-copy {
+          flex: 1 1 auto;
+          min-width: 0;
+          display: grid;
+          gap: 2px;
+        }
+
+        .rate-mobile-field-copy small {
+          color: var(--color-graphite, #707070);
+          font-size: 11.5px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: .05em;
+        }
+
+        .rate-mobile-field-copy strong {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 15.5px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .rate-mobile-field > svg {
+          flex: 0 0 auto;
+          width: 17px;
+          height: 17px;
+          color: var(--color-graphite, #707070);
+        }
+
+        .rate-mobile-bar-spacer {
+          height: 82px;
+        }
+
+        .rate-mobile-bar {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 60;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 12px max(18px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+          background: rgba(255,255,255,.86);
+          backdrop-filter: blur(22px);
+          border-top: 1px solid var(--color-silver-mist, #e8e8ed);
+        }
+
+        .rate-mobile-bar-copy {
+          min-width: 0;
+          display: grid;
+          gap: 2px;
+        }
+
+        .rate-mobile-bar-copy small {
+          color: var(--color-graphite, #707070);
+          font-size: 11.5px;
+          font-weight: 600;
+        }
+
+        .rate-mobile-bar-copy strong {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 21px;
+          font-weight: 700;
+          letter-spacing: -0.03em;
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .rate-mobile-bar.muted .rate-mobile-bar-copy strong {
+          color: var(--color-graphite, #707070);
+        }
+
+        .rate-mobile-bar button {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 46px;
+          border: 0;
+          border-radius: 999px;
+          padding: 0 22px;
+          background: var(--apple-control-blue, #0071e3);
+          color: #fff;
+          font: inherit;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform .12s ease, opacity .12s ease;
+        }
+
+        .rate-mobile-bar button:active:not(:disabled) {
+          transform: scale(.96);
+        }
+
+        .rate-mobile-bar button:disabled {
+          opacity: .42;
+          cursor: not-allowed;
+        }
+
+        .rate-mobile-bar button svg {
+          width: 15px;
+          height: 15px;
+        }
+
+        /* ---------------------------------------
+           Bottom sheet (product/system pickers)
+        ---------------------------------------- */
+
+        .rate-sheet-scrim {
+          position: fixed;
+          inset: 0;
+          z-index: 200;
+          display: flex;
+          align-items: flex-end;
+          background: rgba(0,0,0,.34);
+          opacity: 1;
+          transition: opacity 220ms ease;
+        }
+
+        .rate-sheet-scrim.closing {
+          opacity: 0;
+        }
+
+        .rate-sheet {
+          width: 100%;
+          max-height: min(82vh, 640px);
+          display: flex;
+          flex-direction: column;
+          border-radius: 28px 28px 0 0;
+          background: #fff;
+          box-shadow: 0 -20px 60px rgba(0,0,0,.18);
+          padding-bottom: env(safe-area-inset-bottom);
+          animation: rate-sheet-in 320ms cubic-bezier(0.32,0.72,0,1) both;
+        }
+
+        .rate-sheet.closing {
+          animation: rate-sheet-out 200ms cubic-bezier(0.23,1,0.32,1) both;
+        }
+
+        @keyframes rate-sheet-in {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+
+        @keyframes rate-sheet-out {
+          from { transform: translateY(0); }
+          to { transform: translateY(100%); }
+        }
+
+        .rate-sheet-handle {
+          width: 40px;
+          height: 4px;
+          flex: 0 0 auto;
+          margin: 10px auto 2px;
+          border-radius: 999px;
+          background: rgba(29,29,31,.16);
+          touch-action: none;
+        }
+
+        .rate-sheet-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex: 0 0 auto;
+          padding: 10px 20px 14px;
+        }
+
+        .rate-sheet-head strong {
+          font-family: var(--font-sf-pro-display, Inter, system-ui, sans-serif);
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: var(--color-ink, #1d1d1f);
+        }
+
+        .rate-sheet-close {
+          width: 30px;
+          height: 30px;
+          flex: 0 0 auto;
+          display: grid;
+          place-items: center;
+          border: 0;
+          border-radius: 999px;
+          background: var(--color-fog, #f5f5f7);
+          color: var(--color-graphite, #707070);
+          cursor: pointer;
+        }
+
+        .rate-sheet-close svg {
+          width: 14px;
+          height: 14px;
+        }
+
+        .rate-sheet-scroll {
+          flex: 1 1 auto;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          padding: 0 20px calc(20px + env(safe-area-inset-bottom));
+        }
+
+        .rate-sheet-categories {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          scrollbar-width: none;
+          padding-bottom: 14px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid var(--color-silver-mist, #e8e8ed);
+        }
+
+        .rate-sheet-categories::-webkit-scrollbar {
+          display: none;
+        }
+
+        .rate-sheet-categories button {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 36px;
+          border: 0;
+          border-radius: 999px;
+          padding: 7px 13px;
+          background: var(--color-fog, #f5f5f7);
+          color: var(--color-ink, #1d1d1f);
+          font: inherit;
+          font-size: 13px;
+          font-weight: 500;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+
+        .rate-sheet-categories button.active {
+          background: var(--color-ink, #1d1d1f);
+          color: #fff;
+        }
+
+        .rate-sheet-categories button b {
+          min-width: 18px;
+          min-height: 16px;
+          display: inline-grid;
+          place-items: center;
+          border-radius: 999px;
+          background: rgba(255,255,255,.72);
+          font-size: 10px;
+        }
+
+        .rate-sheet-categories button.active b {
+          background: rgba(255,255,255,.18);
+        }
+
+        .rate-sheet-product-grid,
+        .rate-sheet-system-grid {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          padding: 14px 0 8px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .rate-sheet,
+          .rate-sheet.closing,
+          .rate-sheet-scrim,
+          .rate-mobile-field,
+          .rate-mobile-bar button {
+            animation: none !important;
+            transition: none !important;
           }
         }
       `}</style>

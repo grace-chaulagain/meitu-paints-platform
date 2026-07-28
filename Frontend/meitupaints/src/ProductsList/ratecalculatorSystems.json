@@ -38,5 +38,25 @@
     "key": "putting + 3 in one color + Operatives",
     "title": "putting + 3 in one color + Operatives",
     "desc": "putting + 3 in one color + Operatives"
+  },
+  {
+    "key": "2D",
+    "title": "2D",
+    "desc": "2D finish system"
+  },
+  {
+    "key": "3D",
+    "title": "3D",
+    "desc": "3D finish system"
+  },
+  {
+    "key": "Realstone",
+    "title": "Realstone",
+    "desc": "Realstone finish system"
+  },
+  {
+    "key": "Regular",
+    "title": "Regular",
+    "desc": "Regular finish system"
   }
 ]
