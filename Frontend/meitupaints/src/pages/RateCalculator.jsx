@@ -35,6 +35,7 @@ const CATEGORIES = [
   "Specialty",
   "RealStone",
   "Enamel",
+  "Advanced Paint",
 ];
 
 const AREA_STEP = 50;
