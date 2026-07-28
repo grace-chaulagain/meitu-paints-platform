@@ -24,7 +24,7 @@ import {
 import { auth } from "../middlewares/auth.middleware.js";
 import {
   applicationRateLimit,
-  passwordResetRateLimit,
+  dealerApplicationEmailRateLimit,
   publicReadRateLimit,
 } from "../middlewares/rateLimit.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
@@ -54,13 +54,13 @@ router.post(
 );
 router.post(
   "/dealer/verify-email",
-  passwordResetRateLimit,
+  dealerApplicationEmailRateLimit,
   validateBody(dealerEmailVerificationBodySchema),
   verifyDealerEmailController,
 );
 router.post(
   "/dealer/resend-verification-email",
-  passwordResetRateLimit,
+  dealerApplicationEmailRateLimit,
   validateBody(dealerResendVerificationBodySchema),
   resendDealerVerificationController,
 );

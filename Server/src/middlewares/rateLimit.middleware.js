@@ -57,6 +57,27 @@ export const passwordTokenStatusRateLimit = rateLimit({
   ),
 });
 
+// Dealer application email confirmation (verify-email / resend-verification-
+// email) - conceptually unrelated to the account password-reset/setup flow
+// above (a brand-new applicant has no account or password yet), so it must
+// not share that flow's tight bucket. It previously did, and a dealer
+// clicking their second confirmation email could get "Too many password
+// reset attempts" purely because of shared-IP budget from an entirely
+// different feature. The real per-application throttle now lives in
+// dealer.service.js's issueAndSendDealerEmailVerification (max 3 sends per
+// rolling hour per application) - this is just the IP-level backstop, kept
+// generous since the token itself (a 32-byte random hex string) is the real
+// defense against guessing.
+export const dealerApplicationEmailRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitResponse(
+    "Too many attempts. Please wait a moment and try again.",
+  ),
+});
+
 export const changePasswordRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 10,

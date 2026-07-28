@@ -291,22 +291,40 @@ function dealerEmailConfirmationTemplate({ token, companyName }) {
   return { subject, text, html };
 }
 
-// Persists a fresh token before attempting the send, so a failed send still
-// leaves the application in a resendable state (no transaction needed - the
-// worst case is a resubmit/resend re-triggers this from scratch).
+// Single source of truth for "should a confirmation email actually go out
+// right now" - both callers (applyForDealership's resubmit branch, and the
+// separate resendDealerApplicationVerification endpoint) route through this
+// so the double-click cooldown and the 3-per-hour cap apply consistently no
+// matter which UI path triggered the resend. Persists a fresh token before
+// attempting the send, so a failed send still leaves the application in a
+// resendable state (no transaction needed - the worst case is a resubmit/
+// resend re-triggers this from scratch).
+// Returns { sent, reason, token } - reason is one of SENT/COOLDOWN/
+// LIMIT_REACHED. For a brand-new application (no emailVerification yet)
+// both guards trivially pass, so this doubles as the fresh-send path too.
 async function issueAndSendDealerEmailVerification(app) {
-  const rawToken = crypto.randomBytes(32).toString("hex");
   const now = Date.now();
+  const ev = app.emailVerification || {};
 
-  const previousWindowStart = app.emailVerification?.windowStartedAt?.getTime?.() || 0;
+  const sentAt = ev.sentAt?.getTime?.() || 0;
+  if (now - sentAt < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+    return { sent: false, reason: "COOLDOWN", token: null };
+  }
+
+  const previousWindowStart = ev.windowStartedAt?.getTime?.() || 0;
   const windowExpired = !previousWindowStart || now - previousWindowStart >= EMAIL_SEND_WINDOW_MS;
+  const sendsUsed = windowExpired ? 0 : ev.resendCount || 0;
+  if (sendsUsed >= MAX_EMAIL_SENDS_PER_WINDOW) {
+    return { sent: false, reason: "LIMIT_REACHED", token: null };
+  }
 
+  const rawToken = crypto.randomBytes(32).toString("hex");
   app.emailVerification = {
     tokenHash: hashToken(rawToken),
     expiresAt: new Date(now + EMAIL_VERIFICATION_TTL_MS),
     sentAt: new Date(now),
-    windowStartedAt: windowExpired ? new Date(now) : app.emailVerification.windowStartedAt,
-    resendCount: windowExpired ? 1 : (app.emailVerification?.resendCount || 0) + 1,
+    windowStartedAt: windowExpired ? new Date(now) : ev.windowStartedAt,
+    resendCount: sendsUsed + 1,
   };
   app.emailVerifiedAt = null;
   await app.save();
@@ -322,7 +340,7 @@ async function issueAndSendDealerEmailVerification(app) {
     await sendMail({ to: app.email, subject, text, html });
   }
 
-  return rawToken;
+  return { sent: true, reason: "SENT", token: rawToken };
 }
 
 // ----------------------------
@@ -365,47 +383,26 @@ export async function applyForDealership(payload = {}) {
       existing.status === DEALER_APPLICATION_STATUS.VERIFIED ||
       existing.status === DEALER_APPLICATION_STATUS.REJECTED;
 
-    let resentToken;
-    let emailSent = false;
-    // One of: SENT, TERMINAL (already verified/rejected - nothing to
-    // resend), COOLDOWN (near-instant double-submit), LIMIT_REACHED (used
-    // up all MAX_EMAIL_SENDS_PER_WINDOW sends for the current window) -
-    // lets the frontend show an accurate reason instead of a blanket
-    // "check your inbox" either way.
-    let resendReason = "TERMINAL";
-
-    if (!isTerminal && !existing.emailVerifiedAt) {
-      // Applicant likely never got the first email (typo, spam filter) and is
-      // retrying - reissue and resend rather than silently no-op'ing, which is
-      // the whole point of this feature. Small cooldown guards against a
-      // double-submit double-firing the send; applicationRateLimit (12/hr/IP
-      // at the route level) is the primary throttle on top.
-      const sentAt = existing.emailVerification?.sentAt?.getTime?.() || 0;
-      const withinDoubleClickCooldown = Date.now() - sentAt < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS;
-
-      const windowStartedAt = existing.emailVerification?.windowStartedAt?.getTime?.() || 0;
-      const windowActive = windowStartedAt && Date.now() - windowStartedAt < EMAIL_SEND_WINDOW_MS;
-      const sendsUsed = existing.emailVerification?.resendCount || 0;
-      const limitReached = windowActive && sendsUsed >= MAX_EMAIL_SENDS_PER_WINDOW;
-
-      if (withinDoubleClickCooldown) {
-        resendReason = "COOLDOWN";
-      } else if (limitReached) {
-        resendReason = "LIMIT_REACHED";
-      } else {
-        resentToken = await issueAndSendDealerEmailVerification(existing);
-        emailSent = true;
-        resendReason = "SENT";
-      }
-    }
+    // Applicant likely never got the first email (typo, spam filter) and is
+    // retrying - reissue and resend rather than silently no-op'ing, which is
+    // the whole point of this feature. issueAndSendDealerEmailVerification
+    // itself enforces the double-click cooldown and the 3-per-hour cap (one
+    // of: SENT, COOLDOWN, LIMIT_REACHED) so this stays accurate no matter
+    // which UI path (this resubmit, or the separate resend-verification-
+    // email endpoint) triggered it. TERMINAL covers an already-verified/
+    // rejected application - there's nothing left to resend.
+    const result =
+      !isTerminal && !existing.emailVerifiedAt
+        ? await issueAndSendDealerEmailVerification(existing)
+        : { sent: false, reason: "TERMINAL", token: null };
 
     return {
       ok: true,
       applicationId: existing._id,
       status: existing.status,
-      token: IS_PRODUCTION ? undefined : resentToken,
-      emailSent,
-      resendReason,
+      token: IS_PRODUCTION ? undefined : result.token,
+      emailSent: result.sent,
+      resendReason: result.reason,
     };
   }
 
@@ -420,14 +417,15 @@ export async function applyForDealership(payload = {}) {
     status: DEALER_APPLICATION_STATUS.PENDING,
   });
 
-  const rawToken = await issueAndSendDealerEmailVerification(app);
+  const result = await issueAndSendDealerEmailVerification(app);
 
   return {
     ok: true,
     applicationId: app._id,
     status: app.status,
-    token: IS_PRODUCTION ? undefined : rawToken,
-    emailSent: true,
+    token: IS_PRODUCTION ? undefined : result.token,
+    emailSent: result.sent,
+    resendReason: result.reason,
   };
 }
 
@@ -495,6 +493,11 @@ export async function resendDealerApplicationVerification({ email }) {
   }).sort({ createdAt: -1 });
 
   if (app) {
+    // Return value intentionally discarded - this endpoint stays neutral
+    // either way (see NEUTRAL_RESEND_RESPONSE below) so it can't be used to
+    // enumerate which emails have a pending application. The cooldown/cap
+    // enforcement inside issueAndSendDealerEmailVerification still applies
+    // regardless of whether the caller looks at the result.
     await issueAndSendDealerEmailVerification(app);
   }
 
