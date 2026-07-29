@@ -12,7 +12,7 @@ const MEITU_PAN = "606572561";
 // instead of needing each wrapped-line count computed and accounted for by
 // hand.
 const styles = StyleSheet.create({
-  page: { padding: 36, fontFamily: "Helvetica", fontSize: 10, color: "#111111" },
+  page: { padding: 36, fontFamily: "Helvetica", fontSize: 10, color: "#000000" },
   header: { textAlign: "center", alignItems: "center", position: "relative" },
   logo: { marginBottom: 6 },
   serialWatermark: {
@@ -21,7 +21,7 @@ const styles = StyleSheet.create({
     left: 0,
     fontSize: 8.5,
     fontWeight: 700,
-    color: "#555555",
+    color: "#000000",
     letterSpacing: 0.5,
   },
   panLabel: {
@@ -30,26 +30,26 @@ const styles = StyleSheet.create({
     right: 0,
     fontSize: 8.5,
     fontWeight: 700,
-    color: "#555555",
+    color: "#000000",
   },
   companyName: { fontSize: 16, fontWeight: 700 },
-  companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: "#444444" },
+  companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: "#000000" },
   docTitle: { marginTop: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
-  infoSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: "#dddddd" },
+  infoSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: "#000000" },
   infoRow: { flexDirection: "row", gap: 18 },
   infoColLeft: { flex: 1.3 },
   infoColRight: { flex: 1 },
   infoLine: { flexDirection: "row", marginBottom: 6 },
-  infoLabel: { width: 92, fontSize: 8.5, color: "#666666" },
+  infoLabel: { width: 92, fontSize: 8.5, color: "#000000" },
   infoValue: { fontSize: 9.5, fontWeight: 700, flex: 1 },
   driverLine: {
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#dddddd",
+    borderTopColor: "#000000",
     borderTopStyle: "dashed",
     fontSize: 8.5,
-    color: "#666666",
+    color: "#000000",
   },
   table: { marginTop: 16, borderWidth: 1, borderColor: "#cccccc", borderRadius: 4 },
   tableHeaderRow: {
@@ -69,8 +69,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 10,
   },
-  headerLabel: { fontSize: 8, fontWeight: 700, color: "#666666", textTransform: "uppercase" },
-  colSN: { width: 18, fontSize: 9, textAlign: "center", color: "#666666" },
+  headerLabel: { fontSize: 8, fontWeight: 700, color: "#000000", textTransform: "uppercase" },
+  colSN: { width: 18, fontSize: 9, textAlign: "center", color: "#000000" },
   // Product gets a larger share of the row (long paint names wrap less),
   // the four numeric/short-text columns give up a little width each to
   // compensate - same total flex as before, just redistributed.
@@ -83,18 +83,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#dddddd",
+    borderTopColor: "#000000",
     borderTopStyle: "dashed",
   },
-  amountInWordsLabel: { fontSize: 7.5, fontWeight: 700, color: "#888888", textTransform: "uppercase" },
-  amountInWordsValue: { marginTop: 2, fontSize: 8.5, fontWeight: 700, color: "#333333" },
+  amountInWordsLabel: { fontSize: 7.5, fontWeight: 700, color: "#000000", textTransform: "uppercase" },
+  amountInWordsValue: { marginTop: 2, fontSize: 8.5, fontWeight: 700, color: "#000000" },
   totalsWrap: { marginTop: 10, flexDirection: "row", justifyContent: "flex-end" },
-  totalsBox: { width: 230, borderWidth: 1, borderColor: "#cccccc", borderRadius: 4 },
+  totalsBox: { width: 230, borderWidth: 1, borderColor: "#000000", borderRadius: 4 },
   bucketLabel: {
     paddingVertical: 5,
     paddingHorizontal: 8,
     borderTopWidth: 1,
-    borderTopColor: "#e2e2e2",
+    borderTopColor: "#000000",
     fontSize: 8,
     fontWeight: 700,
     backgroundColor: "#f7f7f7",
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderTopWidth: 1,
-    borderTopColor: "#e2e2e2",
+    borderTopColor: "#000000",
   },
   totalsRowEmphasis: { backgroundColor: "#f2f2f2" },
   totalsLabel: { fontSize: 8, fontWeight: 500 },
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     fontSize: 9.5,
     fontWeight: 700,
-    color: "#444444",
+    color: "#000000",
   },
   footer: {
     position: "absolute",
@@ -136,11 +136,11 @@ const styles = StyleSheet.create({
     right: 36,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#dddddd",
+    borderTopColor: "#000000",
     textAlign: "center",
   },
-  footerText: { fontSize: 8.5, color: "#888888" },
-  footerId: { marginTop: 2, fontSize: 7, color: "#aaaaaa" },
+  footerText: { fontSize: 8.5, color: "#000000" },
+  footerId: { marginTop: 2, fontSize: 7, color: "#000000" },
 });
 
 function InfoLine({ label, value }) {
@@ -167,7 +167,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
           <Text style={styles.serialWatermark}>SN{invoice.serialNumber}</Text>
         ) : null}
         <Text style={styles.panLabel}>PAN: {MEITU_PAN}</Text>
-        <MeituLogoMark width={38} style={styles.logo} />
+        <MeituLogoMark width={38} style={styles.logo} color="#000000" />
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>
         <Text style={styles.companyAddress}>Madhyapur Thimi-08, Bhaktapur</Text>
         <Text style={styles.docTitle}>PROFORMA INVOICE</Text>
