@@ -86,6 +86,7 @@ async function getAssignedOrderOrThrow({ dispatcherId, orderId }) {
   const order = await Order.findOne({
     _id: orderId,
     dispatcherId,
+    isDeleted: { $ne: true },
   });
 
   if (!order) {
@@ -398,7 +399,7 @@ export async function listMyOrders({
   const perPage = Math.min(100, toPositiveInt(limit, 20));
   const skip = (currentPage - 1) * perPage;
 
-  const query = { dispatcherId };
+  const query = { dispatcherId, isDeleted: { $ne: true } };
 
   if (dealerId) {
     query.dealerId = dealerId;
@@ -450,6 +451,7 @@ export async function getMyOrderById({ user, orderId } = {}) {
   const order = await Order.findOne({
     _id: orderId,
     dispatcherId,
+    isDeleted: { $ne: true },
   })
     .populate("dealerId", "companyName contactName email phone address status")
     .populate("dispatcherId", "name companyName email phone")
@@ -466,7 +468,7 @@ export async function getMyOrderStockCheck({ user, orderId } = {}) {
   const dispatcherId = ensureDispatcherId(user);
   await getVerifiedActiveDispatcher(dispatcherId);
 
-  const order = await Order.findOne({ _id: orderId, dispatcherId })
+  const order = await Order.findOne({ _id: orderId, dispatcherId, isDeleted: { $ne: true } })
     .select("items")
     .lean();
 
@@ -502,6 +504,7 @@ export async function listMyReplenishmentOrders({
   const query = {
     dispatcherCustomerId: dispatcherId,
     orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+    isDeleted: { $ne: true },
   };
 
   if (archive) {
@@ -554,6 +557,7 @@ export async function getMyReplenishmentOrderById({ user, orderId } = {}) {
     _id: orderId,
     dispatcherCustomerId: dispatcherId,
     orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+    isDeleted: { $ne: true },
   }).lean();
 
   if (!order) {
