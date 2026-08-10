@@ -1556,6 +1556,41 @@ export const meituApi = createApi({
     // Account-keeping rebuild (see admin.insights.routes.js) - per-section
     // endpoints, lazy-loaded per active tab, rather than the single
     // combined getAdminInsights blob above.
+    getAdminInventoryOverview: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/overview", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminFactoryStock: builder.query({
+      query: () => ({ url: "/api/admin/insights/inventory/factory" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminDispatcherStockLevels: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/dispatcher", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminDealerStockLevels: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/dealer", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminStockMovements: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/movements", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
     getAdminPayablePartyList: builder.query({
       query: () => ({ url: "/api/admin/insights/payments/parties" }),
       transformResponse: getItems,
@@ -1985,6 +2020,11 @@ export const {
   useGetAdminArAgingQuery,
   useGetAdminPaymentsQuery,
   useGetAdminPaymentLedgerQuery,
+  useGetAdminInventoryOverviewQuery,
+  useGetAdminFactoryStockQuery,
+  useGetAdminDispatcherStockLevelsQuery,
+  useGetAdminDealerStockLevelsQuery,
+  useGetAdminStockMovementsQuery,
   useGetAdminPayablePartyListQuery,
   useGetAdminPartyDuesQuery,
   useGetAdminAllocationPreviewQuery,

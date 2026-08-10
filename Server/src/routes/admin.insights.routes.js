@@ -14,6 +14,11 @@ import {
   getPartyDuesController,
   previewAllocationController,
   createAdminPaymentController,
+  getInventoryOverviewController,
+  getFactoryStockController,
+  getDispatcherStockController,
+  getDealerStockController,
+  getStockMovementsController,
 } from "../controllers/admin.insights.controller.js";
 import { auth } from "../middlewares/auth.middleware.js";
 import { requireRoleWithReadOnlyAdmin } from "../middlewares/requireRole.middleware.js";
@@ -25,6 +30,8 @@ import {
   partyDuesQuerySchema,
   allocationPreviewQuerySchema,
   createPaymentBodySchema,
+  inventoryScopeQuerySchema,
+  stockMovementsQuerySchema,
 } from "../validations/adminInsights.validation.js";
 
 // Mounted as a sibling of admin.routes.js (see routes/index.js), not
@@ -68,5 +75,14 @@ router.get(
 );
 router.get("/payments", validateQuery(paymentsListQuerySchema), listAdminPaymentsController);
 router.post("/payments", validateBody(createPaymentBodySchema), createAdminPaymentController);
+
+// Inventory is read-only here: adjustments stay in their existing
+// factory/dispatcher/dealer screens rather than adding write-risk to a
+// reporting workspace.
+router.get("/inventory/overview", validateQuery(inventoryScopeQuerySchema), getInventoryOverviewController);
+router.get("/inventory/factory", getFactoryStockController);
+router.get("/inventory/dispatcher", validateQuery(inventoryScopeQuerySchema), getDispatcherStockController);
+router.get("/inventory/dealer", validateQuery(inventoryScopeQuerySchema), getDealerStockController);
+router.get("/inventory/movements", validateQuery(stockMovementsQuerySchema), getStockMovementsController);
 
 export default router;

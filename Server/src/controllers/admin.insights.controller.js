@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import * as cashPositionService from "../services/adminInsights/cashPosition.service.js";
 import * as reconciliationService from "../services/adminInsights/reconciliation.service.js";
 import * as paymentsService from "../services/adminInsights/payments.service.js";
+import * as inventoryService from "../services/adminInsights/inventory.service.js";
 import * as orderAnalyticsService from "../services/adminInsights/orderAnalytics.service.js";
 import * as dealerStatementsService from "../services/adminInsights/dealerStatements.service.js";
 import * as performanceService from "../services/adminInsights/performance.service.js";
@@ -85,4 +86,29 @@ export const previewAllocationController = asyncHandler(async (req, res) => {
 export const createAdminPaymentController = asyncHandler(async (req, res) => {
   const item = await paymentsService.createAdminPayment(req.body || {}, req.user?._id || null);
   res.status(201).json({ ok: true, item });
+});
+
+export const getInventoryOverviewController = asyncHandler(async (req, res) => {
+  const item = await inventoryService.getInventoryOverview(req.query || {});
+  res.status(200).json({ ok: true, item });
+});
+
+export const getFactoryStockController = asyncHandler(async (_req, res) => {
+  const items = await inventoryService.getFactoryStock();
+  res.status(200).json({ ok: true, items });
+});
+
+export const getDispatcherStockController = asyncHandler(async (req, res) => {
+  const items = await inventoryService.getDispatcherStock(req.query || {});
+  res.status(200).json({ ok: true, items });
+});
+
+export const getDealerStockController = asyncHandler(async (req, res) => {
+  const items = await inventoryService.getDealerStock(req.query || {});
+  res.status(200).json({ ok: true, items });
+});
+
+export const getStockMovementsController = asyncHandler(async (req, res) => {
+  const items = await inventoryService.getStockMovements(req.query || {});
+  res.status(200).json({ ok: true, items });
 });

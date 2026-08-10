@@ -13,6 +13,7 @@ import OrderAnalyticsSection from "./sections/OrderAnalyticsSection.jsx";
 import PerformanceSection from "./sections/PerformanceSection.jsx";
 import ReportsSection from "./sections/ReportsSection.jsx";
 import PaymentsSection from "./sections/PaymentsSection.jsx";
+import InventorySection from "./sections/InventorySection.jsx";
 
 // Standalone accounting workspace (route: /admin/insights), deliberately
 // outside the /admin/dashboard shell: with this many account-keeping
@@ -26,6 +27,7 @@ const INSIGHT_SECTIONS = [
   { key: "statements", label: "Statements & AR", path: "/admin/insights/statements", icon: "list" },
   { key: "reconciliation", label: "Reconciliation", path: "/admin/insights/reconciliation", icon: "checkSquare" },
   { key: "payments", label: "Payments", path: "/admin/insights/payments", icon: "invoice" },
+  { key: "inventory", label: "Inventory", path: "/admin/insights/inventory", icon: "package" },
   { key: "orders", label: "Order Analytics", path: "/admin/insights/orders", icon: "orders" },
   { key: "performance", label: "Performance", path: "/admin/insights/performance", icon: "chart" },
   { key: "reports", label: "Reports", path: "/admin/insights/reports", icon: "download" },
@@ -144,6 +146,7 @@ export default function AdminInsightsWorkspace() {
     if (activeSection === "statements") return <DealerStatementsSection {...props} />;
     if (activeSection === "reconciliation") return <PaymentReconciliationSection {...props} />;
     if (activeSection === "payments") return <PaymentsSection {...props} />;
+    if (activeSection === "inventory") return <InventorySection {...props} />;
     if (activeSection === "orders") return <OrderAnalyticsSection {...props} />;
     if (activeSection === "performance") return <PerformanceSection {...props} />;
     if (activeSection === "reports") return <ReportsSection dateFilters={dateFilters} />;

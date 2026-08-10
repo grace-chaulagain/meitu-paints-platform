@@ -72,3 +72,23 @@ export const createPaymentBodySchema = z
     receivedDate: z.string().trim().max(40).optional(),
   })
   .strict();
+
+export const inventoryScopeQuerySchema = z
+  .object({
+    dealerId: z.string().trim().max(40).optional(),
+    dispatcherId: z.string().trim().max(40).optional(),
+  })
+  .strict();
+
+export const stockMovementsQuerySchema = z
+  .object({
+    tier: z.enum(["factory", "dispatcher", "dealer"]).optional(),
+    range: z.string().trim().max(20).optional(),
+    preset: z.string().trim().max(20).optional(),
+    from: z.string().trim().max(40).optional(),
+    to: z.string().trim().max(40).optional(),
+    dealerId: z.string().trim().max(40).optional(),
+    dispatcherId: z.string().trim().max(40).optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+  })
+  .strict();
