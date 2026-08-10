@@ -1,3 +1,16 @@
+// NOTE (Insights rebuild, Phase 4): the admin Insights *page* no longer
+// calls this - it was replaced section-by-section by
+// src/services/adminInsights/{cashPosition,reconciliation,orderAnalytics,
+// dealerStatements,performance}.service.js (real Mongo aggregation
+// pipelines instead of the full-collection-scan-and-JS-reduce approach
+// below). This file, its route (GET /api/admin/insights), and its
+// controller (getAdminInsightsController) are kept alive ONLY because
+// Frontend/meitupaints/src/admin/mobile/AdminHomeMobileView.jsx's "Morning
+// Brief" hero (today's orders/revenue + a revenue trend sparkline) still
+// depends on this exact response shape (data.home.kpis, data.home.pulse,
+// data.orders.summary.totalOrders). Migrating that unrelated page's data
+// source was out of scope for the Insights rebuild - do not delete this
+// file without first checking AdminHomeMobileView.jsx.
 import mongoose from "mongoose";
 
 import ApiError from "../utils/apiError.js";

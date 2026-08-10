@@ -2996,7 +2996,17 @@ export async function listPayments({
   const skip = (Math.max(1, Number(page)) - 1) * perPage;
 
   const [items, total] = await Promise.all([
-    Payment.find(q).sort({ createdAt: -1 }).skip(skip).limit(perPage).lean(),
+    Payment.find(q)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(perPage)
+      // Populated so a verification-queue UI can show dealer/order names
+      // instead of raw ids - this endpoint had no frontend consumer before
+      // the Payment Reconciliation section, so nothing depended on the
+      // unpopulated shape.
+      .populate({ path: "dealerId", select: "companyName contactName" })
+      .populate({ path: "orderId", select: "orderNumber totals.total" })
+      .lean(),
     Payment.countDocuments(q),
   ]);
 
@@ -3054,10 +3064,14 @@ export async function getOrderOutstanding({ orderId } = {}) {
   const order = await Order.findById(orderId).select("totals dealerId");
   if (!order) throw new ApiError(404, "Order not found");
 
+  // PAYMENT_STATUS has no APPROVED/CONFIRMED member, so those two used to
+  // silently fall back to their literal string ("APPROVED"/"CONFIRMED"),
+  // which never matches a real payment - only VERIFIED payments counted
+  // as paid. PARTIAL/PAID are real received-money statuses too.
   const verifiedStatuses = [
-    PAYMENT_STATUS?.VERIFIED ?? "VERIFIED",
-    PAYMENT_STATUS?.APPROVED ?? "APPROVED",
-    PAYMENT_STATUS?.CONFIRMED ?? "CONFIRMED",
+    PAYMENT_STATUS.VERIFIED,
+    PAYMENT_STATUS.PARTIAL,
+    PAYMENT_STATUS.PAID,
   ];
 
   const rows = await Payment.find({

@@ -7,6 +7,7 @@ import userRoutes from "./user.routes.js";
 import productRoutes from "./product.routes.js";
 import productFamilyRoutes from "./productFamily.routes.js";
 import adminCatalogRoutes from "./admin.catalog.routes.js";
+import adminInsightsRoutes from "./admin.insights.routes.js";
 import announcementRoutes from "./announcement.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
 import orderRoutes from "./order.routes.js";
@@ -43,6 +44,12 @@ router.use("/auth", authRoutes);
 // Admin
 router.use("/admin/catalog", adminCatalogRoutes);
 router.use("/admin/announcements", announcementRoutes);
+// Mounted before the general /admin router below so /admin/insights/*
+// sub-paths (cash-position, reconciliation, orders, ar/*) hit this router
+// first; the exact GET /admin/insights (no sub-path) legacy route still
+// lives in admin.routes.js and is unaffected since nothing here matches
+// an empty suffix.
+router.use("/admin/insights", adminInsightsRoutes);
 router.use("/admin", adminRoutes);
 
 // Dealer

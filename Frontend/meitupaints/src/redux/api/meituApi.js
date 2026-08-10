@@ -1552,6 +1552,108 @@ export const meituApi = createApi({
       providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
     }),
 
+    // Account-keeping rebuild (see admin.insights.routes.js) - per-section
+    // endpoints, lazy-loaded per active tab, rather than the single
+    // combined getAdminInsights blob above.
+    getAdminCashPosition: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/cash-position", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminPaymentReconciliation: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/reconciliation", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight"), listTag("Payment")],
+    }),
+
+    getAdminOrderAnalytics: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/orders", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    // Performance sub-tabs (see admin.insights.routes.js). Dealers
+    // deliberately calls the existing, previously-orphaned dealer
+    // leaderboard endpoint directly rather than a new insights-domain
+    // proxy - it was already correct, just unwired to any frontend.
+    getAdminDealerLeaderboard: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/dealers/analytics/leaderboard", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminProductPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/products", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminDispatcherPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/dispatchers", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminRoutingPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/routing", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminArSummary: builder.query({
+      query: () => ({ url: "/api/admin/insights/ar/summary" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminArAging: builder.query({
+      query: () => ({ url: "/api/admin/insights/ar/aging" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    // Payments (verification queue) - the Payment model/routes were already
+    // backend-complete but had zero frontend consumers before this section.
+    getAdminPayments: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/payments", params }),
+      transformResponse: (response) => ({
+        items: response?.items || [],
+        total: response?.total || 0,
+        page: response?.page || 1,
+        limit: response?.limit || 20,
+      }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: (response) => listResponseTags("Payment", response),
+    }),
+
+    verifyAdminPayment: builder.mutation({
+      query: ({ paymentId, note = "" }) => ({
+        url: `/api/admin/payments/${paymentId}/verify`,
+        method: "POST",
+        data: { note },
+      }),
+      invalidatesTags: () => [listTag("Payment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    rejectAdminPayment: builder.mutation({
+      query: ({ paymentId, note = "" }) => ({
+        url: `/api/admin/payments/${paymentId}/reject`,
+        method: "POST",
+        data: { note },
+      }),
+      invalidatesTags: () => [listTag("Payment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
     getAdminPointsCatalogProducts: builder.query({
       query: (params = {}) => ({ url: "/api/admin/points-catalog-products", params }),
       providesTags: (response) => listResponseTags("PointsCatalogProduct", response),
@@ -1838,6 +1940,18 @@ export const {
   useIssueFactoryInvoiceMutation,
   useLazyGetAdminOrderStatementReportQuery,
   useGetAdminInsightsQuery,
+  useGetAdminCashPositionQuery,
+  useGetAdminPaymentReconciliationQuery,
+  useGetAdminOrderAnalyticsQuery,
+  useGetAdminDealerLeaderboardQuery,
+  useGetAdminProductPerformanceQuery,
+  useGetAdminDispatcherPerformanceQuery,
+  useGetAdminRoutingPerformanceQuery,
+  useGetAdminArSummaryQuery,
+  useGetAdminArAgingQuery,
+  useGetAdminPaymentsQuery,
+  useVerifyAdminPaymentMutation,
+  useRejectAdminPaymentMutation,
   useGetAdminPointsCatalogProductsQuery,
   useGetAdminPointsCatalogProductQuery,
   useCreatePointsCatalogProductMutation,
