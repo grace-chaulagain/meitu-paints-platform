@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { DashboardUIStyles } from "../../../components/dashboard/DashboardUI.jsx";
+import { ReadOnlyAdminStyles } from "../../../components/dashboard/readOnlyAdminMode.jsx";
 import { rangeForPreset } from "./insightsFormatting.js";
 import DateRangeFilterBar from "./sections/DateRangeFilterBar.jsx";
 import EntityFilterBar from "./sections/EntityFilterBar.jsx";
@@ -155,6 +157,14 @@ export default function AdminInsightsWorkspace() {
 
   return (
     <div className="insights-workspace">
+      {/* DashboardUI keeps every .dash-* rule (tables, dropdowns, tab
+          bars, pills) inside this component rather than a global
+          stylesheet, so any page outside the dashboard shell has to
+          mount it itself - without it DataTable/TabBar/AppleDropdown
+          render as raw unstyled boxes. */}
+      <DashboardUIStyles />
+      <ReadOnlyAdminStyles />
+
       <aside className="iw-rail" aria-label="Insights sections">
         <button type="button" className="iw-back" onClick={() => navigate("/admin/dashboard")}>
           <DashboardIcon name="chevron" size={16} strokeWidth={2} style={{ transform: "rotate(180deg)" }} />
@@ -339,10 +349,17 @@ export default function AdminInsightsWorkspace() {
            sections declare internally, without touching each file. */
         .iw-viewpane{ gap:16px; }
 
-        /* The filter strip reads as one control group. */
+        /* Filter strip reads as one control group: a single row height,
+           a hairline separating the date controls from the entity ones. */
         .iw-filters > *{ flex:0 0 auto; }
-        .iw-filters .dash-native-select,
-        .iw-filters button{ min-height:36px; }
+        /* Control heights come from DashboardUIStyles (44px pill
+           dropdowns, 32px date chips) - deliberately not overridden here,
+           only aligned on a common baseline. */
+        .iw-filters{ align-items:center; row-gap:8px; }
+
+        /* The section's own action row (filters + Add payment) sits on a
+           card-free strip, so it needs its own separation from the KPIs. */
+        .iw-content .dash-tab-bar{ margin-top:2px; }
 
         @media (hover:hover) and (pointer:fine){
           .iw-back:hover{ background:var(--color-fog, #f5f5f7); color:var(--color-ink, #1d1d1f); }

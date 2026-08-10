@@ -197,22 +197,47 @@ export default function InventorySection({ dateFilters, view, onViewChange }) {
     </div>
   );
 
-  const lowestFirst = useMemo(
+  // Out-of-stock rows are quantity 0, so plotting them draws a label with
+  // no bar. Chart only what has a magnitude worth comparing; the
+  // out-of-stock count is already a KPI and is restated below the chart.
+  const lowItems = useMemo(
     () =>
       rows
-        .filter((row) => row.status !== "OK")
+        .filter((row) => row.status === "LOW")
+        .sort((a, b) => a.quantity - b.quantity)
         .slice(0, 12)
-        .map((row) => ({ label: `${row.name}${row.holder ? ` · ${row.holder}` : ""}`, value: row.quantity })),
+        .map((row) => ({
+          // Pack label disambiguates SKUs that share a product name -
+          // without it the chart repeated "Friendly Natural Exterior
+          // Paint" four times with no way to tell them apart.
+          label: [row.name, row.packLabel, row.holder].filter(Boolean).join(" · "),
+          value: row.quantity,
+        })),
     [rows],
   );
 
+  const outOfStockCount = useMemo(() => rows.filter((row) => row.status === "OUT").length, [rows]);
+
   const charts = (
     <Surface padding={0}>
-      <PanelHead eyebrow="Attention" icon="warning" title="Low and out-of-stock items" />
+      <PanelHead
+        eyebrow="Attention"
+        icon="warning"
+        title="Running low"
+        subtitle={
+          outOfStockCount
+            ? `${outOfStockCount} item${outOfStockCount === 1 ? " is" : "s are"} fully out of stock — see the Data view.`
+            : ""
+        }
+      />
       <MagnitudeBarChart
-        items={lowestFirst}
+        items={lowItems}
         formatValue={(v) => number(v)}
-        empty="Every tracked item is above its threshold."
+        empty={
+          outOfStockCount
+            ? "Nothing is running low — but some items are fully out of stock."
+            : "Every tracked item is above its threshold."
+        }
       />
     </Surface>
   );
