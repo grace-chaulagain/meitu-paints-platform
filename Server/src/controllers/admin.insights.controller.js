@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 import * as cashPositionService from "../services/adminInsights/cashPosition.service.js";
 import * as reconciliationService from "../services/adminInsights/reconciliation.service.js";
+import * as paymentsService from "../services/adminInsights/payments.service.js";
 import * as orderAnalyticsService from "../services/adminInsights/orderAnalytics.service.js";
 import * as dealerStatementsService from "../services/adminInsights/dealerStatements.service.js";
 import * as performanceService from "../services/adminInsights/performance.service.js";
@@ -59,4 +60,29 @@ export const getDispatcherPerformanceController = asyncHandler(async (req, res) 
 export const getRoutingPerformanceController = asyncHandler(async (req, res) => {
   const item = await performanceService.getRoutingPerformance(req.query || {});
   res.status(200).json({ ok: true, item });
+});
+
+export const listPayablePartiesController = asyncHandler(async (_req, res) => {
+  const items = await paymentsService.listPayableParties();
+  res.status(200).json({ ok: true, items });
+});
+
+export const listAdminPaymentsController = asyncHandler(async (req, res) => {
+  const items = await paymentsService.listAdminPayments(req.query || {});
+  res.status(200).json({ ok: true, items });
+});
+
+export const getPartyDuesController = asyncHandler(async (req, res) => {
+  const items = await paymentsService.getPartyDues(req.query || {});
+  res.status(200).json({ ok: true, items });
+});
+
+export const previewAllocationController = asyncHandler(async (req, res) => {
+  const item = await paymentsService.previewAllocation(req.query || {});
+  res.status(200).json({ ok: true, item });
+});
+
+export const createAdminPaymentController = asyncHandler(async (req, res) => {
+  const item = await paymentsService.createAdminPayment(req.body || {}, req.user?._id || null);
+  res.status(201).json({ ok: true, item });
 });

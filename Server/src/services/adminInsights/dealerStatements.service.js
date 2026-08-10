@@ -128,17 +128,35 @@ export async function getArAgingBuckets(filters = {}) {
       },
     },
     {
+      // Counts BOTH order-linked payments and the per-order slices of
+      // on-account payments (Payment.allocations). Without the second
+      // half, an on-account payment would never reduce any order's
+      // outstanding and aging would keep reporting settled bills as
+      // overdue - see payments.service.js.
       $lookup: {
         from: "payments",
         let: { orderId: "$_id" },
         pipeline: [
+          { $match: { status: { $in: PAID_PAYMENT_STATUSES } } },
           {
-            $match: {
-              $expr: { $eq: ["$orderId", "$$orderId"] },
-              status: { $in: PAID_PAYMENT_STATUSES },
+            $project: {
+              direct: { $cond: [{ $eq: ["$orderId", "$$orderId"] }, "$amount", 0] },
+              allocated: {
+                $sum: {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: { $ifNull: ["$allocations", []] },
+                        cond: { $eq: ["$$this.orderId", "$$orderId"] },
+                      },
+                    },
+                    in: "$$this.amount",
+                  },
+                },
+              },
             },
           },
-          { $group: { _id: null, paid: { $sum: "$amount" } } },
+          { $group: { _id: null, paid: { $sum: { $add: ["$direct", "$allocated"] } } } },
         ],
         as: "paymentAgg",
       },

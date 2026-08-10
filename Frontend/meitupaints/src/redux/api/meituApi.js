@@ -174,6 +174,7 @@ export const meituApi = createApi({
     "Report",
     "Insight",
     "AdminInsight",
+    "AdminPayment",
     "DispatcherStock",
     "DispatcherStockMovement",
     "DispatcherCatalog",
@@ -1555,6 +1556,39 @@ export const meituApi = createApi({
     // Account-keeping rebuild (see admin.insights.routes.js) - per-section
     // endpoints, lazy-loaded per active tab, rather than the single
     // combined getAdminInsights blob above.
+    getAdminPayablePartyList: builder.query({
+      query: () => ({ url: "/api/admin/insights/payments/parties" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminPaymentLedger: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminPartyDues: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments/dues", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminAllocationPreview: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments/allocation-preview", params }),
+      transformResponse: getItem,
+    }),
+
+    createAdminPayment: builder.mutation({
+      query: (body) => ({ url: "/api/admin/insights/payments", method: "POST", body }),
+      // A recorded payment changes AR, aging, reconciliation and cash
+      // position, so the whole insights surface is invalidated with it.
+      invalidatesTags: () => [listTag("AdminPayment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
     getAdminCashPosition: builder.query({
       query: (params = {}) => ({ url: "/api/admin/insights/cash-position", params }),
       transformResponse: getItem,
@@ -1950,6 +1984,11 @@ export const {
   useGetAdminArSummaryQuery,
   useGetAdminArAgingQuery,
   useGetAdminPaymentsQuery,
+  useGetAdminPaymentLedgerQuery,
+  useGetAdminPayablePartyListQuery,
+  useGetAdminPartyDuesQuery,
+  useGetAdminAllocationPreviewQuery,
+  useCreateAdminPaymentMutation,
   useVerifyAdminPaymentMutation,
   useRejectAdminPaymentMutation,
   useGetAdminPointsCatalogProductsQuery,
