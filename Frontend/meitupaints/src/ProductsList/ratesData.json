@@ -180,8 +180,8 @@
     "name": "Meitu Liquid Granite 3D Imitation Stone Paint",
     "category": "Granite (Exterior and Interior)",
     "rates": {
-      "4 in one color + Operatives": 180,
-      "putting + 4 in one color + Operatives": 205
+      "4 in one color + Operatives": 190,
+      "putting + 4 in one color + Operatives": 215
     },
     "src": "3d/Meitu Granite 3D Imitation Stone Paint (12kg).webp"
   },
@@ -200,7 +200,7 @@
     "name": "Meitu Epoxy Regular Floor Paint",
     "category": "Granite (Exterior and Interior)",
     "rates": {
-      "4 in one color + Operatives": 115 
+      "4 in one color + Operatives": 165
     },
     "src": "Floor/Meitu Floor Paint (3kg).webp"
   },
@@ -209,7 +209,7 @@
     "name": "Meitu Epoxy Granite Floor Paint",
     "category": "Granite (Exterior and Interior)",
     "rates": {
-      "4 in one color + Operatives": 190 
+      "4 in one color + Operatives": 180 
     },
     "src": "Floor/Meitu Floor Paint (2kg).webp"
   },
@@ -218,19 +218,43 @@
     "name": "Meitu Real Stone Paint",
     "category": "RealStone",
     "rates": {
-      "3 in one + Operatives": 155,
-      "putting + 3 in one color + Operatives": 180
+      "3 in one + Operatives": 170,
+      "putting + 3 in one color + Operatives": 195
     },
     "src": "Realstone/Meitu Real Stone (20L).webp"
   },
   {
     "id": 28,
-    "name": "Advanced Paint",
+    "name": "Advanced 2D",
     "category": "Advanced Paint",
     "rates": {
-      "2D": 225,
-      "Realstone": 240,
-      "3D": 255,
+      "2D": 225
+    },
+    "src": "Advanced Paint/Advanced Paint.png"
+  },
+  {
+    "id": 29,
+    "name": "Advanced 3D",
+    "category": "Advanced Paint",
+    "rates": {
+      "3D": 255
+    },
+    "src": "Advanced Paint/Advanced Paint.png"
+  },
+  {
+    "id": 30,
+    "name": "Advanced Real Stone",
+    "category": "Advanced Paint",
+    "rates": {
+      "Realstone": 240
+    },
+    "src": "Advanced Paint/Advanced Paint.png"
+  },
+  {
+    "id": 31,
+    "name": "Advanced Regular",
+    "category": "Advanced Paint",
+    "rates": {
       "Regular": 130
     },
     "src": "Advanced Paint/Advanced Paint.png"

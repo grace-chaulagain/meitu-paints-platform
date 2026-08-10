@@ -41,22 +41,22 @@
   },
   {
     "key": "2D",
-    "title": "2D",
-    "desc": "2D finish system"
+    "title": "Advanced 2D",
+    "desc": "Advanced 2D finish system"
   },
   {
     "key": "3D",
-    "title": "3D",
-    "desc": "3D finish system"
+    "title": "Advanced 3D",
+    "desc": "Advanced 3D finish system"
   },
   {
     "key": "Realstone",
-    "title": "Realstone",
-    "desc": "Realstone finish system"
+    "title": "Advanced Real Stone",
+    "desc": "Advanced real stone finish system"
   },
   {
     "key": "Regular",
-    "title": "Regular",
-    "desc": "Regular finish system"
+    "title": "Advanced Regular",
+    "desc": "Advanced regular finish system"
   }
 ]
