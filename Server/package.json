@@ -18,6 +18,7 @@
     "seed:admin": "node src/scripts/seed-admin.js",
     "seed:factory": "node src/scripts/seed-factory-user.js",
     "seed:painters": "node src/scripts/seed-painters.js",
+    "seed:insights-demo": "node -r dotenv/config src/scripts/seed-insights-demo.js",
     "seed:products": "node src/seed/seedProducts.js",
     "seed:families": "node src/seed/seedProductFamilies.js",
     "append:products": "node src/seed/appendProducts.js",

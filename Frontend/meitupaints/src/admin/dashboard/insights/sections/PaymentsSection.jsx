@@ -34,9 +34,11 @@ const DUES_FILTERS = [
   { key: "all", label: "All parties" },
 ];
 
+// Tones must come from Pill's own set (neutral/accent/positive/critical/
+// caution) - anything else silently falls back to neutral grey.
 function statusTone(status) {
-  if (status === "VERIFIED" || status === "PAID") return "success";
-  if (status === "REJECTED") return "danger";
+  if (status === "VERIFIED" || status === "PAID") return "positive";
+  if (status === "REJECTED") return "critical";
   if (status === "PENDING_VERIFICATION") return "accent";
   return "neutral";
 }

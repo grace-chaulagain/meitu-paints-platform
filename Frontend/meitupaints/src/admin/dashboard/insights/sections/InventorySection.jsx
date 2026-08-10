@@ -21,10 +21,12 @@ const TIER_TABS = [
   { key: "dealer", label: "Dealers" },
 ];
 
+// Tones must come from Pill's own set (neutral/accent/positive/critical/
+// caution) - anything else silently falls back to neutral grey.
 function statusTone(status) {
-  if (status === "OUT") return "danger";
-  if (status === "LOW") return "warning";
-  return "success";
+  if (status === "OUT") return "critical";
+  if (status === "LOW") return "caution";
+  return "positive";
 }
 
 function statusLabel(status) {

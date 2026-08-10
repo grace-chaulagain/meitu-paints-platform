@@ -275,16 +275,54 @@ export default function AdminInsightsWorkspace() {
         .iw-filters{
           display:flex; align-items:center; flex-wrap:wrap; gap:10px;
         }
-        .iw-content{
-          display:grid; gap:16px;
-          padding:20px 24px 48px;
-          min-width:0;
-          animation:iw-enter 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+
+        /* ---- Section polish ----
+           Surface/Pill/DataTable already carry their own styling (mostly
+           inline or in DashboardUI's own <style>), so this deliberately
+           only adds what is genuinely missing: press feedback on
+           controls, tabular figures, and a brief row entrance. Selectors
+           are verified against real class names - Surface and Pill are
+           inline-styled and cannot be reached from here. */
+
+        /* Every pressable control in the workspace acknowledges touch. */
+        .insights-workspace button{
+          transition:transform 120ms ease-out, background 150ms ease-out, border-color 150ms ease-out;
         }
-        @keyframes iw-enter{
-          from{ opacity:0; transform:translateY(6px); }
+        .insights-workspace button:active{ transform:scale(0.97); }
+
+        /* Money and counts must not jitter as digits change. DataTable
+           sets this per-cell via cellClassName; this covers the metric
+           tiles, which have no such hook. */
+        .iw-content .dash-metric-tile{
+          transition:border-color 150ms ease-out;
+        }
+        .iw-content .dash-metric-tile strong,
+        .iw-content .dash-metric-tile b{
+          font-variant-numeric:tabular-nums;
+          font-feature-settings:"tnum" 1;
+        }
+
+        /* Rows fade in briefly on first paint - decorative, capped at the
+           first handful so a 200-row ledger is never gated behind it. */
+        .iw-content .dash-table tbody tr:nth-child(-n+8){
+          animation:iw-row-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        .iw-content .dash-table tbody tr:nth-child(2){ animation-delay:30ms; }
+        .iw-content .dash-table tbody tr:nth-child(3){ animation-delay:60ms; }
+        .iw-content .dash-table tbody tr:nth-child(4){ animation-delay:90ms; }
+        .iw-content .dash-table tbody tr:nth-child(5){ animation-delay:120ms; }
+        .iw-content .dash-table tbody tr:nth-child(6){ animation-delay:150ms; }
+        .iw-content .dash-table tbody tr:nth-child(7){ animation-delay:180ms; }
+        .iw-content .dash-table tbody tr:nth-child(8){ animation-delay:210ms; }
+        @keyframes iw-row-in{
+          from{ opacity:0; transform:translateY(3px); }
           to{ opacity:1; transform:none; }
         }
+
+        /* The filter strip reads as one control group. */
+        .iw-filters > *{ flex:0 0 auto; }
+        .iw-filters .dash-native-select,
+        .iw-filters button{ min-height:36px; }
 
         @media (hover:hover) and (pointer:fine){
           .iw-back:hover{ background:var(--color-fog, #f5f5f7); color:var(--color-ink, #1d1d1f); }
@@ -324,6 +362,9 @@ export default function AdminInsightsWorkspace() {
         }
 
         @media (prefers-reduced-motion: reduce){
+          .iw-content .dash-table tbody tr:nth-child(-n+8){ animation:none; }
+          .insights-workspace button{ transition:none; }
+          .insights-workspace button:active{ transform:none; }
           .iw-rail-marker{ transition:none; }
           .iw-content{ animation:none; }
           .iw-back, .iw-rail-item{ transition:none; }
