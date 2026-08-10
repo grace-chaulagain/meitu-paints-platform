@@ -56,6 +56,9 @@ import {
   ConfirmDealerEmailPage,
 } from "./pages/AuthRecoveryPages.jsx";
 import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
+import AdminInsightsWorkspace, {
+  LegacyInsightsRedirect,
+} from "./admin/dashboard/insights/AdminInsightsWorkspace.jsx";
 
 import DealerDashboardPage from "./dealer/DealerDashboardPage.jsx";
 import DealerHomePage from "./dealer/DealerHomePage.jsx";
@@ -468,6 +471,27 @@ const router = createBrowserRouter([
       {
         path: "/admin/orders",
         element: <Navigate to="/admin/dashboard/orders" replace />,
+      },
+
+      // Insights is its own standalone accounting workspace rather than a
+      // section inside the dashboard shell. These two redirects keep the
+      // previous /admin/dashboard/insights URLs (bookmarks, older links)
+      // pointing at the equivalent section on the new route.
+      {
+        path: "/admin/dashboard/insights",
+        element: <Navigate to="/admin/insights" replace />,
+      },
+      {
+        path: "/admin/dashboard/insights/:section",
+        element: <LegacyInsightsRedirect />,
+      },
+      {
+        path: "/admin/insights/*",
+        element: (
+          <RequireAdmin>
+            <AdminInsightsWorkspace />
+          </RequireAdmin>
+        ),
       },
       {
         path: "/admin/dashboard/*",
