@@ -5,7 +5,7 @@ import { getQueryErrorMessage } from "../../../../../redux/api/selectors.js";
 import { Surface, DataTable, Pill } from "../../../../../components/dashboard/DashboardUI.jsx";
 import { money, number, percent, formatDate } from "../../insightsFormatting.js";
 import { CURRENCY } from "../sectionLayout.js";
-import { PanelHead, ErrorBanner } from "../sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "../sectionShared.jsx";
 import SectionViewFrame from "../SectionViewFrame.jsx";
 import MagnitudeBarChart from "../charts/MagnitudeBarChart.jsx";
 
@@ -68,7 +68,7 @@ export default function DealersPerformanceTab({ view, onViewChange }) {
   const dataView = (
       <Surface padding={0}>
         <PanelHead eyebrow="Comparison" icon="list" title="Dealer leaderboard" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={columns}
             rows={rows}
@@ -77,7 +77,7 @@ export default function DealersPerformanceTab({ view, onViewChange }) {
             emptyState={{ icon: "store", title: "No dealer activity yet", subtitle: "Accepted dealer orders will appear here." }}
             minWidth={760}
           />
-        </div>
+        </PanelBody>
       </Surface>
   );
 

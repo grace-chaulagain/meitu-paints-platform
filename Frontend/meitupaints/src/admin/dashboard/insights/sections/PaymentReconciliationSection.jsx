@@ -10,7 +10,7 @@ import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { Surface, DataTable, GhostButton, Pill, MetricTile } from "../../../../components/dashboard/DashboardUI.jsx";
 import { money, number, formatDate } from "../insightsFormatting.js";
 import { CURRENCY, twoColStyle, kpiRowStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
 
@@ -142,7 +142,7 @@ export default function PaymentReconciliationSection({ dateFilters, view, onView
 
       <Surface padding={0}>
         <PanelHead eyebrow="Action needed" icon="warning" title="Verification queue" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           {queueError ? (
             <ErrorBanner message={queueError} />
           ) : (
@@ -155,7 +155,7 @@ export default function PaymentReconciliationSection({ dateFilters, view, onView
               minWidth={760}
             />
           )}
-        </div>
+        </PanelBody>
       </Surface>
     </div>
   );
@@ -196,7 +196,7 @@ export default function PaymentReconciliationSection({ dateFilters, view, onView
     <>
       <Surface padding={0}>
         <PanelHead eyebrow="Pending" icon="list" title="Pending amount by method" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "method", header: "Method", render: (row) => row.method || "Unspecified" },
@@ -209,11 +209,11 @@ export default function PaymentReconciliationSection({ dateFilters, view, onView
             emptyState={{ icon: "checkmark", title: "Nothing pending", subtitle: "No payments awaiting verification." }}
             minWidth={480}
           />
-        </div>
+        </PanelBody>
       </Surface>
       <Surface padding={0}>
         <PanelHead eyebrow="Window" icon="list" title="Status/method breakdown" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "status", header: "Status", render: (row) => row.status },
@@ -227,7 +227,7 @@ export default function PaymentReconciliationSection({ dateFilters, view, onView
             emptyState={{ icon: "invoice", title: "No payments", subtitle: "Nothing recorded in this window." }}
             minWidth={560}
           />
-        </div>
+        </PanelBody>
       </Surface>
     </>
   );

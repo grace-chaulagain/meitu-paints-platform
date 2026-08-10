@@ -5,7 +5,7 @@ import { getQueryErrorMessage } from "../../../../../redux/api/selectors.js";
 import { Surface, DataTable } from "../../../../../components/dashboard/DashboardUI.jsx";
 import { money, number, formatDate } from "../../insightsFormatting.js";
 import { CURRENCY, twoColStyle } from "../sectionLayout.js";
-import { PanelHead, ErrorBanner } from "../sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "../sectionShared.jsx";
 import SectionViewFrame from "../SectionViewFrame.jsx";
 import MagnitudeBarChart from "../charts/MagnitudeBarChart.jsx";
 
@@ -61,7 +61,7 @@ export default function ProductsPerformanceTab({ dateFilters, view, onViewChange
   const dataView = (
       <Surface padding={0}>
         <PanelHead eyebrow="Ranking" icon="list" title="Product performance" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={columns}
             rows={data?.ranking || []}
@@ -70,7 +70,7 @@ export default function ProductsPerformanceTab({ dateFilters, view, onViewChange
             emptyState={{ icon: "package", title: "No product activity yet", subtitle: "Accepted order line items will appear here." }}
             minWidth={760}
           />
-        </div>
+        </PanelBody>
       </Surface>
   );
 

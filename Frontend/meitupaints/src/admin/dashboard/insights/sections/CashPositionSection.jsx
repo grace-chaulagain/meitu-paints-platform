@@ -6,7 +6,7 @@ import { Surface, DataTable } from "../../../../components/dashboard/DashboardUI
 import { KpiTile } from "../InsightsPrimitives.jsx";
 import { money, number, percent } from "../insightsFormatting.js";
 import { CURRENCY, twoColStyle, kpiRowStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import RevenueTrendChart from "./charts/RevenueTrendChart.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
@@ -82,7 +82,7 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
     <>
       <Surface padding={0}>
         <PanelHead eyebrow="Revenue" icon="list" title="Revenue by period" />
-        <div style={{ padding: "0 8px 8px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "date", header: "Period", render: (row) => String(row.date).slice(0, 10) },
@@ -107,11 +107,11 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
             emptyState={{ icon: "chart", title: "No revenue in this window", subtitle: "Try a wider date range." }}
             minWidth={480}
           />
-        </div>
+        </PanelBody>
       </Surface>
       <Surface padding={0}>
         <PanelHead eyebrow="Composition" icon="list" title="Payment method mix" />
-        <div style={{ padding: "0 8px 8px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "method", header: "Method", render: (row) => row.method || "Unspecified" },
@@ -136,7 +136,7 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
             emptyState={{ icon: "invoice", title: "No accepted orders", subtitle: "Nothing to break down yet." }}
             minWidth={480}
           />
-        </div>
+        </PanelBody>
       </Surface>
     </>
   );

@@ -319,6 +319,26 @@ export default function AdminInsightsWorkspace() {
           to{ opacity:1; transform:none; }
         }
 
+        /* ---- Card rhythm ---- */
+        /* Charts need air under the panel head and above the card edge. */
+        .iw-content .recharts-responsive-container{ margin:2px 0 6px; }
+
+        /* Empty states shouldn't sit flush against a hairline. */
+        .iw-content .dash-table-surface{ border:none; }
+
+        /* KPI row: consistent tile height so a helper line on one tile
+           doesn't leave the others short. */
+        .iw-content .dash-metric-tile{
+          min-height:92px;
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
+        }
+
+        /* Section-to-section rhythm: cards breathe more than the 14px the
+           sections declare internally, without touching each file. */
+        .iw-viewpane{ gap:16px; }
+
         /* The filter strip reads as one control group. */
         .iw-filters > *{ flex:0 0 auto; }
         .iw-filters .dash-native-select,

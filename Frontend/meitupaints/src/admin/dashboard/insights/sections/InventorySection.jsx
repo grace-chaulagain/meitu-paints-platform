@@ -11,7 +11,7 @@ import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { Surface, DataTable, TabBar, Pill, MetricTile } from "../../../../components/dashboard/DashboardUI.jsx";
 import { number, formatDate } from "../insightsFormatting.js";
 import { kpiRowStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
 
@@ -211,7 +211,7 @@ export default function InventorySection({ dateFilters, view, onViewChange }) {
       <PanelHead eyebrow="Attention" icon="warning" title="Low and out-of-stock items" />
       <MagnitudeBarChart
         items={lowestFirst}
-        formatValue={number}
+        formatValue={(v) => number(v)}
         empty="Every tracked item is above its threshold."
       />
     </Surface>
@@ -221,7 +221,7 @@ export default function InventorySection({ dateFilters, view, onViewChange }) {
     <>
       <Surface padding={0}>
         <PanelHead eyebrow="Stock levels" icon="package" title="Current stock" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={stockColumns}
             rows={rows}
@@ -230,12 +230,12 @@ export default function InventorySection({ dateFilters, view, onViewChange }) {
             emptyState={{ icon: "package", title: "No stock records", subtitle: "Nothing tracked for this tier yet." }}
             minWidth={860}
           />
-        </div>
+        </PanelBody>
       </Surface>
 
       <Surface padding={0}>
         <PanelHead eyebrow="History" icon="history" title="Stock movements" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={movementColumns}
             rows={movements}
@@ -244,7 +244,7 @@ export default function InventorySection({ dateFilters, view, onViewChange }) {
             emptyState={{ icon: "history", title: "No movements", subtitle: "Nothing recorded in this window." }}
             minWidth={860}
           />
-        </div>
+        </PanelBody>
       </Surface>
     </>
   );

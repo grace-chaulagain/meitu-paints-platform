@@ -6,7 +6,7 @@ import { Surface, DataTable, PrimaryButton, Pill, MetricTile } from "../../../..
 import { AppleDropdown } from "../../../../components/dashboard/ApplePickers.jsx";
 import { money, number, formatDate } from "../insightsFormatting.js";
 import { CURRENCY, kpiRowStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import AddPaymentModal from "./AddPaymentModal.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
@@ -210,7 +210,7 @@ export default function PaymentsSection({ dateFilters, view, onViewChange }) {
     <>
       <Surface padding={0}>
         <PanelHead eyebrow="Ledger" icon="list" title="Recorded payments" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={paymentColumns}
             rows={payments}
@@ -219,12 +219,12 @@ export default function PaymentsSection({ dateFilters, view, onViewChange }) {
             emptyState={{ icon: "invoice", title: "No payments recorded", subtitle: "Use Add payment to record one." }}
             minWidth={860}
           />
-        </div>
+        </PanelBody>
       </Surface>
 
       <Surface padding={0}>
         <PanelHead eyebrow="Balances" icon="store" title="Dues by party" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={duesColumns}
             rows={dues}
@@ -233,7 +233,7 @@ export default function PaymentsSection({ dateFilters, view, onViewChange }) {
             emptyState={{ icon: "checkmark", title: "Nothing outstanding", subtitle: "Every party is settled." }}
             minWidth={640}
           />
-        </div>
+        </PanelBody>
       </Surface>
     </>
   );

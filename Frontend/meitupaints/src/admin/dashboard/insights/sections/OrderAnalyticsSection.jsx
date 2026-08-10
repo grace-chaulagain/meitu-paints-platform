@@ -6,7 +6,7 @@ import { Surface, DataTable, SegmentedControl } from "../../../../components/das
 import { KpiTile } from "../InsightsPrimitives.jsx";
 import { money, number, formatDate } from "../insightsFormatting.js";
 import { CURRENCY, twoColStyle, kpiRowStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import RevenueTrendChart from "./charts/RevenueTrendChart.jsx";
 import StatusDistributionBarChart from "./charts/StatusDistributionBarChart.jsx";
@@ -103,7 +103,7 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
         </Surface>
         <Surface padding={0}>
           <PanelHead eyebrow="Cadence" icon="calendar" title="Orders by day of week" />
-          <MagnitudeBarChart items={dayOfWeekItems} formatValue={number} empty="No accepted orders in this window." />
+          <MagnitudeBarChart items={dayOfWeekItems} formatValue={(v) => number(v)} empty="No accepted orders in this window." />
         </Surface>
       </div>
     </>
@@ -126,7 +126,7 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
           title="Orders by period"
           action={<SegmentedControl value={granularity} onChange={setGranularity} options={GRANULARITY_OPTIONS} size="small" />}
         />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "date", header: "Period", render: (row) => String(row.date).slice(0, 10) },
@@ -145,13 +145,13 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
             emptyState={{ icon: "chart", title: "No orders in this window", subtitle: "Try a wider date range." }}
             minWidth={480}
           />
-        </div>
+        </PanelBody>
       </Surface>
 
       <div style={twoColStyle()}>
         <Surface padding={0}>
           <PanelHead eyebrow="Funnel" icon="list" title="Orders by status" />
-          <div style={{ padding: "0 18px 18px" }}>
+          <PanelBody>
             <DataTable
               columns={[
                 { key: "status", header: "Status", render: (row) => row.status },
@@ -163,11 +163,11 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
               emptyState={{ icon: "orders", title: "No orders", subtitle: "Nothing in this window." }}
               minWidth={360}
             />
-          </div>
+          </PanelBody>
         </Surface>
         <Surface padding={0}>
           <PanelHead eyebrow="Cadence" icon="list" title="Orders by day of week" />
-          <div style={{ padding: "0 18px 18px" }}>
+          <PanelBody>
             <DataTable
               columns={[
                 { key: "label", header: "Day", render: (row) => row.label },
@@ -179,13 +179,13 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
               emptyState={{ icon: "calendar", title: "No orders", subtitle: "Nothing in this window." }}
               minWidth={360}
             />
-          </div>
+          </PanelBody>
         </Surface>
       </div>
 
       <Surface padding={0}>
         <PanelHead eyebrow="Distribution" icon="list" title="Order value bands" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={[
               { key: "label", header: "Band", render: (row) => row.label },
@@ -203,12 +203,12 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
             emptyState={{ icon: "invoice", title: "No accepted orders", subtitle: "Nothing in this window." }}
             minWidth={360}
           />
-        </div>
+        </PanelBody>
       </Surface>
 
       <Surface padding={0}>
         <PanelHead eyebrow="Ranked" icon="list" title="Largest accepted orders" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={largestOrdersColumns}
             rows={data?.largestOrders || []}
@@ -217,7 +217,7 @@ export default function OrderAnalyticsSection({ dateFilters, view, onViewChange 
             emptyState={{ icon: "invoice", title: "No accepted orders", subtitle: "Nothing accepted in this window yet." }}
             minWidth={640}
           />
-        </div>
+        </PanelBody>
       </Surface>
     </>
   );

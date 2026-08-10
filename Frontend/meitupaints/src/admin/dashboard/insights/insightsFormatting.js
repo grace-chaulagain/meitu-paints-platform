@@ -49,15 +49,32 @@ export function rangeForPreset(preset) {
   return { from: isoDate(from), to: isoDate(to) };
 }
 
+// Intl throws RangeError if maximumFractionDigits isn't an integer in
+// 0..20. These formatters get passed straight to chart tooltips, which
+// call them as formatValue(value, entry) - so a bare `number` reference
+// used to receive the recharts entry object as `digits` and crash the
+// whole page. Coercing here makes that impossible from any call site.
+function safeDigits(digits) {
+  const parsed = Number(digits);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(20, Math.max(0, Math.trunc(parsed)));
+}
+
+function safeNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function money(value, currency = "NPR") {
-  return `${currency} ${Number(value || 0).toLocaleString(undefined, {
+  const code = typeof currency === "string" && currency.trim() ? currency.trim() : "NPR";
+  return `${code} ${safeNumber(value).toLocaleString(undefined, {
     maximumFractionDigits: 0,
   })}`;
 }
 
 export function number(value, digits = 0) {
-  return Number(value || 0).toLocaleString(undefined, {
-    maximumFractionDigits: digits,
+  return safeNumber(value).toLocaleString(undefined, {
+    maximumFractionDigits: safeDigits(digits),
   });
 }
 

@@ -10,7 +10,7 @@ import { Surface, DataTable, PrimaryButton } from "../../../../components/dashbo
 import { money } from "../insightsFormatting.js";
 import { downloadOrderStatementsReportPdf } from "../../../../utils/downloadOrderStatementsReportPdf.js";
 import { CURRENCY, twoColStyle } from "./sectionLayout.js";
-import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import { PanelHead, PanelBody, ErrorBanner } from "./sectionShared.jsx";
 import SectionViewFrame from "./SectionViewFrame.jsx";
 import ArAgingBarChart from "./charts/ArAgingBarChart.jsx";
 
@@ -135,9 +135,9 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
             PDF.
           </div>
           {generateError ? (
-            <div style={{ padding: "0 18px 18px" }}>
+            <PanelBody>
               <ErrorBanner message={generateError} />
-            </div>
+            </PanelBody>
           ) : null}
         </Surface>
   );
@@ -158,7 +158,7 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
     <>
       <Surface padding={0}>
         <PanelHead eyebrow="Accounts receivable" icon="invoice" title="Dealer outstanding balances" />
-        <div style={{ padding: "0 18px 18px" }}>
+        <PanelBody>
           <DataTable
             columns={arColumns}
             rows={arRows}
@@ -168,7 +168,7 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
             emptyState={{ icon: "invoice", title: "No outstanding balances", subtitle: "Every dealer is settled." }}
             minWidth={640}
           />
-        </div>
+        </PanelBody>
       </Surface>
       {exportPanel}
     </>
