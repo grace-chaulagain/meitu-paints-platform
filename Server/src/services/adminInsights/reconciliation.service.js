@@ -1,6 +1,11 @@
 import Payment from "../../models/Payment.model.js";
 import { PAYMENT_STATUS } from "../../constants/statuses.js";
-import { numberValue, resolveDateRange } from "./insightsShared.js";
+import {
+  applyDealerScope,
+  numberValue,
+  resolveDateRange,
+  resolveDealerIdScope,
+} from "./insightsShared.js";
 
 // Status/method breakdown for the selected window - the verification
 // queue itself is the existing listPayments() (admin.service.js), filtered
@@ -8,7 +13,9 @@ import { numberValue, resolveDateRange } from "./insightsShared.js";
 // currently doesn't exist anywhere on top of that raw listing.
 export async function getPaymentBreakdown(filters = {}) {
   const range = resolveDateRange(filters);
-  const match = {};
+  // Payments carry dealerId but not routing, so the workspace's Route
+  // scope is resolved to dealer ids first.
+  const match = applyDealerScope({}, await resolveDealerIdScope(filters));
   if (!range.isAllTime) {
     match.createdAt = { $gte: range.start, $lte: range.end };
   }
@@ -36,9 +43,14 @@ export async function getPaymentBreakdown(filters = {}) {
 // Headline totals for the verification queue - independent of the date
 // filter, since a queue is a "what needs action right now" view, not a
 // historical report.
-export async function getVerificationQueueSummary() {
+export async function getVerificationQueueSummary(filters = {}) {
   const rows = await Payment.aggregate([
-    { $match: { status: PAYMENT_STATUS.PENDING_VERIFICATION } },
+    {
+      $match: applyDealerScope(
+        { status: PAYMENT_STATUS.PENDING_VERIFICATION },
+        await resolveDealerIdScope(filters),
+      ),
+    },
     {
       $group: {
         _id: "$method",

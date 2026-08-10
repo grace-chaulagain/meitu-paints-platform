@@ -10,7 +10,10 @@ import {
   AR_EXCLUDED_ORDER_STATUSES,
   INTERNAL_ORDER_ORIGINS,
   PAID_PAYMENT_STATUSES,
+  applyDealerScope,
   numberValue,
+  resolveDealerIdScope,
+  resolveEntityMatch,
 } from "./insightsShared.js";
 
 // Per-dealer outstanding balance = everything they've ever ordered (minus
@@ -18,13 +21,20 @@ import {
 // Deliberately left SIGNED (an overpaid dealer shows a negative balance,
 // i.e. a credit owed back to them) rather than clamped at 0 - a real
 // account-keeping view needs to surface that, not hide it.
-export async function getArSummaryByDealer() {
+export async function getArSummaryByDealer(filters = {}) {
+  // Orders carry routing on the snapshot, but payments only carry
+  // dealerId - so the same scope is expressed two ways (see
+  // resolveDealerIdScope in insightsShared.js).
+  const entity = resolveEntityMatch(filters);
+  const dealerScope = await resolveDealerIdScope(filters);
+
   const [orderedRows, paidRows] = await Promise.all([
     Order.aggregate([
       {
         $match: {
           status: { $nin: AR_EXCLUDED_ORDER_STATUSES },
           isDeleted: { $ne: true },
+          ...entity,
           // Dispatcher-replenishment orders have no dealerId (they use
           // dispatcherCustomerId instead) - without this, "$dealerId"
           // groups them under a null _id, which then blows up the
@@ -37,7 +47,12 @@ export async function getArSummaryByDealer() {
       { $group: { _id: "$dealerId", totalOrdered: { $sum: "$totals.total" } } },
     ]),
     Payment.aggregate([
-      { $match: { status: { $in: PAID_PAYMENT_STATUSES }, dealerId: { $ne: null } } },
+      {
+        $match: applyDealerScope(
+          { status: { $in: PAID_PAYMENT_STATUSES }, dealerId: { $ne: null } },
+          dealerScope,
+        ),
+      },
       { $group: { _id: "$dealerId", totalPaid: { $sum: "$amount" } } },
     ]),
   ]);
@@ -76,8 +91,8 @@ export async function getArSummaryByDealer() {
 // Fleet-wide AR position: sum of every dealer's signed outstanding balance
 // (so dealer credit balances net against dealer debts, mirroring how the
 // per-dealer figures above are computed).
-export async function getFleetArTotal() {
-  const rows = await getArSummaryByDealer();
+export async function getFleetArTotal(filters = {}) {
+  const rows = await getArSummaryByDealer(filters);
   return rows.reduce((sum, row) => sum + row.outstanding, 0);
 }
 
@@ -99,8 +114,9 @@ const AGING_BUCKET_LABELS = {
 // closeOrder() only ever sets closedAt once an order is fully reconciled
 // (see admin.service.js:closeOrder), so this is a safe, real narrowing of
 // the $lookup's working set, not just a nice-to-have.
-export async function getArAgingBuckets() {
+export async function getArAgingBuckets(filters = {}) {
   const now = new Date();
+  const entity = resolveEntityMatch(filters);
   const rows = await Order.aggregate([
     {
       $match: {
@@ -108,6 +124,7 @@ export async function getArAgingBuckets() {
         isDeleted: { $ne: true },
         orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
         closedAt: null,
+        ...entity,
       },
     },
     {
@@ -167,8 +184,8 @@ export async function getArAgingBuckets() {
 // "Overdue" = outstanding order age beyond a flat 30-day grace window
 // (buckets 2-4). All figures here are non-negative (see aging note above),
 // so this sum is always >= 0.
-export async function getOverdueArTotal() {
-  const buckets = await getArAgingBuckets();
+export async function getOverdueArTotal(filters = {}) {
+  const buckets = await getArAgingBuckets(filters);
   return buckets
     .filter((bucket) => bucket.bucket !== "0-30 days")
     .reduce((sum, bucket) => sum + bucket.outstanding, 0);

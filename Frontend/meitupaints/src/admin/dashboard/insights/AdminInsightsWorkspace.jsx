@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { rangeForPreset } from "./insightsFormatting.js";
 import DateRangeFilterBar from "./sections/DateRangeFilterBar.jsx";
+import EntityFilterBar from "./sections/EntityFilterBar.jsx";
+import { ROUTE_ALL, routeToParams } from "./sections/entityScope.js";
 import CashPositionSection from "./sections/CashPositionSection.jsx";
 import DealerStatementsSection from "./sections/DealerStatementsSection.jsx";
 import PaymentReconciliationSection from "./sections/PaymentReconciliationSection.jsx";
@@ -55,6 +57,39 @@ export default function AdminInsightsWorkspace() {
   const initialRange = useMemo(() => rangeForPreset("30d"), []);
   const [range, setRange] = useState({ preset: "30d", from: initialRange.from, to: initialRange.to });
 
+  // Entity scope lives in the URL (same convention as the admin orders
+  // list) so a filtered view is shareable and survives a reload.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const route = searchParams.get("route") || ROUTE_ALL;
+  const dealerId = searchParams.get("dealer") || "";
+
+  const setScopeParam = useCallback(
+    (patch) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          Object.entries(patch).forEach(([key, value]) => {
+            if (value) next.set(key, value);
+            else next.delete(key);
+          });
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // Changing route invalidates a dealer chosen under the previous route.
+  const handleRouteChange = useCallback(
+    (nextRoute) => setScopeParam({ route: nextRoute === ROUTE_ALL ? "" : nextRoute, dealer: "" }),
+    [setScopeParam],
+  );
+  const handleDealerChange = useCallback(
+    (nextDealer) => setScopeParam({ dealer: nextDealer }),
+    [setScopeParam],
+  );
+
   function updateRange(patch) {
     setRange((current) => {
       const next = { ...current, ...patch };
@@ -70,14 +105,25 @@ export default function AdminInsightsWorkspace() {
     setRange({ preset: "30d", from: defaultRange.from, to: defaultRange.to });
   }
 
+  // One object every section receives: date window + entity scope. Named
+  // `dateFilters` still because that's the prop the sections already take.
   const dateFilters = useMemo(() => {
     const params = { range: range.preset };
     if (range.preset !== "all") {
       params.from = range.from;
       params.to = range.to;
     }
+    Object.assign(params, routeToParams(route));
+    // Performance ranks entities against each other, so a single-dealer
+    // scope would reduce it to a one-row ranking - the picker is disabled
+    // there (see below) and the param is dropped to match.
+    if (dealerId && activeSection !== "performance") {
+      params.dealerId = dealerId;
+    }
     return params;
-  }, [range.preset, range.from, range.to]);
+  }, [range.preset, range.from, range.to, route, dealerId, activeSection]);
+
+  const dealerFilterDisabled = activeSection === "performance";
 
   function renderSection() {
     if (activeSection === "cash-position") return <CashPositionSection dateFilters={dateFilters} />;
@@ -120,13 +166,23 @@ export default function AdminInsightsWorkspace() {
 
       <div className="iw-main">
         <header className="iw-header">
-          <DateRangeFilterBar
-            preset={range.preset}
-            from={range.from}
-            to={range.to}
-            onChange={updateRange}
-            onReset={resetRange}
-          />
+          <div className="iw-filters">
+            <DateRangeFilterBar
+              preset={range.preset}
+              from={range.from}
+              to={range.to}
+              onChange={updateRange}
+              onReset={resetRange}
+            />
+            <EntityFilterBar
+              route={route}
+              dealerId={dealerId}
+              onRouteChange={handleRouteChange}
+              onDealerChange={handleDealerChange}
+              dealerDisabled={dealerFilterDisabled}
+              dealerDisabledReason="Rankings compare all dealers"
+            />
+          </div>
         </header>
 
         {/* Keyed so a section switch replays the entrance rather than
@@ -197,6 +253,9 @@ export default function AdminInsightsWorkspace() {
           backdrop-filter:saturate(180%) blur(20px);
           -webkit-backdrop-filter:saturate(180%) blur(20px);
           border-bottom:1px solid var(--color-silver-mist, #e8e8ed);
+        }
+        .iw-filters{
+          display:flex; align-items:center; flex-wrap:wrap; gap:10px;
         }
         .iw-content{
           display:grid; gap:16px;

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import ApiError from "../../utils/apiError.js";
 import { PAYMENT_STATUS } from "../../constants/statuses.js";
 import { ORDER_STATUS } from "../../models/Order.model.js";
@@ -42,6 +43,85 @@ export function normalizeUpper(value = "") {
 export function numberValue(value) {
   const next = Number(value || 0);
   return Number.isFinite(next) ? next : 0;
+}
+
+function objectId(value, label) {
+  if (!mongoose.Types.ObjectId.isValid(String(value))) {
+    throw new ApiError(400, `Invalid ${label}`);
+  }
+  return new mongoose.Types.ObjectId(String(value));
+}
+
+// Entity scope shared by every insights section, so the workspace's Route
+// and Dealer pickers filter exactly the way the admin orders list does
+// (see listOrders() in order.service.js) rather than growing a second,
+// subtly different interpretation of the same words.
+//
+// DISPATCHER_REPLENISHMENT is deliberately NOT accepted here: those orders
+// are excluded from every revenue/AR view (INTERNAL_ORDER_ORIGINS above),
+// so offering it as a filter could only ever produce an all-zero view.
+export function resolveEntityMatch(filters = {}) {
+  const match = {};
+
+  const fulfillmentMode = normalizeUpper(filters.fulfillmentMode);
+  if (["FACTORY", "DISPATCHER"].includes(fulfillmentMode)) {
+    match["dealerSnapshot.fulfillmentMode"] = fulfillmentMode;
+  }
+
+  if (normalize(filters.dispatcherId)) {
+    match.dispatcherId = objectId(filters.dispatcherId, "dispatcherId");
+    // A dispatcher scope is meaningless outside dispatcher-routed orders,
+    // and pinning it here keeps the count consistent with the orders list.
+    match["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
+  }
+
+  if (normalize(filters.dealerId)) {
+    match.dealerId = objectId(filters.dealerId, "dealerId");
+  }
+
+  return match;
+}
+
+export function hasEntityScope(filters = {}) {
+  return Boolean(
+    normalize(filters.dealerId) ||
+      normalize(filters.dispatcherId) ||
+      ["FACTORY", "DISPATCHER"].includes(normalizeUpper(filters.fulfillmentMode)),
+  );
+}
+
+// Collections keyed only by dealerId (Payment, dealer stock) can't be
+// filtered by routing directly - routing lives on DealerProfile, not on
+// the payment. So resolve the scope to a concrete dealer id list first.
+// Returns null when unscoped, meaning "apply no dealer restriction";
+// an empty array means "scoped, but nothing matches" and callers must
+// treat that as a genuine empty result rather than as unscoped.
+export async function resolveDealerIdScope(filters = {}) {
+  if (!hasEntityScope(filters)) return null;
+
+  const dealerId = normalize(filters.dealerId);
+  if (dealerId) return [objectId(dealerId, "dealerId")];
+
+  const { default: DealerProfile } = await import("../../models/DealerProfile.model.js");
+
+  const query = {};
+  const dispatcherId = normalize(filters.dispatcherId);
+  if (dispatcherId) {
+    query.fulfillmentMode = "DISPATCHER";
+    query.dispatcherId = objectId(dispatcherId, "dispatcherId");
+  } else {
+    query.fulfillmentMode = normalizeUpper(filters.fulfillmentMode);
+  }
+
+  const dealers = await DealerProfile.find(query).select("_id").lean();
+  return dealers.map((dealer) => dealer._id);
+}
+
+// Applies a resolved dealer-id scope to a query object in place.
+export function applyDealerScope(query, scope) {
+  if (scope === null || scope === undefined) return query;
+  query.dealerId = { $in: scope };
+  return query;
 }
 
 function parseDateBoundary(value, endOfDay = false) {

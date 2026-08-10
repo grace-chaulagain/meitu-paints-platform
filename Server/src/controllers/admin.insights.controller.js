@@ -14,7 +14,7 @@ export const getCashPositionController = asyncHandler(async (req, res) => {
 export const getPaymentReconciliationController = asyncHandler(async (req, res) => {
   const [breakdown, queueSummary] = await Promise.all([
     reconciliationService.getPaymentBreakdown(req.query || {}),
-    reconciliationService.getVerificationQueueSummary(),
+    reconciliationService.getVerificationQueueSummary(req.query || {}),
   ]);
   res.status(200).json({ ok: true, item: { breakdown, queueSummary } });
 });
@@ -35,12 +35,12 @@ export const getOrderAnalyticsController = asyncHandler(async (req, res) => {
 });
 
 export const getArSummaryController = asyncHandler(async (req, res) => {
-  const items = await dealerStatementsService.getArSummaryByDealer();
+  const items = await dealerStatementsService.getArSummaryByDealer(req.query || {});
   res.status(200).json({ ok: true, items });
 });
 
 export const getArAgingController = asyncHandler(async (req, res) => {
-  const items = await dealerStatementsService.getArAgingBuckets();
+  const items = await dealerStatementsService.getArAgingBuckets(req.query || {});
   res.status(200).json({ ok: true, items });
 });
 

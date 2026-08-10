@@ -11,13 +11,15 @@ import {
   INTERNAL_ORDER_ORIGINS,
   numberValue,
   resolveDateRange,
+  resolveEntityMatch,
 } from "./insightsShared.js";
 
-function acceptedMatch(range) {
+function acceptedMatch(range, entity = {}) {
   const match = {
     isDeleted: { $ne: true },
     orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
     status: { $in: ACCEPTED_ORDER_STATUSES },
+    ...entity,
   };
   if (!range.isAllTime) {
     match.createdAt = { $gte: range.start, $lte: range.end };
@@ -31,7 +33,7 @@ export async function getProductPerformance(filters = {}, limit = 20) {
 
   const [ranking, categoryMix] = await Promise.all([
     Order.aggregate([
-      { $match: acceptedMatch(range) },
+      { $match: acceptedMatch(range, resolveEntityMatch(filters)) },
       { $unwind: "$items" },
       {
         $group: {
@@ -46,7 +48,7 @@ export async function getProductPerformance(filters = {}, limit = 20) {
       { $limit: safeLimit },
     ]),
     Order.aggregate([
-      { $match: acceptedMatch(range) },
+      { $match: acceptedMatch(range, resolveEntityMatch(filters)) },
       { $unwind: "$items" },
       {
         $group: {
@@ -84,7 +86,7 @@ export async function getDispatcherPerformance(filters = {}, limit = 20) {
   const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
 
   const match = {
-    ...acceptedMatch(range),
+    ...acceptedMatch(range, resolveEntityMatch(filters)),
     "dealerSnapshot.fulfillmentMode": "DISPATCHER",
     dispatcherId: { $ne: null },
   };
@@ -131,7 +133,7 @@ export async function getRoutingPerformance(filters = {}) {
   const range = resolveDateRange(filters);
 
   const rows = await Order.aggregate([
-    { $match: acceptedMatch(range) },
+    { $match: acceptedMatch(range, resolveEntityMatch(filters)) },
     {
       $group: {
         _id: { $ifNull: ["$dealerSnapshot.fulfillmentMode", "FACTORY"] },

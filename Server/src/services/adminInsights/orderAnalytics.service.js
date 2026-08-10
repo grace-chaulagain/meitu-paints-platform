@@ -4,14 +4,16 @@ import {
   INTERNAL_ORDER_ORIGINS,
   numberValue,
   resolveDateRange,
+  resolveEntityMatch,
 } from "./insightsShared.js";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function baseMatch(range) {
+function baseMatch(range, entity = {}) {
   const match = {
     isDeleted: { $ne: true },
     orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+    ...entity,
   };
   if (!range.isAllTime) {
     match.createdAt = { $gte: range.start, $lte: range.end };
@@ -28,7 +30,7 @@ export async function getOrderTrend(filters = {}) {
     : "day";
 
   const rows = await Order.aggregate([
-    { $match: { ...baseMatch(range), status: { $in: ACCEPTED_ORDER_STATUSES } } },
+    { $match: { ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } } },
     {
       $group: {
         _id: { $dateTrunc: { date: "$createdAt", unit: granularity } },
@@ -50,7 +52,7 @@ export async function getOrderTrend(filters = {}) {
 export async function getOrderStatusDistribution(filters = {}) {
   const range = resolveDateRange(filters);
   const rows = await Order.aggregate([
-    { $match: baseMatch(range) },
+    { $match: baseMatch(range, resolveEntityMatch(filters)) },
     { $group: { _id: "$status", count: { $sum: 1 }, revenue: { $sum: "$totals.total" } } },
     { $sort: { count: -1 } },
   ]);
@@ -68,7 +70,7 @@ const VALUE_BUCKET_LABELS = ["< 50K", "50K-100K", "100K-250K", "250K-500K", "500
 export async function getOrderValueDistribution(filters = {}) {
   const range = resolveDateRange(filters);
   const rows = await Order.aggregate([
-    { $match: { ...baseMatch(range), status: { $in: ACCEPTED_ORDER_STATUSES } } },
+    { $match: { ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } } },
     {
       $bucket: {
         groupBy: "$totals.total",
@@ -94,7 +96,7 @@ export async function getOrderValueDistribution(filters = {}) {
 export async function getOrderDayOfWeekPattern(filters = {}) {
   const range = resolveDateRange(filters);
   const rows = await Order.aggregate([
-    { $match: { ...baseMatch(range), status: { $in: ACCEPTED_ORDER_STATUSES } } },
+    { $match: { ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } } },
     {
       $group: {
         _id: { $dayOfWeek: "$createdAt" },
@@ -118,7 +120,7 @@ export async function getOrderDayOfWeekPattern(filters = {}) {
 
 export async function getLargestOrders(filters = {}, limit = 10) {
   const range = resolveDateRange(filters);
-  const rows = await Order.find({ ...baseMatch(range), status: { $in: ACCEPTED_ORDER_STATUSES } })
+  const rows = await Order.find({ ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } })
     .select("orderNumber totals.total createdAt dealerSnapshot.companyName dealerSnapshot.fulfillmentMode")
     .sort({ "totals.total": -1 })
     .limit(Math.min(50, Math.max(1, Number(limit) || 10)))

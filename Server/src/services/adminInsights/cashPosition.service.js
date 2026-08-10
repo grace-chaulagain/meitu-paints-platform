@@ -5,14 +5,16 @@ import {
   numberValue,
   growth,
   resolveDateRange,
+  resolveEntityMatch,
 } from "./insightsShared.js";
 import { getFleetArTotal, getOverdueArTotal } from "./dealerStatements.service.js";
 
-function acceptedRevenueMatch(range) {
+function acceptedRevenueMatch(range, entity = {}) {
   const match = {
     isDeleted: { $ne: true },
     orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
     status: { $in: ACCEPTED_ORDER_STATUSES },
+    ...entity,
   };
   if (!range.isAllTime) {
     match.createdAt = { $gte: range.start, $lte: range.end };
@@ -40,8 +42,8 @@ async function revenueTotals(match) {
 // Real recharts-ready trend series, day/week/month granularity chosen by
 // the caller - replaces the old hardcoded daily-under-120-days-else-
 // monthly binary switch with a real user-selectable bucket.
-async function revenueTrend(range, granularity) {
-  const match = acceptedRevenueMatch(range);
+async function revenueTrend(range, granularity, entity) {
+  const match = acceptedRevenueMatch(range, entity);
   const rows = await Order.aggregate([
     { $match: match },
     {
@@ -61,8 +63,8 @@ async function revenueTrend(range, granularity) {
   }));
 }
 
-async function paymentMethodMix(range) {
-  const match = acceptedRevenueMatch(range);
+async function paymentMethodMix(range, entity) {
+  const match = acceptedRevenueMatch(range, entity);
   const rows = await Order.aggregate([
     { $match: match },
     {
@@ -88,7 +90,8 @@ export async function getCashPosition(filters = {}) {
     ? filters.granularity
     : "day";
 
-  const currentMatch = acceptedRevenueMatch(range);
+  const entity = resolveEntityMatch(filters);
+  const currentMatch = acceptedRevenueMatch(range, entity);
   const previousMatch = range.isAllTime
     ? null
     : {
@@ -99,10 +102,10 @@ export async function getCashPosition(filters = {}) {
   const [current, previous, trend, paymentMix, arOutstanding, arOverdue] = await Promise.all([
     revenueTotals(currentMatch),
     previousMatch ? revenueTotals(previousMatch) : Promise.resolve({ revenue: 0, orderCount: 0 }),
-    revenueTrend(range, granularity),
-    paymentMethodMix(range),
-    getFleetArTotal(),
-    getOverdueArTotal(),
+    revenueTrend(range, granularity, entity),
+    paymentMethodMix(range, entity),
+    getFleetArTotal(filters),
+    getOverdueArTotal(filters),
   ]);
 
   return {

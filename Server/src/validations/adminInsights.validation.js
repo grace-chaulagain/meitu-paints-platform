@@ -11,6 +11,12 @@ export const insightsDateRangeQuerySchema = z
     from: z.string().trim().max(40).optional(),
     to: z.string().trim().max(40).optional(),
     granularity: z.enum(["day", "week", "month"]).optional(),
+    // Entity scope from the workspace's Route/Dealer pickers. Mirrors the
+    // admin orders list vocabulary; DISPATCHER_REPLENISHMENT is not
+    // accepted because those orders are excluded from revenue/AR views.
+    fulfillmentMode: z.enum(["FACTORY", "DISPATCHER"]).optional(),
+    dispatcherId: z.string().trim().max(40).optional(),
+    dealerId: z.string().trim().max(40).optional(),
   })
   .strict();
 
