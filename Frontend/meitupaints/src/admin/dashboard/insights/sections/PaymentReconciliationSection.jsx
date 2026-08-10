@@ -11,6 +11,7 @@ import { Surface, DataTable, GhostButton, Pill, MetricTile } from "../../../../c
 import { money, number, formatDate } from "../insightsFormatting.js";
 import { CURRENCY, twoColStyle, kpiRowStyle } from "./sectionLayout.js";
 import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import SectionViewFrame from "./SectionViewFrame.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
 
 function statusPillTone(status) {
@@ -20,7 +21,7 @@ function statusPillTone(status) {
   return "neutral";
 }
 
-export default function PaymentReconciliationSection({ dateFilters }) {
+export default function PaymentReconciliationSection({ dateFilters, view, onViewChange }) {
   const breakdownQuery = useGetAdminPaymentReconciliationQuery(dateFilters);
   const queueQuery = useGetAdminPaymentsQuery({ status: "PENDING_VERIFICATION", limit: 50 });
   const [verifyPayment, verifyState] = useVerifyAdminPaymentMutation();
@@ -126,7 +127,10 @@ export default function PaymentReconciliationSection({ dateFilters }) {
     (verifyState.error ? getQueryErrorMessage(verifyState.error, "Failed to verify payment.") : "") ||
     (rejectState.error ? getQueryErrorMessage(rejectState.error, "Failed to reject payment.") : "");
 
-  return (
+  // The verification queue is actionable work, not a visualisation, so it
+  // stays visible in both views alongside the KPIs - only the breakdown
+  // charts swap for their underlying rows.
+  const summary = (
     <div style={{ display: "grid", gap: 14 }}>
       {breakdownError ? <ErrorBanner message={breakdownError} /> : null}
       {actionError ? <ErrorBanner message={actionError} /> : null}
@@ -134,28 +138,6 @@ export default function PaymentReconciliationSection({ dateFilters }) {
       <div style={kpiRowStyle()}>
         <MetricTile icon="invoice" label="Pending Verification" value={money(queueSummary.amount, CURRENCY)} tone="accent" />
         <MetricTile icon="orders" label="Pending Payments" value={number(queueSummary.count)} />
-      </div>
-
-      <div style={twoColStyle()}>
-        <Surface padding={0}>
-          <PanelHead eyebrow="Pending" icon="chart" title="Pending amount by method" />
-          <MagnitudeBarChart
-            items={methodBreakdown.map((row) => ({ label: row.method, value: row.amount }))}
-            formatValue={(v) => money(v, CURRENCY)}
-            empty="Nothing pending verification."
-          />
-        </Surface>
-        <Surface padding={0}>
-          <PanelHead eyebrow="Window" icon="list" title="Status/method breakdown" />
-          <MagnitudeBarChart
-            items={(breakdownQuery.data?.breakdown || []).map((row) => ({
-              label: `${row.status} · ${row.method}`,
-              value: row.amount,
-            }))}
-            formatValue={(v) => money(v, CURRENCY)}
-            empty="No payments recorded in this window."
-          />
-        </Surface>
       </div>
 
       <Surface padding={0}>
@@ -176,5 +158,87 @@ export default function PaymentReconciliationSection({ dateFilters }) {
         </div>
       </Surface>
     </div>
+  );
+
+  const charts = (
+    <div style={twoColStyle()}>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Pending" icon="chart" title="Pending amount by method" />
+        <MagnitudeBarChart
+          items={methodBreakdown.map((row) => ({ label: row.method, value: row.amount }))}
+          formatValue={(v) => money(v, CURRENCY)}
+          empty="Nothing pending verification."
+        />
+      </Surface>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Window" icon="list" title="Status/method breakdown" />
+        <MagnitudeBarChart
+          items={(breakdownQuery.data?.breakdown || []).map((row) => ({
+            label: `${row.status} · ${row.method}`,
+            value: row.amount,
+          }))}
+          formatValue={(v) => money(v, CURRENCY)}
+          empty="No payments recorded in this window."
+        />
+      </Surface>
+    </div>
+  );
+
+  const numericCol = (key, header) => ({
+    key,
+    header,
+    align: "right",
+    cellClassName: () => "dash-table-tabular",
+    render: (row) => (key === "count" ? number(row[key]) : money(row[key], CURRENCY)),
+  });
+
+  const dataView = (
+    <>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Pending" icon="list" title="Pending amount by method" />
+        <div style={{ padding: "0 18px 18px" }}>
+          <DataTable
+            columns={[
+              { key: "method", header: "Method", render: (row) => row.method || "Unspecified" },
+              numericCol("count", "Payments"),
+              numericCol("amount", "Amount"),
+            ]}
+            rows={methodBreakdown}
+            getRowKey={(row) => String(row.method)}
+            loading={breakdownQuery.isLoading && !breakdownQuery.data}
+            emptyState={{ icon: "checkmark", title: "Nothing pending", subtitle: "No payments awaiting verification." }}
+            minWidth={480}
+          />
+        </div>
+      </Surface>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Window" icon="list" title="Status/method breakdown" />
+        <div style={{ padding: "0 18px 18px" }}>
+          <DataTable
+            columns={[
+              { key: "status", header: "Status", render: (row) => row.status },
+              { key: "method", header: "Method", render: (row) => row.method || "Unspecified" },
+              numericCol("count", "Payments"),
+              numericCol("amount", "Amount"),
+            ]}
+            rows={breakdownQuery.data?.breakdown || []}
+            getRowKey={(row) => `${row.status}-${row.method}`}
+            loading={breakdownQuery.isLoading && !breakdownQuery.data}
+            emptyState={{ icon: "invoice", title: "No payments", subtitle: "Nothing recorded in this window." }}
+            minWidth={560}
+          />
+        </div>
+      </Surface>
+    </>
+  );
+
+  return (
+    <SectionViewFrame
+      summary={summary}
+      charts={charts}
+      data={dataView}
+      view={view}
+      onViewChange={onViewChange}
+    />
   );
 }

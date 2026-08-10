@@ -6,6 +6,7 @@ import { Surface, DataTable, Pill } from "../../../../../components/dashboard/Da
 import { money, number, percent, formatDate } from "../../insightsFormatting.js";
 import { CURRENCY } from "../sectionLayout.js";
 import { PanelHead, ErrorBanner } from "../sectionShared.jsx";
+import SectionViewFrame from "../SectionViewFrame.jsx";
 import MagnitudeBarChart from "../charts/MagnitudeBarChart.jsx";
 
 function activityTone(status) {
@@ -17,7 +18,7 @@ function activityTone(status) {
 // Resurrects GET /admin/dealers/analytics/leaderboard - backend-complete,
 // correct, real $group/$unwind aggregation, but zero frontend consumers
 // before this tab.
-export default function DealersPerformanceTab() {
+export default function DealersPerformanceTab({ view, onViewChange }) {
   const query = useGetAdminDealerLeaderboardQuery({ sort: "totalSales", limit: 50 });
   const rows = useMemo(() => query.data || [], [query.data]);
   const error = query.error ? getQueryErrorMessage(query.error, "Failed to load dealer leaderboard.") : "";
@@ -57,12 +58,14 @@ export default function DealersPerformanceTab() {
 
   if (error) return <ErrorBanner message={error} />;
 
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
+  const charts = (
       <Surface padding={0}>
         <PanelHead eyebrow="Leadership" icon="store" title="Dealer revenue leaders" />
         <MagnitudeBarChart items={chartItems} formatValue={(v) => money(v, CURRENCY)} />
       </Surface>
+  );
+
+  const dataView = (
       <Surface padding={0}>
         <PanelHead eyebrow="Comparison" icon="list" title="Dealer leaderboard" />
         <div style={{ padding: "0 18px 18px" }}>
@@ -76,6 +79,7 @@ export default function DealersPerformanceTab() {
           />
         </div>
       </Surface>
-    </div>
   );
+
+  return <SectionViewFrame charts={charts} data={dataView} view={view} onViewChange={onViewChange} />;
 }

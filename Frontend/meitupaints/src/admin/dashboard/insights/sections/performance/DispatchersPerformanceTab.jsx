@@ -6,9 +6,10 @@ import { Surface, DataTable } from "../../../../../components/dashboard/Dashboar
 import { money, number, formatDate } from "../../insightsFormatting.js";
 import { CURRENCY } from "../sectionLayout.js";
 import { PanelHead, ErrorBanner } from "../sectionShared.jsx";
+import SectionViewFrame from "../SectionViewFrame.jsx";
 import MagnitudeBarChart from "../charts/MagnitudeBarChart.jsx";
 
-export default function DispatchersPerformanceTab({ dateFilters }) {
+export default function DispatchersPerformanceTab({ dateFilters, view, onViewChange }) {
   const query = useGetAdminDispatcherPerformanceQuery({ ...dateFilters, limit: 20 });
   const rows = useMemo(() => query.data || [], [query.data]);
   const error = query.error ? getQueryErrorMessage(query.error, "Failed to load dispatcher performance.") : "";
@@ -50,12 +51,14 @@ export default function DispatchersPerformanceTab({ dateFilters }) {
 
   if (error) return <ErrorBanner message={error} />;
 
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
+  const charts = (
       <Surface padding={0}>
         <PanelHead eyebrow="Revenue" icon="invoice" title="Revenue by dispatcher" />
         <MagnitudeBarChart items={chartItems} formatValue={(v) => money(v, CURRENCY)} />
       </Surface>
+  );
+
+  const dataView = (
       <Surface padding={0}>
         <PanelHead eyebrow="Comparison" icon="list" title="Dispatcher performance" />
         <div style={{ padding: "0 18px 18px" }}>
@@ -69,6 +72,7 @@ export default function DispatchersPerformanceTab({ dateFilters }) {
           />
         </div>
       </Surface>
-    </div>
   );
+
+  return <SectionViewFrame charts={charts} data={dataView} view={view} onViewChange={onViewChange} />;
 }

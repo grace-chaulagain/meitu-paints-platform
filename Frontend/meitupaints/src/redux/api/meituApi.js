@@ -1609,14 +1609,14 @@ export const meituApi = createApi({
     }),
 
     getAdminArSummary: builder.query({
-      query: () => ({ url: "/api/admin/insights/ar/summary" }),
+      query: (params = {}) => ({ url: "/api/admin/insights/ar/summary", params }),
       transformResponse: getItems,
       keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
       providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
     }),
 
     getAdminArAging: builder.query({
-      query: () => ({ url: "/api/admin/insights/ar/aging" }),
+      query: (params = {}) => ({ url: "/api/admin/insights/ar/aging", params }),
       transformResponse: getItems,
       keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
       providesTags: () => [listTag("Insight"), listTag("AdminInsight")],

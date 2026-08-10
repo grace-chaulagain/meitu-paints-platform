@@ -5,6 +5,7 @@ import { rangeForPreset } from "./insightsFormatting.js";
 import DateRangeFilterBar from "./sections/DateRangeFilterBar.jsx";
 import EntityFilterBar from "./sections/EntityFilterBar.jsx";
 import { ROUTE_ALL, routeToParams } from "./sections/entityScope.js";
+import { VIEW_CHARTS } from "./sections/viewMode.js";
 import CashPositionSection from "./sections/CashPositionSection.jsx";
 import DealerStatementsSection from "./sections/DealerStatementsSection.jsx";
 import PaymentReconciliationSection from "./sections/PaymentReconciliationSection.jsx";
@@ -125,12 +126,23 @@ export default function AdminInsightsWorkspace() {
 
   const dealerFilterDisabled = activeSection === "performance";
 
+  // Each section remembers its own Charts/Data choice - some sections you
+  // read, some you audit, and forcing one mode across all of them means
+  // re-toggling on every switch.
+  const [viewBySection, setViewBySection] = useState({});
+  const view = viewBySection[activeSection] || VIEW_CHARTS;
+  const onViewChange = useCallback(
+    (nextView) => setViewBySection((current) => ({ ...current, [activeSection]: nextView })),
+    [activeSection],
+  );
+
   function renderSection() {
-    if (activeSection === "cash-position") return <CashPositionSection dateFilters={dateFilters} />;
-    if (activeSection === "statements") return <DealerStatementsSection dateFilters={dateFilters} />;
-    if (activeSection === "reconciliation") return <PaymentReconciliationSection dateFilters={dateFilters} />;
-    if (activeSection === "orders") return <OrderAnalyticsSection dateFilters={dateFilters} />;
-    if (activeSection === "performance") return <PerformanceSection dateFilters={dateFilters} />;
+    const props = { dateFilters, view, onViewChange };
+    if (activeSection === "cash-position") return <CashPositionSection {...props} />;
+    if (activeSection === "statements") return <DealerStatementsSection {...props} />;
+    if (activeSection === "reconciliation") return <PaymentReconciliationSection {...props} />;
+    if (activeSection === "orders") return <OrderAnalyticsSection {...props} />;
+    if (activeSection === "performance") return <PerformanceSection {...props} />;
     if (activeSection === "reports") return <ReportsSection dateFilters={dateFilters} />;
     return null;
   }

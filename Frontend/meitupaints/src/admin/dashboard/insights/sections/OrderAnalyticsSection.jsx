@@ -7,6 +7,7 @@ import { KpiTile } from "../InsightsPrimitives.jsx";
 import { money, number, formatDate } from "../insightsFormatting.js";
 import { CURRENCY, twoColStyle, kpiRowStyle } from "./sectionLayout.js";
 import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import SectionViewFrame from "./SectionViewFrame.jsx";
 import RevenueTrendChart from "./charts/RevenueTrendChart.jsx";
 import StatusDistributionBarChart from "./charts/StatusDistributionBarChart.jsx";
 import MagnitudeBarChart from "./charts/MagnitudeBarChart.jsx";
@@ -17,7 +18,7 @@ const GRANULARITY_OPTIONS = [
   { key: "month", label: "Month" },
 ];
 
-export default function OrderAnalyticsSection({ dateFilters }) {
+export default function OrderAnalyticsSection({ dateFilters, view, onViewChange }) {
   // Real user-selectable trend granularity - the old page hardcoded a
   // binary daily/monthly switch based on the selected date range's length.
   const [granularity, setGranularity] = useState("day");
@@ -71,13 +72,15 @@ export default function OrderAnalyticsSection({ dateFilters }) {
 
   if (error) return <ErrorBanner message={error} />;
 
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div style={kpiRowStyle()}>
-        <KpiTile icon="orders" label="Orders in window" value={loading ? "…" : number(totals.orders)} />
-        <KpiTile icon="invoice" label="Revenue in window" value={loading ? "…" : money(totals.revenue, CURRENCY)} tone="accent" />
-      </div>
+  const summary = (
+    <div style={kpiRowStyle()}>
+      <KpiTile icon="orders" label="Orders in window" value={loading ? "…" : number(totals.orders)} />
+      <KpiTile icon="invoice" label="Revenue in window" value={loading ? "…" : money(totals.revenue, CURRENCY)} tone="accent" />
+    </div>
+  );
 
+  const charts = (
+    <>
       <Surface padding={0}>
         <PanelHead
           eyebrow="Trend analysis"
@@ -103,6 +106,105 @@ export default function OrderAnalyticsSection({ dateFilters }) {
           <MagnitudeBarChart items={dayOfWeekItems} formatValue={number} empty="No accepted orders in this window." />
         </Surface>
       </div>
+    </>
+  );
+
+  const countCol = (key, header) => ({
+    key,
+    header,
+    align: "right",
+    cellClassName: () => "dash-table-tabular",
+    render: (row) => number(row[key]),
+  });
+
+  const dataView = (
+    <>
+      <Surface padding={0}>
+        <PanelHead
+          eyebrow="Trend analysis"
+          icon="list"
+          title="Orders by period"
+          action={<SegmentedControl value={granularity} onChange={setGranularity} options={GRANULARITY_OPTIONS} size="small" />}
+        />
+        <div style={{ padding: "0 18px 18px" }}>
+          <DataTable
+            columns={[
+              { key: "date", header: "Period", render: (row) => String(row.date).slice(0, 10) },
+              countCol("orderCount", "Orders"),
+              {
+                key: "revenue",
+                header: "Revenue",
+                align: "right",
+                cellClassName: () => "dash-table-tabular",
+                render: (row) => money(row.revenue, CURRENCY),
+              },
+            ]}
+            rows={data?.trend || []}
+            getRowKey={(row) => String(row.date)}
+            loading={loading}
+            emptyState={{ icon: "chart", title: "No orders in this window", subtitle: "Try a wider date range." }}
+            minWidth={480}
+          />
+        </div>
+      </Surface>
+
+      <div style={twoColStyle()}>
+        <Surface padding={0}>
+          <PanelHead eyebrow="Funnel" icon="list" title="Orders by status" />
+          <div style={{ padding: "0 18px 18px" }}>
+            <DataTable
+              columns={[
+                { key: "status", header: "Status", render: (row) => row.status },
+                countCol("count", "Orders"),
+              ]}
+              rows={data?.statusDistribution || []}
+              getRowKey={(row) => String(row.status)}
+              loading={loading}
+              emptyState={{ icon: "orders", title: "No orders", subtitle: "Nothing in this window." }}
+              minWidth={360}
+            />
+          </div>
+        </Surface>
+        <Surface padding={0}>
+          <PanelHead eyebrow="Cadence" icon="list" title="Orders by day of week" />
+          <div style={{ padding: "0 18px 18px" }}>
+            <DataTable
+              columns={[
+                { key: "label", header: "Day", render: (row) => row.label },
+                countCol("value", "Orders"),
+              ]}
+              rows={dayOfWeekItems}
+              getRowKey={(row) => String(row.label)}
+              loading={loading}
+              emptyState={{ icon: "calendar", title: "No orders", subtitle: "Nothing in this window." }}
+              minWidth={360}
+            />
+          </div>
+        </Surface>
+      </div>
+
+      <Surface padding={0}>
+        <PanelHead eyebrow="Distribution" icon="list" title="Order value bands" />
+        <div style={{ padding: "0 18px 18px" }}>
+          <DataTable
+            columns={[
+              { key: "label", header: "Band", render: (row) => row.label },
+              {
+                key: "value",
+                header: "Revenue",
+                align: "right",
+                cellClassName: () => "dash-table-tabular",
+                render: (row) => money(row.value, CURRENCY),
+              },
+            ]}
+            rows={valueDistItems}
+            getRowKey={(row) => String(row.label)}
+            loading={loading}
+            emptyState={{ icon: "invoice", title: "No accepted orders", subtitle: "Nothing in this window." }}
+            minWidth={360}
+          />
+        </div>
+      </Surface>
 
       <Surface padding={0}>
         <PanelHead eyebrow="Ranked" icon="list" title="Largest accepted orders" />
@@ -117,6 +219,16 @@ export default function OrderAnalyticsSection({ dateFilters }) {
           />
         </div>
       </Surface>
-    </div>
+    </>
+  );
+
+  return (
+    <SectionViewFrame
+      summary={summary}
+      charts={charts}
+      data={dataView}
+      view={view}
+      onViewChange={onViewChange}
+    />
   );
 }

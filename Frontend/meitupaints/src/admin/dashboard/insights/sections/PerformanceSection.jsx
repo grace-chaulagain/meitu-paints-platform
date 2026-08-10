@@ -18,15 +18,21 @@ const SUB_TABS = [
 // tab, expressed with TabBar (visually lighter than the top-level
 // SegmentedControl) so "secondary" is a real component distinction, not
 // just documentation.
-export default function PerformanceSection({ dateFilters }) {
+export default function PerformanceSection({ dateFilters, view, onViewChange }) {
   const [subTab, setSubTab] = useState("dealers");
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <TabBar value={subTab} onChange={setSubTab} options={SUB_TABS} />
-      {subTab === "dealers" ? <DealersPerformanceTab /> : null}
-      {subTab === "products" ? <ProductsPerformanceTab dateFilters={dateFilters} /> : null}
-      {subTab === "dispatchers" ? <DispatchersPerformanceTab dateFilters={dateFilters} /> : null}
+      {subTab === "dealers" ? <DealersPerformanceTab view={view} onViewChange={onViewChange} /> : null}
+      {subTab === "products" ? (
+        <ProductsPerformanceTab dateFilters={dateFilters} view={view} onViewChange={onViewChange} />
+      ) : null}
+      {subTab === "dispatchers" ? (
+        <DispatchersPerformanceTab dateFilters={dateFilters} view={view} onViewChange={onViewChange} />
+      ) : null}
+      {/* Routing is KPI tiles + charts only - no rows to switch to, so it
+          renders without a toggle rather than offering an empty Data view. */}
       {subTab === "routing" ? <RoutingPerformanceTab dateFilters={dateFilters} /> : null}
     </div>
   );

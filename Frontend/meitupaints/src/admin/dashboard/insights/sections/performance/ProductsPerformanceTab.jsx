@@ -6,9 +6,10 @@ import { Surface, DataTable } from "../../../../../components/dashboard/Dashboar
 import { money, number, formatDate } from "../../insightsFormatting.js";
 import { CURRENCY, twoColStyle } from "../sectionLayout.js";
 import { PanelHead, ErrorBanner } from "../sectionShared.jsx";
+import SectionViewFrame from "../SectionViewFrame.jsx";
 import MagnitudeBarChart from "../charts/MagnitudeBarChart.jsx";
 
-export default function ProductsPerformanceTab({ dateFilters }) {
+export default function ProductsPerformanceTab({ dateFilters, view, onViewChange }) {
   const query = useGetAdminProductPerformanceQuery({ ...dateFilters, limit: 20 });
   const data = query.data;
   const error = query.error ? getQueryErrorMessage(query.error, "Failed to load product performance.") : "";
@@ -44,8 +45,7 @@ export default function ProductsPerformanceTab({ dateFilters }) {
 
   if (error) return <ErrorBanner message={error} />;
 
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
+  const charts = (
       <div style={twoColStyle()}>
         <Surface padding={0}>
           <PanelHead eyebrow="Revenue" icon="invoice" title="Top products by revenue" />
@@ -56,7 +56,9 @@ export default function ProductsPerformanceTab({ dateFilters }) {
           <MagnitudeBarChart items={categoryItems} formatValue={(v) => money(v, CURRENCY)} />
         </Surface>
       </div>
+  );
 
+  const dataView = (
       <Surface padding={0}>
         <PanelHead eyebrow="Ranking" icon="list" title="Product performance" />
         <div style={{ padding: "0 18px 18px" }}>
@@ -70,6 +72,7 @@ export default function ProductsPerformanceTab({ dateFilters }) {
           />
         </div>
       </Surface>
-    </div>
   );
+
+  return <SectionViewFrame charts={charts} data={dataView} view={view} onViewChange={onViewChange} />;
 }

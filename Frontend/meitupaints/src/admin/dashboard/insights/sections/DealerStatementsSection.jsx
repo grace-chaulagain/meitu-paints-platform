@@ -11,6 +11,7 @@ import { money } from "../insightsFormatting.js";
 import { downloadOrderStatementsReportPdf } from "../../../../utils/downloadOrderStatementsReportPdf.js";
 import { CURRENCY, twoColStyle } from "./sectionLayout.js";
 import { PanelHead, ErrorBanner } from "./sectionShared.jsx";
+import SectionViewFrame from "./SectionViewFrame.jsx";
 import ArAgingBarChart from "./charts/ArAgingBarChart.jsx";
 
 function outstandingColor(value) {
@@ -19,9 +20,12 @@ function outstandingColor(value) {
   return "var(--color-ink, #1d1d1f)";
 }
 
-export default function DealerStatementsSection({ dateFilters }) {
-  const arSummaryQuery = useGetAdminArSummaryQuery();
-  const arAgingQuery = useGetAdminArAgingQuery();
+export default function DealerStatementsSection({ dateFilters, view, onViewChange }) {
+  // AR is a balance-to-date figure, so the server ignores the date window
+  // here - but the entity scope in dateFilters must still reach it, or the
+  // header would claim a filter the numbers don't honour.
+  const arSummaryQuery = useGetAdminArSummaryQuery(dateFilters);
+  const arAgingQuery = useGetAdminArAgingQuery(dateFilters);
   const [fetchStatement, statementQuery] = useLazyGetAdminOrderStatementReportQuery();
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
@@ -114,15 +118,7 @@ export default function DealerStatementsSection({ dateFilters }) {
     }
   }
 
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      {arError ? <ErrorBanner message={arError} /> : null}
-
-      <div style={twoColStyle()}>
-        <Surface padding={0}>
-          <PanelHead eyebrow="Aging" icon="warning" title="AR aging buckets" />
-          <ArAgingBarChart items={agingRows} formatValue={(v) => money(v, CURRENCY)} />
-        </Surface>
+  const exportPanel = (
         <Surface padding={0}>
           <PanelHead
             eyebrow="Export"
@@ -144,8 +140,22 @@ export default function DealerStatementsSection({ dateFilters }) {
             </div>
           ) : null}
         </Surface>
-      </div>
+  );
 
+  const summary = arError ? <ErrorBanner message={arError} /> : null;
+
+  const charts = (
+    <div style={twoColStyle()}>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Aging" icon="warning" title="AR aging buckets" />
+        <ArAgingBarChart items={agingRows} formatValue={(v) => money(v, CURRENCY)} />
+      </Surface>
+      {exportPanel}
+    </div>
+  );
+
+  const dataView = (
+    <>
       <Surface padding={0}>
         <PanelHead eyebrow="Accounts receivable" icon="invoice" title="Dealer outstanding balances" />
         <div style={{ padding: "0 18px 18px" }}>
@@ -160,6 +170,17 @@ export default function DealerStatementsSection({ dateFilters }) {
           />
         </div>
       </Surface>
-    </div>
+      {exportPanel}
+    </>
+  );
+
+  return (
+    <SectionViewFrame
+      summary={summary}
+      charts={charts}
+      data={dataView}
+      view={view}
+      onViewChange={onViewChange}
+    />
   );
 }
