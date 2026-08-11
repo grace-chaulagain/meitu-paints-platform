@@ -31,10 +31,11 @@ export function movementLabel(type) {
   return (
     {
       PURCHASE: "Received from Meitu",
-      // Free-of-cost goods from an admin scheme order - deliberately
-      // worded differently from a purchase so a dealer can tell at a
-      // glance which stock they were given rather than bought.
-      SCHEME: "Received free (scheme)",
+      // Free-of-cost goods from an admin scheme order. These are logged
+      // for the record but never enter sellable stock, so the wording
+      // must not imply the balance moved - a dealer seeing "+6" against
+      // an unchanged balance would reasonably think it was a bug.
+      SCHEME: "Scheme goods (not in stock)",
       SALE: "Sold",
       RETURN: "Returned",
       ADJUSTMENT: "Manual adjustment",

@@ -55,17 +55,28 @@ async function applyMovement({
     INVENTORY_MOVEMENT_TYPE.PURCHASE,
     INVENTORY_MOVEMENT_TYPE.RETURN,
     INVENTORY_MOVEMENT_TYPE.TRANSFER_IN,
-    INVENTORY_MOVEMENT_TYPE.SCHEME,
   ].includes(type);
   const isDebit = [INVENTORY_MOVEMENT_TYPE.SALE, INVENTORY_MOVEMENT_TYPE.TRANSFER_OUT].includes(type);
   const isAdjustment = type === INVENTORY_MOVEMENT_TYPE.ADJUSTMENT;
+  // Scheme goods are recorded but never enter sellable stock: the dealer
+  // physically receives them, yet they are handled outside the app (they
+  // can't be sold through the Sales Register, and they don't count toward
+  // lifetime received). So this writes a history row and moves no
+  // numbers - deliberately the only ledger-only movement type.
+  const isLedgerOnly = type === INVENTORY_MOVEMENT_TYPE.SCHEME;
 
-  const delta = isAdjustment ? Number(quantity) : isDebit ? -Math.abs(Number(quantity)) : Math.abs(Number(quantity));
-  if (!Number.isFinite(delta) || delta === 0) {
+  const delta = isLedgerOnly
+    ? 0
+    : isAdjustment
+      ? Number(quantity)
+      : isDebit
+        ? -Math.abs(Number(quantity))
+        : Math.abs(Number(quantity));
+  if (!Number.isFinite(delta) || (delta === 0 && !isLedgerOnly)) {
     throw new ApiError(400, "Invalid movement quantity");
   }
 
-  const incFields = { currentQuantity: delta };
+  const incFields = isLedgerOnly ? {} : { currentQuantity: delta };
   if (isCredit) incFields.totalReceivedQuantity = Math.abs(delta);
   if (isDebit) incFields.totalSoldQuantity = Math.abs(delta);
 
@@ -80,14 +91,18 @@ async function applyMovement({
   const updated = await DealerProductStock.findOneAndUpdate(
     filter,
     {
-      $inc: incFields,
+      // $inc with an empty object is invalid, so it's omitted entirely
+      // for ledger-only movements rather than incrementing by zero.
+      ...(Object.keys(incFields).length ? { $inc: incFields } : {}),
       $set: {
         lastMovementAt: new Date(),
         lastUpdatedBy: actorId(actorUser),
         ...(unitCost !== null ? { lastKnownUnitCost: unitCost } : {}),
       },
     },
-    { upsert: delta > 0, new: true, session, setDefaultsOnInsert: true },
+    // Upsert on a scheme too, so the history row still has a stock
+    // document to hang off for a product the dealer has never bought.
+    { upsert: delta > 0 || isLedgerOnly, new: true, session, setDefaultsOnInsert: true },
   );
 
   if (!updated) {
@@ -109,7 +124,10 @@ async function applyMovement({
         productId,
         branchId,
         type,
-        quantity: isAdjustment ? delta : Math.abs(delta),
+        // The received count is still recorded on the row itself (that's
+        // the point of the audit trail); it just isn't applied to any
+        // balance above.
+        quantity: isLedgerOnly ? Math.abs(Number(quantity)) : isAdjustment ? delta : Math.abs(delta),
         previousQuantity,
         newQuantity: updated.currentQuantity,
         unitCost,

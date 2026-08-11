@@ -13,6 +13,13 @@
 //      with factory stock reserved at creation.
 //   4. Creation is BLOCKED if factory stock can't cover it, rather than
 //      promising goods that don't exist.
+//   5. On delivery the goods do NOT enter the recipient's sellable
+//      inventory. Factory stock is still consumed (they physically
+//      leave), and a SCHEME row is written to the dealer's stock history
+//      for the record, but currentQuantity and totalReceivedQuantity are
+//      untouched - scheme goods are handled outside the app and cannot
+//      be sold through the Sales Register. See applyMovement's
+//      isLedgerOnly branch in dealerInventory.service.js.
 import mongoose from "mongoose";
 import Order, { ORDER_ORIGIN, ORDER_STATUS } from "../models/Order.model.js";
 import Product from "../models/Product.model.js";
