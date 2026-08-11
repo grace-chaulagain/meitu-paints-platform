@@ -55,6 +55,7 @@ async function applyMovement({
     INVENTORY_MOVEMENT_TYPE.PURCHASE,
     INVENTORY_MOVEMENT_TYPE.RETURN,
     INVENTORY_MOVEMENT_TYPE.TRANSFER_IN,
+    INVENTORY_MOVEMENT_TYPE.SCHEME,
   ].includes(type);
   const isDebit = [INVENTORY_MOVEMENT_TYPE.SALE, INVENTORY_MOVEMENT_TYPE.TRANSFER_OUT].includes(type);
   const isAdjustment = type === INVENTORY_MOVEMENT_TYPE.ADJUSTMENT;
@@ -139,6 +140,10 @@ export async function recordPurchaseMovement({
   actorUser,
   actorRole = "SYSTEM",
   session = null,
+  // SCHEME for free-of-cost scheme orders; defaults to PURCHASE so every
+  // existing caller behaves exactly as before.
+  movementType = INVENTORY_MOVEMENT_TYPE.PURCHASE,
+  reason = "Order delivered",
 } = {}) {
   if (!dealerId) throw new ApiError(400, "dealerId is required");
 
@@ -152,10 +157,10 @@ export async function recordPurchaseMovement({
       const result = await applyMovement({
         dealerId,
         productId,
-        type: INVENTORY_MOVEMENT_TYPE.PURCHASE,
+        type: movementType,
         quantity,
         unitCost: itemUnitCost(item),
-        reason: "Order delivered",
+        reason,
         orderId,
         actorUser,
         actorRole,

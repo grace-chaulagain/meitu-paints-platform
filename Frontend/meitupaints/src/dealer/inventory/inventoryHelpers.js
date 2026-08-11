@@ -31,6 +31,10 @@ export function movementLabel(type) {
   return (
     {
       PURCHASE: "Received from Meitu",
+      // Free-of-cost goods from an admin scheme order - deliberately
+      // worded differently from a purchase so a dealer can tell at a
+      // glance which stock they were given rather than bought.
+      SCHEME: "Received free (scheme)",
       SALE: "Sold",
       RETURN: "Returned",
       ADJUSTMENT: "Manual adjustment",

@@ -175,6 +175,13 @@ function OrderRow({ order, onOpen, isArrived }) {
         {money(order.totals?.total, order.totals?.currency)}
       </strong>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+        {/* A scheme is free-of-cost, so the factory must not treat the
+            NPR 0 total as a data error - the badge says why. */}
+        {order.orderOrigin === "SCHEME" ? (
+          <Pill tone="caution" size="small">
+            {order.scheme?.label ? `SCHEME · ${order.scheme.label}` : "SCHEME · Free of cost"}
+          </Pill>
+        ) : null}
         <Pill tone={statusTone(order.status)} size="small">{titleCaseLabel(order.status)}</Pill>
         <Pill tone={priorityForOrder(order) === "High" ? "critical" : priorityForOrder(order) === "Medium" ? "caution" : "neutral"} size="small">
           {priorityForOrder(order)}

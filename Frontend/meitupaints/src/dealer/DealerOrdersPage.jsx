@@ -196,6 +196,13 @@ function OrderTimelineRow({ order, onOpen, productsMap, familyMap }) {
           <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="dealer-order-number">{order.orderNumber || "Unnamed Order"}</span>
             <Pill tone={meta.pillTone} size="small">{pillLabel}</Pill>
+            {/* The dealer sees NPR 0 on this order - the badge explains
+                that it's a company scheme, not a pricing fault. */}
+            {order.orderOrigin === "SCHEME" ? (
+              <Pill tone="caution" size="small">
+                {order.scheme?.label ? `SCHEME · ${order.scheme.label}` : "SCHEME · Free of cost"}
+              </Pill>
+            ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <span className="dealer-order-amount">{formatMoney(order?.totals?.total, order?.totals?.currency)}</span>

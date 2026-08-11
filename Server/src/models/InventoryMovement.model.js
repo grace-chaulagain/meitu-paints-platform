@@ -11,6 +11,11 @@ export const INVENTORY_MOVEMENT_TYPE = Object.freeze({
   ADJUSTMENT: "ADJUSTMENT",
   TRANSFER_IN: "TRANSFER_IN",
   TRANSFER_OUT: "TRANSFER_OUT",
+  // Free-of-cost goods from an admin scheme order. A credit like
+  // PURCHASE (the stock is genuinely theirs to sell), but kept distinct
+  // so stock history says where it came from and so commercial metrics
+  // that sum PURCHASE volume don't count gifted stock as buying power.
+  SCHEME: "SCHEME",
 });
 
 const InventoryMovementSchema = new mongoose.Schema(

@@ -39,6 +39,7 @@ const HISTORY_PAGE_SIZE = 20;
 const HISTORY_TYPE_OPTIONS = [
   { key: "ALL", label: "All Transactions" },
   { key: "PURCHASE", label: "Purchases" },
+  { key: "SCHEME", label: "Scheme (free)" },
   { key: "SALE", label: "Sales" },
 ];
 

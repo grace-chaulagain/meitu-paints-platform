@@ -194,7 +194,11 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
           <span style={labelStyle}>Products (free of cost)</span>
           <div style={{ display: "grid", gap: 8 }}>
             {lines.map((line, index) => (
-              <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 96px 36px", gap: 8 }}>
+              <div
+                key={index}
+                className="scheme-line"
+                style={{ display: "grid", gridTemplateColumns: "1fr 96px 36px", gap: 8 }}
+              >
                 <AppleDropdown
                   value={line.productId}
                   options={productOptions}
@@ -256,6 +260,7 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
 
         {validLines.length ? (
           <div
+            className="scheme-summary"
             style={{
               display: "flex",
               alignItems: "center",
@@ -276,6 +281,50 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
           </div>
         ) : null}
       </div>
+
+      <style>{`
+        /* One-shot entrance for a newly added product row. Keyframe (not
+           a transition) because it only ever plays once per mount. */
+        .scheme-line{
+          animation: scheme-line-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        @keyframes scheme-line-in{
+          from{ opacity:0; transform:translateY(-4px); }
+          to{ opacity:1; transform:none; }
+        }
+
+        /* The running summary re-renders on every keystroke, so it gets a
+           transition rather than an animation - a keyframe would restart
+           mid-flight and flicker as the admin types quantities. */
+        .scheme-summary{
+          animation: scheme-summary-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+        }
+        @keyframes scheme-summary-in{
+          from{ opacity:0; transform:scale(0.98); }
+          to{ opacity:1; transform:none; }
+        }
+
+        .scheme-line input,
+        .scheme-line button{
+          transition: border-color 150ms ease-out, background 150ms ease-out, transform 120ms ease-out;
+        }
+        .scheme-line button:active{ transform:scale(0.94); }
+        .scheme-line input:focus{
+          outline:none;
+          border-color: var(--color-azure, #0071e3);
+          background: var(--color-snow, #fff);
+        }
+
+        @media (hover:hover) and (pointer:fine){
+          .scheme-line button:hover{ background: var(--color-fog, #f5f5f7); }
+        }
+
+        @media (prefers-reduced-motion: reduce){
+          .scheme-line, .scheme-summary{ animation:none; }
+          .scheme-line input, .scheme-line button{ transition:none; }
+          .scheme-line button:active{ transform:none; }
+        }
+      `}</style>
     </AdminDecisionModal>
   );
 }

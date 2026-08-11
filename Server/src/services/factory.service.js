@@ -474,6 +474,7 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
       // goods are physically handed over - this is the "Dealer receives
       // order from Meitu -> Inventory automatically increases" step.
       if (updated.dealerId) {
+        const isScheme = updated.orderOrigin === "SCHEME";
         await recordPurchaseMovement({
           dealerId: updated.dealerId,
           items: updated.items,
@@ -481,6 +482,12 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
           actorUser: factoryUser,
           actorRole: "FACTORY",
           session,
+          // Labels the dealer's stock history with where these units came
+          // from, and keeps gifted stock out of PURCHASE-volume metrics.
+          movementType: isScheme ? "SCHEME" : undefined,
+          reason: isScheme
+            ? `Scheme order received${updated.scheme?.label ? `: ${updated.scheme.label}` : ""}`
+            : undefined,
         });
       }
 

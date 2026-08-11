@@ -41,6 +41,7 @@ const TABS = [
 const TYPE_OPTIONS = [
   { key: "ALL", label: "All Transactions" },
   { key: "PURCHASE", label: "Purchases" },
+  { key: "SCHEME", label: "Scheme (free)" },
   { key: "SALE", label: "Sales" },
   { key: "RETURN", label: "Returns" },
   { key: "ADJUSTMENT", label: "Adjustments" },
