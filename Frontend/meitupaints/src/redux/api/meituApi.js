@@ -175,6 +175,7 @@ export const meituApi = createApi({
     "Insight",
     "AdminInsight",
     "AdminPayment",
+    "SchemeOrder",
     "DispatcherStock",
     "DispatcherStockMovement",
     "DispatcherCatalog",
@@ -1556,6 +1557,32 @@ export const meituApi = createApi({
     // Account-keeping rebuild (see admin.insights.routes.js) - per-section
     // endpoints, lazy-loaded per active tab, rather than the single
     // combined getAdminInsights blob above.
+    getSchemeRecipients: builder.query({
+      query: () => ({ url: "/api/admin/scheme-orders/recipients" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: () => [listTag("SchemeOrder")],
+    }),
+
+    getSchemeOrders: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/scheme-orders", params }),
+      transformResponse: getItems,
+      providesTags: () => [listTag("SchemeOrder")],
+    }),
+
+    createSchemeOrder: builder.mutation({
+      query: (body) => ({ url: "/api/admin/scheme-orders", method: "POST", body }),
+      // A scheme reserves factory stock and lands in the factory queue,
+      // so orders, stock and insights all change with it.
+      invalidatesTags: () => [
+        listTag("SchemeOrder"),
+        listTag("Order"),
+        listTag("Stock"),
+        listTag("Insight"),
+        listTag("AdminInsight"),
+      ],
+    }),
+
     getAdminInventoryOverview: builder.query({
       query: (params = {}) => ({ url: "/api/admin/insights/inventory/overview", params }),
       transformResponse: getItem,
@@ -2021,6 +2048,9 @@ export const {
   useGetAdminPaymentsQuery,
   useGetAdminPaymentLedgerQuery,
   useGetAdminInventoryOverviewQuery,
+  useGetSchemeRecipientsQuery,
+  useGetSchemeOrdersQuery,
+  useCreateSchemeOrderMutation,
   useGetAdminFactoryStockQuery,
   useGetAdminDispatcherStockLevelsQuery,
   useGetAdminDealerStockLevelsQuery,

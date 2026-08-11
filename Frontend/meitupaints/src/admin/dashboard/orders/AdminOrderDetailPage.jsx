@@ -546,7 +546,7 @@ export default function AdminOrderDetailPage() {
             mode={dealer?.fulfillmentMode || "FACTORY"}
             dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
           />
-          <OriginBadge origin={order?.orderOrigin} />
+          <OriginBadge origin={order?.orderOrigin} scheme={order?.scheme} />
           <CelebrationLine
             celebration={orderTransition.celebration}
             onUndo={handleUndoVerification}

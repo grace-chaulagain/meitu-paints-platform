@@ -19,9 +19,14 @@ export const AR_EXCLUDED_ORDER_STATUSES = [
   ORDER_STATUS.CANCELLED,
 ];
 
-// A dispatcher replenishing their own regional stock reuses the Order
-// pipeline but isn't a dealer sale - excluded from every revenue/AR view.
-export const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT"];
+// Order origins that reuse the Order pipeline but aren't dealer sales, so
+// they're excluded from every revenue/AR view:
+//   DISPATCHER_REPLENISHMENT - a dispatcher restocking from the factory.
+//   SCHEME - free-of-cost goods granted to a dealer/dispatcher. Every
+//     line is zero-value, so including them would drag average order
+//     value down and show each giveaway as a fully-settled bill.
+// Both remain fully visible in Order Analytics and Inventory.
+export const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT", "SCHEME"];
 
 // Payment statuses that count as money actually received. VERIFIED is the
 // normal case; PARTIAL/PAID also represent real received amounts (the

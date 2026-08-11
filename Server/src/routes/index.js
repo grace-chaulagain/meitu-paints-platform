@@ -8,6 +8,7 @@ import productRoutes from "./product.routes.js";
 import productFamilyRoutes from "./productFamily.routes.js";
 import adminCatalogRoutes from "./admin.catalog.routes.js";
 import adminInsightsRoutes from "./admin.insights.routes.js";
+import schemeOrderRoutes from "./schemeOrder.routes.js";
 import announcementRoutes from "./announcement.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
 import orderRoutes from "./order.routes.js";
@@ -50,6 +51,7 @@ router.use("/admin/announcements", announcementRoutes);
 // lives in admin.routes.js and is unaffected since nothing here matches
 // an empty suffix.
 router.use("/admin/insights", adminInsightsRoutes);
+router.use("/admin/scheme-orders", schemeOrderRoutes);
 router.use("/admin", adminRoutes);
 
 // Dealer

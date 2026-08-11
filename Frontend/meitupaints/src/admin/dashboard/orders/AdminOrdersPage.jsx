@@ -9,6 +9,7 @@ import {
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import CreateSchemeOrderModal from "./CreateSchemeOrderModal.jsx";
 import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
 import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
@@ -665,7 +666,18 @@ export function RoutingBadge({ mode, dispatcherName = "" }) {
   );
 }
 
-export function OriginBadge({ origin }) {
+// Keyed off orderOrigin rather than any derived signal (a zero total, for
+// instance) so a scheme is recognisable the instant it appears in any
+// list, and can never be confused with an ordinary order that happens to
+// total zero. Shared with AdminOrderDetailPage.
+export function OriginBadge({ origin, scheme = null }) {
+  if (origin === "SCHEME") {
+    return (
+      <Pill tone="caution" size="small" title={scheme?.label || "Free-of-cost scheme order"}>
+        {scheme?.label ? `SCHEME · ${scheme.label}` : "SCHEME · Free of cost"}
+      </Pill>
+    );
+  }
   if (origin !== "DISPATCHER_REPLENISHMENT") return null;
   return (
     <Pill tone="accent" size="small">
@@ -801,7 +813,7 @@ export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, produ
               mode={dealer?.fulfillmentMode || "FACTORY"}
               dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
             />
-            <OriginBadge origin={item?.orderOrigin} />
+            <OriginBadge origin={item?.orderOrigin} scheme={item?.scheme} />
             <OwnerChip order={item} role="ADMIN" />
           </div>
         </div>
@@ -1588,6 +1600,7 @@ export default function AdminOrdersPage() {
   // The search box shows whatever was last committed to the URL - if the admin
   // navigated away and came back, this restores the exact text they searched.
   const [search, setSearch] = useState(() => listState.committedSearch);
+  const [schemeModalOpen, setSchemeModalOpen] = useState(false);
 
   const updateListState = useCallback(
     (patch) => {
@@ -1857,6 +1870,15 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="admin-orders-page" style={{ display: "grid", gap: 16 }}>
+      {/* Mounted only while open so the form always starts clean. */}
+      {schemeModalOpen ? (
+        <CreateSchemeOrderModal
+          open={schemeModalOpen}
+          onClose={() => setSchemeModalOpen(false)}
+          onCreated={() => setSchemeModalOpen(false)}
+        />
+      ) : null}
+
       <Surface padding={16} className="dash-fade-up">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <DashboardSectionHeader
@@ -1880,6 +1902,9 @@ export default function AdminOrdersPage() {
                 placeholder="Search order number or dealer…"
               />
             </div>
+            <PrimaryButton icon="plus" onClick={() => setSchemeModalOpen(true)}>
+              Scheme order
+            </PrimaryButton>
           </div>
         </div>
 
