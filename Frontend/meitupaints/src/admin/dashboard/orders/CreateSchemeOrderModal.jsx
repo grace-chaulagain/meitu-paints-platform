@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   useCreateSchemeOrderMutation,
@@ -6,34 +7,17 @@ import {
   useGetProductsQuery,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
-import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
 import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
-import { Pill } from "../../../components/dashboard/DashboardUI.jsx";
+import { Spinner } from "../../../components/dashboard/DashboardUI.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 
-// Master scope first, then the filtered name list. Mixing factory
-// dealers, dispatcher-served dealers and dispatchers into one list made
-// it impossible to tell what you were picking, and it grew unusable as
-// the dealer count rose.
+// Each scope carries its own hue so the choice is readable at a glance
+// rather than three identical grey cards. Amber is the scheme's own
+// identity colour (it matches the SCHEME badge used across the portals).
 const SCOPES = [
-  {
-    key: "FACTORY_DEALERS",
-    label: "Factory-routed dealers",
-    icon: "store",
-    hint: "Supplied directly by the factory",
-  },
-  {
-    key: "DISPATCHER_DEALERS",
-    label: "Dispatcher-routed dealers",
-    icon: "handshake",
-    hint: "Normally supplied by a dispatcher — schemes still ship direct from the factory",
-  },
-  {
-    key: "DISPATCHERS",
-    label: "Dispatchers",
-    icon: "truck",
-    hint: "The dispatcher's own regional stock",
-  },
+  { key: "FACTORY_DEALERS", label: "Factory dealers", icon: "store", hue: "azure" },
+  { key: "DISPATCHER_DEALERS", label: "Via dispatcher", icon: "handshake", hue: "violet" },
+  { key: "DISPATCHERS", label: "Dispatchers", icon: "truck", hue: "teal" },
 ];
 
 function matchesScope(recipient, scope) {
@@ -54,15 +38,12 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
   const [scope, setScope] = useState("");
   const [recipientKey, setRecipientKey] = useState("");
   const [label, setLabel] = useState("");
-  const [note, setNote] = useState("");
   const [lines, setLines] = useState([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [shortfalls, setShortfalls] = useState([]);
 
   const trimmed = query.trim();
-  // Same server-side search the Amend Order card uses, so the catalog
-  // behaves identically in both places.
   const productsQuery = useGetProductsQuery({ q: trimmed }, { skip: !open || trimmed.length < 2 });
   const results = productsQuery.data || [];
 
@@ -76,10 +57,7 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
   }, [recipients]);
 
   const recipientOptions = useMemo(
-    () =>
-      recipients
-        .filter((r) => matchesScope(r, scope))
-        .map((r) => ({ key: r.key, label: r.name })),
+    () => recipients.filter((r) => matchesScope(r, scope)).map((r) => ({ key: r.key, label: r.name })),
     [recipients, scope],
   );
 
@@ -87,28 +65,24 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
   const [recipientType, recipientId] = recipientKey ? recipientKey.split(":") : ["", ""];
   const totalUnits = lines.reduce((sum, l) => sum + Number(l.quantity || 0), 0);
 
-  function availableOf(product) {
-    return Math.max(
-      0,
-      Number(product.stock?.currentQuantity || 0) - Number(product.stock?.reservedQuantity || 0),
-    );
-  }
+  const availableOf = (p) =>
+    Math.max(0, Number(p.stock?.currentQuantity || 0) - Number(p.stock?.reservedQuantity || 0));
 
   function addProduct(product) {
-    setLines((current) => {
-      if (current.some((l) => l.productId === String(product._id))) return current;
-      return [
-        ...current,
-        {
-          productId: String(product._id),
-          name: product.name,
-          packLabel: product.pack?.label || "",
-          sku: product.sku,
-          available: availableOf(product),
-          quantity: 1,
-        },
-      ];
-    });
+    setLines((current) =>
+      current.some((l) => l.productId === String(product._id))
+        ? current
+        : [
+            ...current,
+            {
+              productId: String(product._id),
+              name: product.name,
+              packLabel: product.pack?.label || "",
+              available: availableOf(product),
+              quantity: 1,
+            },
+          ],
+    );
     setQuery("");
   }
 
@@ -116,7 +90,6 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
     setScope("");
     setRecipientKey("");
     setLabel("");
-    setNote("");
     setLines([]);
     setQuery("");
     setError("");
@@ -124,25 +97,22 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
   }
 
   function handleClose() {
+    if (createState.isLoading) return;
     reset();
     onClose();
   }
 
-  const overCapacity = lines.filter((l) => Number(l.quantity) > l.available);
-  const canSubmit = Boolean(recipientId) && lines.length > 0 && overCapacity.length === 0;
+  const overCapacity = lines.some((l) => Number(l.quantity) > l.available);
+  const canSubmit = Boolean(recipientId) && lines.length > 0 && !overCapacity;
 
   async function handleSubmit() {
     setError("");
     setShortfalls([]);
-    if (!recipientId) return setError("Choose who receives this scheme.");
-    if (!lines.length) return setError("Add at least one product.");
-
     try {
       await createScheme({
         recipientType,
         recipientId,
         label: label.trim(),
-        note: note.trim(),
         items: lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) })),
       }).unwrap();
       onCreated?.();
@@ -152,183 +122,150 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
       const details = err?.data?.details;
       if (details?.code === "SCHEME_STOCK_SHORTFALL") {
         setShortfalls(details.shortfalls || []);
-        setError("Factory stock moved while you were editing — reduce these:");
+        setError("Stock moved while you were editing:");
       } else {
-        setError(getQueryErrorMessage(err, "Failed to create the scheme order."));
+        setError(getQueryErrorMessage(err, "Couldn't create the scheme order."));
       }
     }
   }
 
   if (!open) return null;
 
-  return (
-    <AdminDecisionModal
-      open={open}
-      title="Create scheme order"
-      subtitle="Free-of-cost goods, shipped direct from the factory."
-      confirmLabel={createState.isLoading ? "Creating…" : "Create scheme order"}
-      busy={createState.isLoading}
-      disabled={!canSubmit}
-      onClose={handleClose}
-      onConfirm={handleSubmit}
-    >
-      <div className="scheme-form">
-        {error ? (
-          <div className="scheme-alert" role="alert">
-            <DashboardIcon name="warning" size={15} strokeWidth={2} />
-            <div>
-              <div>{error}</div>
-              {shortfalls.length ? (
-                <ul>
-                  {shortfalls.map((s) => (
-                    <li key={s.productId}>
-                      {s.name} — asked {s.requested}, {s.available} available
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+  return createPortal(
+    <div className="sch-overlay" onClick={(e) => e.target === e.currentTarget && handleClose()}>
+      <div className="sch-card" role="dialog" aria-modal="true" aria-label="Create scheme order">
+        {/* Header and footer stay put; only the middle scrolls, so the
+            card can never grow past the viewport however many products
+            are added or however long the dropdown list is. */}
+        <header className="sch-head">
+          <span className="sch-mark">
+            <DashboardIcon name="award" size={16} strokeWidth={2} />
+          </span>
+          <div className="sch-head-text">
+            <h3>Scheme order</h3>
+            <p>Free of cost · ships from factory</p>
           </div>
-        ) : null}
+          <button type="button" onClick={handleClose} aria-label="Close" className="sch-close">
+            <DashboardIcon name="close" size={13} strokeWidth={2.4} />
+          </button>
+        </header>
 
-        {/* Step 1 — scope */}
-        <section className="scheme-step">
-          <header>
-            <span className="scheme-step-index">1</span>
-            <div>
-              <h4>Who is this for?</h4>
-              <p>Pick the group first, then the name.</p>
-            </div>
-          </header>
-
-          <div className="scheme-scopes">
-            {SCOPES.map((s) => {
-              const active = scope === s.key;
-              const count = scopeCounts[s.key] ?? 0;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  className={`scheme-scope ${active ? "is-active" : ""}`}
-                  onClick={() => {
-                    setScope(s.key);
-                    setRecipientKey("");
-                  }}
-                  disabled={!count}
-                  title={s.hint}
-                >
-                  <span className="scheme-scope-icon">
-                    <DashboardIcon name={s.icon} size={17} strokeWidth={1.9} />
-                  </span>
-                  <span className="scheme-scope-text">
-                    <strong>{s.label}</strong>
-                    <small>{count} available</small>
-                  </span>
-                  <span className="scheme-scope-check" aria-hidden="true">
-                    <DashboardIcon name="checkmark" size={13} strokeWidth={2.6} />
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {scope ? (
-            <div className="scheme-reveal">
-              <AppleDropdown
-                value={recipientKey}
-                options={recipientOptions}
-                onChange={setRecipientKey}
-                placeholder={recipientsQuery.isLoading ? "Loading…" : "Select recipient"}
-                icon="user"
-                style={{ width: "100%" }}
-              />
-              {scope === "DISPATCHER_DEALERS" && selectedRecipient ? (
-                <p className="scheme-inline-note">
-                  <DashboardIcon name="info" size={12} strokeWidth={2} />
-                  Ships direct from the factory, bypassing their dispatcher.
-                </p>
-              ) : null}
+        <div className="sch-body">
+          {error ? (
+            <div className="sch-alert" role="alert">
+              <DashboardIcon name="warning" size={14} strokeWidth={2.2} />
+              <div>
+                {error}
+                {shortfalls.length ? (
+                  <ul>
+                    {shortfalls.map((s) => (
+                      <li key={s.productId}>
+                        {s.name} — {s.available} left
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </div>
           ) : null}
-        </section>
 
-        {/* Step 2 — products */}
-        <section className="scheme-step">
-          <header>
-            <span className="scheme-step-index">2</span>
-            <div>
-              <h4>What are they receiving?</h4>
-              <p>Search the catalog and add items.</p>
+          <div className="sch-field">
+            <label>Recipient</label>
+            <div className="sch-scopes">
+              {SCOPES.map((s) => {
+                const count = scopeCounts[s.key] ?? 0;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    data-hue={s.hue}
+                    className={`sch-scope ${scope === s.key ? "is-active" : ""}`}
+                    onClick={() => {
+                      setScope(s.key);
+                      setRecipientKey("");
+                    }}
+                    disabled={!count}
+                  >
+                    <DashboardIcon name={s.icon} size={18} strokeWidth={1.9} />
+                    <span>{s.label}</span>
+                    <b>{count}</b>
+                  </button>
+                );
+              })}
             </div>
-          </header>
 
-          <div className="scheme-search">
-            <DashboardIcon name="search" size={15} strokeWidth={2} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by product name, SKU or code…"
-            />
-            {query ? (
-              <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
-                <DashboardIcon name="close" size={12} strokeWidth={2.4} />
-              </button>
+            {scope ? (
+              <div className="sch-reveal">
+                <AppleDropdown
+                  value={recipientKey}
+                  options={recipientOptions}
+                  onChange={setRecipientKey}
+                  placeholder={recipientsQuery.isLoading ? "Loading…" : "Select name"}
+                  icon="user"
+                  style={{ width: "100%" }}
+                />
+              </div>
             ) : null}
           </div>
 
-          {trimmed.length >= 2 ? (
-            <div className="scheme-results scheme-reveal">
-              {productsQuery.isFetching ? (
-                <div className="scheme-muted">Searching…</div>
-              ) : results.length === 0 ? (
-                <div className="scheme-muted">No products match “{trimmed}”.</div>
-              ) : (
-                results.slice(0, 6).map((product) => {
-                  const available = availableOf(product);
-                  const added = lines.some((l) => l.productId === String(product._id));
-                  return (
-                    <button
-                      key={product._id}
-                      type="button"
-                      className="scheme-result"
-                      onClick={() => addProduct(product)}
-                      disabled={added || available === 0}
-                    >
-                      <span className="scheme-result-main">
-                        <strong>{product.name}</strong>
-                        <small>
-                          {product.pack?.label ? `${product.pack.label} · ` : ""}
-                          {product.sku}
-                        </small>
-                      </span>
-                      <span className={`scheme-stock ${available === 0 ? "is-none" : ""}`}>
-                        {available === 0 ? "Out of stock" : `${available} available`}
-                      </span>
-                      <span className="scheme-result-add">
-                        <DashboardIcon name={added ? "checkmark" : "plus"} size={13} strokeWidth={2.4} />
-                      </span>
-                    </button>
-                  );
-                })
-              )}
+          <div className="sch-field">
+            <label>Products</label>
+            <div className="sch-search">
+              <DashboardIcon name="search" size={14} strokeWidth={2.2} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, SKU or code…"
+              />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} aria-label="Clear">
+                  <DashboardIcon name="close" size={11} strokeWidth={2.6} />
+                </button>
+              ) : null}
             </div>
-          ) : null}
 
-          {lines.length ? (
-            <ul className="scheme-lines">
-              {lines.map((line, index) => {
-                const over = Number(line.quantity) > line.available;
-                return (
-                  <li key={line.productId} className={`scheme-line ${over ? "is-over" : ""}`}>
-                    <span className="scheme-line-main">
-                      <strong>{line.name}</strong>
-                      <small>
-                        {line.packLabel ? `${line.packLabel} · ` : ""}
-                        {line.available} available
-                      </small>
+            {trimmed.length >= 2 ? (
+              <div className="sch-results sch-reveal">
+                {productsQuery.isFetching ? (
+                  <p className="sch-muted">Searching…</p>
+                ) : results.length === 0 ? (
+                  <p className="sch-muted">Nothing matches “{trimmed}”.</p>
+                ) : (
+                  results.slice(0, 5).map((p) => {
+                    const available = availableOf(p);
+                    const added = lines.some((l) => l.productId === String(p._id));
+                    return (
+                      <button
+                        key={p._id}
+                        type="button"
+                        className="sch-result"
+                        onClick={() => addProduct(p)}
+                        disabled={added || available === 0}
+                      >
+                        <span className="sch-result-name">{p.name}</span>
+                        <span className={`sch-chip ${available === 0 ? "is-out" : ""}`}>
+                          {available === 0 ? "none" : available}
+                        </span>
+                        <DashboardIcon name={added ? "checkmark" : "plus"} size={13} strokeWidth={2.6} />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+
+            {lines.length ? (
+              <ul className="sch-lines">
+                {lines.map((line, index) => (
+                  <li
+                    key={line.productId}
+                    className={`sch-line ${Number(line.quantity) > line.available ? "is-over" : ""}`}
+                  >
+                    <span className="sch-line-name">
+                      {line.name}
+                      {line.packLabel ? <em>{line.packLabel}</em> : null}
                     </span>
-
-                    <span className="scheme-stepper">
+                    <span className="sch-step">
                       <button
                         type="button"
                         aria-label="Decrease"
@@ -340,17 +277,14 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
                           )
                         }
                       >
-                        <DashboardIcon name="minus" size={12} strokeWidth={2.6} />
+                        <DashboardIcon name="minus" size={11} strokeWidth={2.8} />
                       </button>
                       <input
                         type="number"
                         min="1"
-                        inputMode="numeric"
                         value={line.quantity}
                         onChange={(e) =>
-                          setLines((c) =>
-                            c.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)),
-                          )
+                          setLines((c) => c.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)))
                         }
                       />
                       <button
@@ -362,313 +296,289 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
                           )
                         }
                       >
-                        <DashboardIcon name="plus" size={12} strokeWidth={2.6} />
+                        <DashboardIcon name="plus" size={11} strokeWidth={2.8} />
                       </button>
                     </span>
-
                     <button
                       type="button"
-                      className="scheme-line-remove"
+                      className="sch-remove"
                       aria-label={`Remove ${line.name}`}
                       onClick={() => setLines((c) => c.filter((_, i) => i !== index))}
                     >
-                      <DashboardIcon name="trash" size={13} strokeWidth={2} />
+                      <DashboardIcon name="close" size={12} strokeWidth={2.4} />
                     </button>
                   </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="scheme-empty">
-              <DashboardIcon name="package" size={20} strokeWidth={1.6} />
-              <span>No products yet — search above to add them.</span>
-            </div>
-          )}
-        </section>
+                ))}
+              </ul>
+            ) : null}
+          </div>
 
-        {/* Step 3 — label */}
-        <section className="scheme-step">
-          <header>
-            <span className="scheme-step-index">3</span>
-            <div>
-              <h4>Label it</h4>
-              <p>So this shows as a campaign, not an anonymous free order.</p>
-            </div>
-          </header>
-
-          <div className="scheme-fields">
+          <div className="sch-field">
+            <label>Scheme name</label>
             <input
+              className="sch-input"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Scheme name — e.g. Dashain 2083 Volume Scheme"
-            />
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Note (optional)"
+              placeholder="Dashain 2083 Volume Scheme"
             />
           </div>
-        </section>
+        </div>
 
-        {lines.length ? (
-          <footer className="scheme-summary scheme-reveal">
-            <Pill tone="caution" size="small">
-              SCHEME
-            </Pill>
-            <span className="scheme-summary-text">
-              {selectedRecipient ? <strong>{selectedRecipient.name}</strong> : "No recipient yet"} ·{" "}
-              {lines.length} product{lines.length === 1 ? "" : "s"} · {totalUnits} units
-            </span>
-            <span className="scheme-summary-cost">NPR 0</span>
-          </footer>
-        ) : null}
+        <footer className="sch-foot">
+          <span className="sch-total">
+            {lines.length ? (
+              <>
+                <b>{totalUnits}</b> units
+                {selectedRecipient ? ` · ${selectedRecipient.name}` : ""}
+              </>
+            ) : (
+              <span className="sch-muted">Nothing added yet</span>
+            )}
+          </span>
+          <div className="sch-actions">
+            <button type="button" className="sch-btn" onClick={handleClose} disabled={createState.isLoading}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="sch-btn is-primary"
+              onClick={handleSubmit}
+              disabled={!canSubmit || createState.isLoading}
+            >
+              {createState.isLoading ? <Spinner size={13} /> : null}
+              {createState.isLoading ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </footer>
       </div>
 
       <style>{`
-        .scheme-form{ display:grid; gap:18px; }
-
-        .scheme-step{ display:grid; gap:11px; }
-        .scheme-step > header{ display:flex; align-items:flex-start; gap:10px; }
-        .scheme-step-index{
-          flex:0 0 auto;
-          width:21px; height:21px; border-radius:999px;
-          display:grid; place-items:center;
-          background:var(--color-ink, #1d1d1f); color:#fff;
-          font-size:11px; font-weight:700;
+        .sch-overlay{
+          position:fixed; inset:0; z-index:1600;
+          display:grid; place-items:center; padding:24px;
+          background:rgba(245,245,247,.72);
+          backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+          animation:sch-fade 160ms ease-out both;
         }
-        .scheme-step h4{
-          margin:0; font-size:14px; font-weight:700; letter-spacing:-.01em;
-          color:var(--color-ink, #1d1d1f);
-        }
-        .scheme-step p{
-          margin:2px 0 0; font-size:12.5px; font-weight:500;
-          color:var(--color-graphite, #707070);
-        }
-
-        /* Scope cards - a real choice, so they read as options rather
-           than another select. Collapses to one column on narrow screens. */
-        .scheme-scopes{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
-        .scheme-scope{
-          position:relative;
-          display:flex; align-items:center; gap:9px;
-          padding:11px 12px; text-align:left;
-          border-radius:14px;
-          border:1.5px solid var(--color-silver-mist, #e8e8ed);
+        .sch-card{
+          width:min(680px, 100%);
+          /* Never taller than the viewport - the body scrolls instead. */
+          max-height:min(760px, calc(100vh - 48px));
+          display:flex; flex-direction:column;
+          border-radius:26px;
           background:var(--color-snow, #fff);
-          cursor:pointer;
-          transition:border-color 150ms ease-out, background 150ms ease-out, transform 120ms ease-out;
+          border:1px solid rgba(29,29,31,.09);
+          overflow:hidden;
+          animation:sch-pop 220ms cubic-bezier(0.23,1,0.32,1) both;
         }
-        .scheme-scope:disabled{ opacity:.45; cursor:not-allowed; }
-        .scheme-scope:not(:disabled):active{ transform:scale(0.98); }
-        .scheme-scope.is-active{
-          border-color:var(--color-azure, #0071e3);
-          background:color-mix(in srgb, var(--color-azure, #0071e3) 5%, transparent);
-        }
-        .scheme-scope-icon{
-          flex:0 0 auto; width:30px; height:30px; border-radius:9px;
-          display:grid; place-items:center;
-          background:var(--color-fog, #f5f5f7);
-          color:var(--color-slate, #474747);
-        }
-        .scheme-scope.is-active .scheme-scope-icon{
-          background:var(--color-azure, #0071e3); color:#fff;
-        }
-        .scheme-scope-text{ display:grid; min-width:0; }
-        .scheme-scope-text strong{
-          font-size:12.5px; font-weight:650; color:var(--color-ink, #1d1d1f);
-          line-height:1.25;
-        }
-        .scheme-scope-text small{ font-size:11px; color:var(--color-graphite, #707070); }
-        .scheme-scope-check{
-          position:absolute; top:8px; right:9px;
-          color:var(--color-azure, #0071e3);
-          opacity:0; transform:scale(0.7);
-          transition:opacity 160ms ease-out, transform 160ms cubic-bezier(0.34,1.56,0.64,1);
-        }
-        .scheme-scope.is-active .scheme-scope-check{ opacity:1; transform:scale(1); }
 
-        /* Search */
-        .scheme-search{
+        .sch-head{
+          flex:0 0 auto;
+          display:flex; align-items:center; gap:12px;
+          padding:20px 22px;
+          border-bottom:1px solid rgba(29,29,31,.07);
+        }
+        .sch-mark{
+          width:34px; height:34px; border-radius:11px;
+          display:grid; place-items:center;
+          background:linear-gradient(140deg,#ffb020,#ff8a00);
+          color:#fff;
+        }
+        .sch-head-text{ flex:1; min-width:0; }
+        .sch-head h3{ margin:0; font-size:16px; font-weight:700; letter-spacing:-.01em; color:var(--color-ink,#1d1d1f); }
+        .sch-head p{ margin:1px 0 0; font-size:12px; font-weight:500; color:#ff8a00; }
+        .sch-close{
+          width:30px; height:30px; border-radius:999px; border:none;
+          background:var(--color-fog,#f5f5f7); color:var(--color-graphite,#707070);
+          cursor:pointer; display:grid; place-items:center;
+          transition:background 140ms ease-out, transform 110ms ease-out;
+        }
+        .sch-close:active{ transform:scale(0.92); }
+
+        .sch-body{
+          flex:1 1 auto; min-height:0; overflow-y:auto;
+          padding:22px; display:grid; gap:22px;
+          overscroll-behavior:contain;
+        }
+
+        .sch-field{ display:grid; gap:9px; }
+        .sch-field > label{
+          font-size:11px; font-weight:700; letter-spacing:.06em;
+          text-transform:uppercase; color:var(--color-graphite,#707070);
+        }
+
+        .sch-scopes{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+        .sch-scope{
+          display:flex; flex-direction:column; align-items:flex-start; gap:5px;
+          padding:13px; border-radius:15px; cursor:pointer; text-align:left;
+          border:1.5px solid var(--color-silver-mist,#e8e8ed);
+          background:var(--color-snow,#fff);
+          color:var(--color-graphite,#707070);
+          transition:border-color 150ms ease-out, background 150ms ease-out, color 150ms ease-out, transform 110ms ease-out;
+        }
+        .sch-scope span{ font-size:12.5px; font-weight:650; color:var(--color-ink,#1d1d1f); line-height:1.2; }
+        .sch-scope b{ font-size:11px; font-weight:600; color:var(--color-graphite,#707070); }
+        .sch-scope:disabled{ opacity:.4; cursor:not-allowed; }
+        .sch-scope:not(:disabled):active{ transform:scale(0.98); }
+        .sch-scope[data-hue="azure"].is-active{ border-color:#0071e3; background:rgba(0,113,227,.07); color:#0071e3; }
+        .sch-scope[data-hue="violet"].is-active{ border-color:#7c5cff; background:rgba(124,92,255,.08); color:#7c5cff; }
+        .sch-scope[data-hue="teal"].is-active{ border-color:#00a0a0; background:rgba(0,160,160,.08); color:#00a0a0; }
+        .sch-scope.is-active b{ color:inherit; }
+
+        .sch-search{
           display:flex; align-items:center; gap:9px;
-          height:42px; padding:0 12px;
-          border-radius:13px;
-          background:var(--color-fog, #f5f5f7);
-          border:1.5px solid transparent;
-          color:var(--color-graphite, #707070);
+          height:44px; padding:0 13px; border-radius:14px;
+          background:var(--color-fog,#f5f5f7);
+          border:1.5px solid transparent; color:var(--color-graphite,#707070);
           transition:border-color 150ms ease-out, background 150ms ease-out;
         }
-        .scheme-search:focus-within{
-          border-color:var(--color-azure, #0071e3);
-          background:var(--color-snow, #fff);
-        }
-        .scheme-search input{
+        .sch-search:focus-within{ border-color:#0071e3; background:var(--color-snow,#fff); }
+        .sch-search input{
           flex:1; min-width:0; border:none; background:transparent; outline:none;
-          font-size:14px; color:var(--color-ink, #1d1d1f);
+          font-size:14px; color:var(--color-ink,#1d1d1f);
         }
-        .scheme-search > button{
-          border:none; background:transparent; cursor:pointer; padding:4px;
-          color:var(--color-graphite, #707070); display:grid; place-items:center;
+        .sch-search > button{
+          border:none; background:transparent; cursor:pointer; padding:3px;
+          color:var(--color-graphite,#707070); display:grid; place-items:center;
         }
 
-        .scheme-results{
-          display:grid; gap:4px;
-          padding:5px;
-          border-radius:13px;
-          background:var(--color-fog, #f5f5f7);
-        }
-        .scheme-result{
+        .sch-results{ display:grid; gap:2px; padding:5px; border-radius:14px; background:var(--color-fog,#f5f5f7); }
+        .sch-result{
           display:flex; align-items:center; gap:10px;
-          padding:9px 10px; border-radius:10px;
-          border:none; background:transparent; cursor:pointer; text-align:left;
-          transition:background 130ms ease-out, transform 120ms ease-out;
+          padding:9px 10px; border-radius:11px; cursor:pointer; text-align:left;
+          border:none; background:transparent; color:#0071e3;
+          transition:background 130ms ease-out;
         }
-        .scheme-result:disabled{ opacity:.5; cursor:not-allowed; }
-        .scheme-result:not(:disabled):active{ transform:scale(0.99); }
-        .scheme-result-main{ display:grid; min-width:0; flex:1; }
-        .scheme-result-main strong{
-          font-size:13px; font-weight:600; color:var(--color-ink, #1d1d1f);
+        .sch-result:disabled{ opacity:.45; cursor:not-allowed; }
+        .sch-result-name{
+          flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--color-ink,#1d1d1f);
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
-        .scheme-result-main small{ font-size:11.5px; color:var(--color-graphite, #707070); }
-        .scheme-stock{
-          flex:0 0 auto; font-size:11.5px; font-weight:600;
-          color:var(--color-graphite, #707070);
+        .sch-chip{
+          flex:0 0 auto; padding:2px 8px; border-radius:999px;
+          font-size:11px; font-weight:700;
+          background:rgba(0,160,90,.12); color:#0a7f4f;
+          font-variant-numeric:tabular-nums;
         }
-        .scheme-stock.is-none{ color:#b42318; }
-        .scheme-result-add{
-          flex:0 0 auto; width:24px; height:24px; border-radius:999px;
+        .sch-chip.is-out{ background:rgba(180,35,24,.1); color:#b42318; }
+
+        .sch-lines{ list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+        .sch-line{
+          display:flex; align-items:center; gap:10px;
+          padding:8px 8px 8px 13px; border-radius:14px;
+          background:var(--color-fog,#f5f5f7);
+          border:1.5px solid transparent;
+          animation:sch-in 190ms cubic-bezier(0.23,1,0.32,1) both;
+        }
+        .sch-line.is-over{ border-color:#b42318; background:rgba(180,35,24,.05); }
+        .sch-line-name{
+          flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--color-ink,#1d1d1f);
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }
+        .sch-line-name em{ font-style:normal; font-weight:500; color:var(--color-graphite,#707070); }
+        .sch-line-name em::before{ content:" · "; }
+
+        .sch-step{
+          flex:0 0 auto; display:flex; align-items:center;
+          background:var(--color-snow,#fff); border-radius:999px; padding:2px;
+        }
+        .sch-step button{
+          width:26px; height:26px; border-radius:999px; border:none; cursor:pointer;
+          background:transparent; color:var(--color-ink,#1d1d1f);
           display:grid; place-items:center;
-          background:var(--color-snow, #fff); color:var(--color-azure, #0071e3);
-        }
-
-        /* Chosen lines */
-        .scheme-lines{ list-style:none; margin:0; padding:0; display:grid; gap:7px; }
-        .scheme-line{
-          display:flex; align-items:center; gap:10px;
-          padding:9px 10px 9px 12px;
-          border-radius:13px;
-          border:1.5px solid var(--color-silver-mist, #e8e8ed);
-          background:var(--color-snow, #fff);
-          animation:scheme-in 200ms cubic-bezier(0.23,1,0.32,1) both;
-        }
-        .scheme-line.is-over{ border-color:#b42318; background:rgba(180,35,24,.04); }
-        .scheme-line-main{ display:grid; min-width:0; flex:1; }
-        .scheme-line-main strong{
-          font-size:13px; font-weight:600; color:var(--color-ink, #1d1d1f);
-          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-        }
-        .scheme-line-main small{ font-size:11.5px; color:var(--color-graphite, #707070); }
-
-        .scheme-stepper{
-          flex:0 0 auto; display:flex; align-items:center; gap:2px;
-          padding:2px; border-radius:999px; background:var(--color-fog, #f5f5f7);
-        }
-        .scheme-stepper button{
-          width:26px; height:26px; border-radius:999px;
-          border:none; background:transparent; cursor:pointer;
-          display:grid; place-items:center; color:var(--color-ink, #1d1d1f);
           transition:background 130ms ease-out, transform 110ms ease-out;
         }
-        .scheme-stepper button:active{ transform:scale(0.9); }
-        .scheme-stepper input{
-          width:38px; text-align:center; border:none; background:transparent;
-          outline:none; font-size:13px; font-weight:700;
-          color:var(--color-ink, #1d1d1f);
-          font-variant-numeric:tabular-nums;
-          -moz-appearance:textfield;
+        .sch-step button:active{ transform:scale(0.88); }
+        .sch-step input{
+          width:34px; text-align:center; border:none; background:transparent; outline:none;
+          font-size:13px; font-weight:700; color:var(--color-ink,#1d1d1f);
+          font-variant-numeric:tabular-nums; -moz-appearance:textfield;
         }
-        .scheme-stepper input::-webkit-outer-spin-button,
-        .scheme-stepper input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+        .sch-step input::-webkit-outer-spin-button,
+        .sch-step input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
 
-        .scheme-line-remove{
-          flex:0 0 auto; width:28px; height:28px; border-radius:999px;
-          border:none; background:transparent; cursor:pointer;
-          display:grid; place-items:center; color:var(--color-graphite, #707070);
+        .sch-remove{
+          flex:0 0 auto; width:26px; height:26px; border-radius:999px; border:none;
+          background:transparent; color:var(--color-graphite,#707070); cursor:pointer;
+          display:grid; place-items:center;
           transition:background 130ms ease-out, color 130ms ease-out, transform 110ms ease-out;
         }
-        .scheme-line-remove:active{ transform:scale(0.9); }
+        .sch-remove:active{ transform:scale(0.88); }
 
-        .scheme-empty{
-          display:flex; align-items:center; justify-content:center; gap:9px;
-          padding:20px; border-radius:13px;
-          border:1.5px dashed var(--color-silver-mist, #e8e8ed);
-          color:var(--color-graphite, #707070);
-          font-size:12.5px; font-weight:500;
-        }
-
-        .scheme-fields{ display:grid; gap:8px; }
-        .scheme-fields input{
-          height:42px; padding:0 12px; border-radius:13px;
-          border:1.5px solid transparent; background:var(--color-fog, #f5f5f7);
-          font-size:14px; color:var(--color-ink, #1d1d1f); outline:none;
+        .sch-input{
+          height:44px; padding:0 13px; border-radius:14px;
+          border:1.5px solid transparent; background:var(--color-fog,#f5f5f7);
+          font-size:14px; color:var(--color-ink,#1d1d1f); outline:none; width:100%;
           transition:border-color 150ms ease-out, background 150ms ease-out;
         }
-        .scheme-fields input:focus{
-          border-color:var(--color-azure, #0071e3); background:var(--color-snow, #fff);
-        }
+        .sch-input:focus{ border-color:#0071e3; background:var(--color-snow,#fff); }
 
-        .scheme-summary{
-          display:flex; align-items:center; gap:9px; flex-wrap:wrap;
-          padding:11px 13px; border-radius:14px;
-          background:var(--color-fog, #f5f5f7);
-        }
-        .scheme-summary-text{ font-size:12.5px; color:var(--color-graphite, #707070); }
-        .scheme-summary-text strong{ color:var(--color-ink, #1d1d1f); font-weight:650; }
-        .scheme-summary-cost{
-          margin-left:auto; font-size:14px; font-weight:700;
-          color:var(--color-ink, #1d1d1f); font-variant-numeric:tabular-nums;
-        }
-
-        .scheme-alert{
-          display:flex; align-items:flex-start; gap:9px;
+        .sch-alert{
+          display:flex; align-items:flex-start; gap:8px;
           padding:11px 13px; border-radius:13px;
-          background:rgba(180,35,24,.07); border:1px solid rgba(180,35,24,.16);
+          background:rgba(180,35,24,.07); border:1px solid rgba(180,35,24,.15);
           color:#b42318; font-size:12.5px; font-weight:600;
         }
-        .scheme-alert ul{ margin:5px 0 0; padding-left:16px; font-weight:500; }
+        .sch-alert ul{ margin:4px 0 0; padding-left:15px; font-weight:500; }
+        .sch-muted{ margin:0; padding:8px; font-size:12.5px; font-weight:500; color:var(--color-graphite,#707070); }
 
-        .scheme-inline-note{
-          display:flex; align-items:center; gap:6px;
-          margin:8px 0 0; font-size:11.5px; font-weight:500;
-          color:var(--color-graphite, #707070);
+        .sch-foot{
+          flex:0 0 auto;
+          display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+          padding:15px 22px;
+          border-top:1px solid rgba(29,29,31,.07);
+          background:var(--color-snow,#fff);
         }
-        .scheme-muted{
-          padding:10px; font-size:12.5px; font-weight:500;
-          color:var(--color-graphite, #707070);
+        .sch-total{ flex:1; min-width:0; font-size:12.5px; color:var(--color-graphite,#707070); }
+        .sch-total b{ color:var(--color-ink,#1d1d1f); font-size:14px; font-variant-numeric:tabular-nums; }
+        .sch-actions{ display:flex; align-items:center; gap:8px; }
+        .sch-btn{
+          display:inline-flex; align-items:center; gap:7px;
+          height:38px; padding:0 17px; border-radius:999px; cursor:pointer;
+          font-size:13.5px; font-weight:650;
+          border:1px solid var(--color-silver-mist,#e8e8ed);
+          background:var(--color-snow,#fff); color:var(--color-ink,#1d1d1f);
+          transition:background 140ms ease-out, transform 110ms ease-out, opacity 140ms ease-out;
         }
+        .sch-btn.is-primary{
+          border-color:transparent; background:#0071e3; color:#fff;
+        }
+        .sch-btn:disabled{ opacity:.45; cursor:not-allowed; }
+        .sch-btn:not(:disabled):active{ transform:scale(0.97); }
 
-        /* One shared entrance for anything that appears on a choice. */
-        .scheme-reveal{ animation:scheme-in 220ms cubic-bezier(0.23,1,0.32,1) both; }
-        @keyframes scheme-in{
-          from{ opacity:0; transform:translateY(-4px); }
-          to{ opacity:1; transform:none; }
-        }
+        @keyframes sch-fade{ from{ opacity:0; } to{ opacity:1; } }
+        @keyframes sch-pop{ from{ opacity:0; transform:scale(0.97); } to{ opacity:1; transform:none; } }
+        @keyframes sch-in{ from{ opacity:0; transform:translateY(-3px); } to{ opacity:1; transform:none; } }
+        .sch-reveal{ animation:sch-in 200ms cubic-bezier(0.23,1,0.32,1) both; }
 
         @media (hover:hover) and (pointer:fine){
-          .scheme-scope:not(:disabled):not(.is-active):hover{ border-color:rgba(29,29,31,.2); }
-          .scheme-result:not(:disabled):hover{ background:var(--color-snow, #fff); }
-          .scheme-stepper button:hover{ background:var(--color-snow, #fff); }
-          .scheme-line-remove:hover{ background:rgba(180,35,24,.08); color:#b42318; }
+          .sch-close:hover{ background:rgba(29,29,31,.1); }
+          .sch-scope:not(:disabled):not(.is-active):hover{ border-color:rgba(29,29,31,.22); }
+          .sch-result:not(:disabled):hover{ background:var(--color-snow,#fff); }
+          .sch-step button:hover{ background:var(--color-fog,#f5f5f7); }
+          .sch-remove:hover{ background:rgba(180,35,24,.09); color:#b42318; }
+          .sch-btn:not(:disabled):hover{ opacity:.88; }
         }
 
-        /* Narrow screens: scopes stack, and each line's controls wrap
-           under its name rather than squeezing into an unusable row. */
-        @media (max-width:620px){
-          .scheme-scopes{ grid-template-columns:1fr; }
-          .scheme-line{ flex-wrap:wrap; }
-          .scheme-line-main{ flex:1 1 100%; }
-          .scheme-stepper{ margin-left:auto; }
+        @media (max-width:600px){
+          .sch-overlay{ padding:12px; }
+          .sch-card{ max-height:calc(100vh - 24px); border-radius:22px; }
+          .sch-scopes{ grid-template-columns:1fr; }
+          .sch-scope{ flex-direction:row; align-items:center; gap:9px; }
+          .sch-scope span{ flex:1; }
+          .sch-body{ padding:18px; gap:18px; }
+          .sch-foot{ padding:13px 18px; }
         }
 
         @media (prefers-reduced-motion: reduce){
-          .scheme-reveal, .scheme-line{ animation:none; }
-          .scheme-scope, .scheme-result, .scheme-stepper button,
-          .scheme-line-remove, .scheme-search, .scheme-fields input{ transition:none; }
-          .scheme-scope:active, .scheme-result:active,
-          .scheme-stepper button:active, .scheme-line-remove:active{ transform:none; }
-          .scheme-scope-check{ transition:none; }
+          .sch-overlay, .sch-card, .sch-line, .sch-reveal{ animation:none; }
+          .sch-close, .sch-scope, .sch-result, .sch-step button,
+          .sch-remove, .sch-btn, .sch-search, .sch-input{ transition:none; }
+          .sch-close:active, .sch-scope:active, .sch-step button:active,
+          .sch-remove:active, .sch-btn:active{ transform:none; }
         }
       `}</style>
-    </AdminDecisionModal>
+    </div>,
+    document.body,
   );
 }
