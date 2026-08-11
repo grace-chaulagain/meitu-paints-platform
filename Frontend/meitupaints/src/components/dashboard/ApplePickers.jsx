@@ -114,7 +114,7 @@ export function AppleDateField({ value, onChange, disabled = false }) {
       {open && position && typeof document !== "undefined"
         ? createPortal(
             <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={closePopover} />
+              <div style={{ position: "fixed", inset: 0, zIndex: 1800 }} onClick={closePopover} />
               <div
                 className="apple-calendar-pop"
                 role="dialog"
@@ -266,7 +266,7 @@ export function PopoverListMenu({ trigger, renderRow, options, value, onChange, 
       {open && position && typeof document !== "undefined"
         ? createPortal(
             <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={closeMenu} />
+              <div style={{ position: "fixed", inset: 0, zIndex: 1800 }} onClick={closeMenu} />
               <div
                 ref={menuRef}
                 role="listbox"

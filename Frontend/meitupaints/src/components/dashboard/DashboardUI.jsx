@@ -1601,7 +1601,7 @@ export function DashboardUIStyles() {
       }
 
       .apple-calendar-pop{
-        z-index:1401;
+        z-index:1801;
         padding:18px;
         border-radius:20px;
         background:#fff;
@@ -1734,7 +1734,7 @@ export function DashboardUIStyles() {
       }
 
       .apple-dropdown-menu{
-        z-index:1401;
+        z-index:1801;
         max-height:340px;
         overflow-y:auto;
         overflow-x:hidden;
