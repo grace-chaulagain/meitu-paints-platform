@@ -255,6 +255,7 @@ export async function listFactoryOrders({
   stage = "ALL",
   status = "",
   origin = "",
+  excludeOrigins = "",
   dealerId = "",
   q = "",
   page = 1,
@@ -267,9 +268,21 @@ export async function listFactoryOrders({
   const normalizedStatus = normalize(status);
   if (normalizedStatus) query.status = normalizedStatus;
 
+  // Mirrors listOrdersForActor's origin handling (order.service.js) - see the
+  // comment there for why exclusion uses $nin rather than a positive match on
+  // orderOrigin. Schemes matter here specifically because they snapshot
+  // fulfillmentMode FACTORY, so they land in this page's default scope.
   const normalizedOrigin = normalize(origin);
-  if (["DEALER", "DISPATCHER_REPLENISHMENT"].includes(normalizedOrigin)) {
+  if (Object.values(ORDER_ORIGIN).includes(normalizedOrigin)) {
     query.orderOrigin = normalizedOrigin;
+  } else {
+    const excluded = String(excludeOrigins || "")
+      .split(",")
+      .map((value) => normalize(value))
+      .filter((value) => Object.values(ORDER_ORIGIN).includes(value));
+    if (excluded.length) {
+      query.orderOrigin = { $nin: excluded };
+    }
   }
 
   if (dealerId) query.dealerId = dealerId;

@@ -5,6 +5,7 @@ import ApiError from "../utils/apiError.js";
 import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
 import { getNextOrderSerialNumber } from "../utils/orderSerialNumber.js";
 import Order, {
+  ORDER_ORIGIN,
   ORDER_REVIEWED_BY,
   ORDER_STATUS,
 } from "../models/Order.model.js";
@@ -597,6 +598,7 @@ export async function listOrdersForActor({
   fulfillmentMode,
   dispatcherId,
   orderOrigin,
+  excludeOrigins,
   from,
   to,
   page = 1,
@@ -625,9 +627,31 @@ export async function listOrdersForActor({
     query["dealerSnapshot.fulfillmentMode"] = normalizedFulfillmentMode;
   }
 
+  // `orderOrigin` narrows to exactly one pipeline; `excludeOrigins` (a
+  // comma-separated list) removes pipelines from an otherwise-broad view.
+  // Both are needed because a scheme order snapshots
+  // `dealerSnapshot.fulfillmentMode: "FACTORY"` - so without an exclusion the
+  // "Factory" scope silently mixes free-of-cost scheme grants in with real
+  // dealer sales, and there is no way to ask for "real orders only".
+  //
+  // Exclusion is expressed with $nin rather than a positive
+  // `orderOrigin: "DEALER"` match on purpose: `orderOrigin` gained its schema
+  // default long after the first orders were written, and a Mongoose default
+  // does not backfill existing documents. Any pre-existing order with no
+  // `orderOrigin` field at all still matches $nin (missing != excluded value)
+  // but would NOT match an equality check - so the positive form would quietly
+  // hide the oldest orders in the register.
   const normalizedOrigin = normalizeUpper(orderOrigin);
-  if (["DEALER", "DISPATCHER_REPLENISHMENT"].includes(normalizedOrigin)) {
+  if (Object.values(ORDER_ORIGIN).includes(normalizedOrigin)) {
     query.orderOrigin = normalizedOrigin;
+  } else {
+    const excluded = String(excludeOrigins || "")
+      .split(",")
+      .map((value) => normalizeUpper(value))
+      .filter((value) => Object.values(ORDER_ORIGIN).includes(value));
+    if (excluded.length) {
+      query.orderOrigin = { $nin: excluded };
+    }
   }
 
   if (isDealer(actorUser)) {

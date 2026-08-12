@@ -54,16 +54,27 @@ const PRIORITY_OPTIONS = [
 // this page. Applied server-side (fulfillmentMode/origin) rather than as a
 // client-side filter, since the factory orders endpoint defaults to
 // FACTORY-only otherwise.
+//
+// "Scheme" isolates free-of-cost grants. Note that, unlike the admin orders
+// register, "Factory" here deliberately still INCLUDES schemes: this page is
+// a work queue, not a sales register, and a scheme is real work the factory
+// has to pick, pack and ship. Hiding it from the default scope would hide a
+// job, not remove noise. The admin register makes the opposite trade for the
+// opposite reason (see ROUTE_MODES in AdminOrdersPage.jsx).
 const ROUTE_MODES = [
   { key: "ALL", label: "All" },
   { key: "FACTORY", label: "Factory" },
   { key: "DISPATCHER_REPLENISHMENT", label: "Dispatcher" },
+  { key: "SCHEME", label: "Scheme" },
 ];
 
 function routeModeParams(routeMode) {
   if (routeMode === "FACTORY") return { fulfillmentMode: "FACTORY" };
   if (routeMode === "DISPATCHER_REPLENISHMENT") {
     return { fulfillmentMode: "ALL", origin: "DISPATCHER_REPLENISHMENT" };
+  }
+  if (routeMode === "SCHEME") {
+    return { fulfillmentMode: "ALL", origin: "SCHEME" };
   }
   return { fulfillmentMode: "ALL" };
 }
@@ -485,7 +496,7 @@ export default function FactoryOrdersPage() {
           outline-offset:2px;
         }
         .factory-route-menu{
-          z-index:1401;
+          /* z-index is set inline by PopoverListMenu - see ApplePickers.jsx. */
           padding:10px;
           border-radius:20px;
           background:#fff;

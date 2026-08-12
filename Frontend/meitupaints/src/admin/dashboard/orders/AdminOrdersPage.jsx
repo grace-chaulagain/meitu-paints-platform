@@ -70,11 +70,20 @@ const ARCHIVE_STATUS_FILTERS = ORDER_STATUS_FILTERS.filter(
 // between these two - two different concepts (a dispatcher's own
 // restock order vs. a dealer's order fulfilled through a dispatcher) with
 // near-identical names. Spelled out so the label alone disambiguates them.
+//
+// "Scheme Orders" is an origin, not a route, but it belongs in this same
+// control for one concrete reason: a scheme snapshots
+// `fulfillmentMode: "FACTORY"` (schemes always ship from the factory, even
+// for a dispatcher-served dealer), so without its own segment it has nowhere
+// to live except mixed into "Factory" alongside real, billable dealer sales.
+// Picking it here scopes to schemes only; picking "Factory" now explicitly
+// excludes them, so the two are cleanly separable in both directions.
 const ROUTE_MODES = [
   { key: "ALL", label: "All" },
   { key: "FACTORY", label: "Factory" },
   { key: "DISPATCHER_REPLENISHMENT", label: "Dispatcher's Own Orders" },
   { key: "DISPATCHER_ALL", label: "Dealer Orders via Dispatcher" },
+  { key: "SCHEME", label: "Scheme Orders" },
 ];
 
 // Collapses the fine-grained routeMode value (which includes DISPATCHER:<id>
@@ -83,6 +92,7 @@ const ROUTE_MODES = [
 // regardless of whether a specific dispatcher is also selected.
 function routeModeGroup(routeMode) {
   if (routeMode === "FACTORY") return "FACTORY";
+  if (routeMode === "SCHEME") return "SCHEME";
   if (routeMode === "DISPATCHER_REPLENISHMENT") return "DISPATCHER_REPLENISHMENT";
   if (routeMode === "DISPATCHER_ALL" || String(routeMode || "").startsWith("DISPATCHER:")) return "DISPATCHER_ALL";
   return "ALL";
@@ -107,6 +117,12 @@ function isDefaultRouteScope(routeMode) {
 // deviation worth explaining, not the default state.
 function describeRouteScope(routeMode, dispatchers) {
   const group = routeModeGroup(routeMode);
+  if (group === "SCHEME") {
+    return {
+      tone: "caution",
+      text: "Showing free-of-cost scheme grants only - these carry no value and are excluded from revenue and receivables.",
+    };
+  }
   if (group === "DISPATCHER_REPLENISHMENT") {
     return {
       tone: "caution",
@@ -514,11 +530,19 @@ function groupOrdersByRoute(orders, { active }) {
     const dealer = order?.dealerSnapshot || order?.dealerId || {};
     const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
     const isReplenishment = order?.orderOrigin === "DISPATCHER_REPLENISHMENT";
-    const isDispatcherRouted = !isReplenishment && (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER";
+    // Checked before the routing test, not after: a scheme snapshots
+    // fulfillmentMode FACTORY, so it would otherwise fall through into the
+    // "Factory Orders" bucket and read as a real dealer sale worth NPR 0.
+    const isScheme = order?.orderOrigin === "SCHEME";
+    const isDispatcherRouted =
+      !isReplenishment && !isScheme && (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER";
 
     let routeKey;
     let routeLabel;
-    if (isReplenishment) {
+    if (isScheme) {
+      routeKey = "scheme";
+      routeLabel = "Scheme Orders (free of cost)";
+    } else if (isReplenishment) {
       routeKey = "dispatcher-replenishment";
       routeLabel = "Dispatchers' Own Orders";
     } else if (isDispatcherRouted) {
@@ -536,16 +560,26 @@ function groupOrdersByRoute(orders, { active }) {
     }
 
     if (!buckets.has(routeKey)) {
-      buckets.set(routeKey, { routeKey, routeLabel, isDispatcherRelated: routeKey !== "factory", orders: [] });
+      buckets.set(routeKey, {
+        routeKey,
+        routeLabel,
+        isDispatcherRelated: routeKey !== "factory" && routeKey !== "scheme",
+        // Factory is home base, schemes are the small internal exception,
+        // dispatcher-related groups come last. An explicit rank rather than
+        // the old boolean flip, now that there are three tiers rather than
+        // two.
+        rank: routeKey === "factory" ? 0 : routeKey === "scheme" ? 1 : 2,
+        orders: [],
+      });
     }
     buckets.get(routeKey).orders.push(order);
   });
 
-  // Factory first (it's home base), then dispatcher-related groups
+  // Factory first, then schemes, then dispatcher-related groups
   // alphabetically by label so the list order is stable across reloads.
   return [...buckets.values()]
     .sort((a, b) => {
-      if (a.isDispatcherRelated !== b.isDispatcherRelated) return a.isDispatcherRelated ? 1 : -1;
+      if (a.rank !== b.rank) return a.rank - b.rank;
       return a.routeLabel.localeCompare(b.routeLabel);
     })
     .map((bucket) => ({ ...bucket, dayGroups: groupOrdersByDay(bucket.orders) }));
@@ -1669,6 +1703,8 @@ export default function AdminOrdersPage() {
 
     if (routeMode === "DISPATCHER_REPLENISHMENT") {
       params.orderOrigin = "DISPATCHER_REPLENISHMENT";
+    } else if (routeMode === "SCHEME") {
+      params.orderOrigin = "SCHEME";
     } else if (routeMode === "DISPATCHER_ALL") {
       params.fulfillmentMode = "DISPATCHER";
     } else if (String(routeMode).startsWith("DISPATCHER:")) {
@@ -1676,6 +1712,11 @@ export default function AdminOrdersPage() {
       params.dispatcherId = String(routeMode).split(":")[1] || "";
     } else if (routeMode !== "ALL") {
       params.fulfillmentMode = routeMode;
+      // Schemes snapshot fulfillmentMode FACTORY, so without this they'd
+      // sit inside the Factory scope next to real dealer sales at NPR 0.
+      // Excluded here rather than server-side-by-default so the "All"
+      // scope still genuinely means all.
+      if (routeMode === "FACTORY") params.excludeOrigins = "SCHEME";
     }
 
     if (committedSearch.trim()) {
@@ -2020,7 +2061,11 @@ export default function AdminOrdersPage() {
               {routeGroups.map((routeGroup) => (
                 <div key={routeGroup.routeKey || "flat"} className="admin-order-route-group">
                   {routeGroup.routeLabel ? (
-                    <div className={`admin-order-route-heading ${routeGroup.isDispatcherRelated ? "is-dispatcher-related" : ""}`}>
+                    <div
+                      className={`admin-order-route-heading ${routeGroup.isDispatcherRelated ? "is-dispatcher-related" : ""} ${
+                        routeGroup.routeKey === "scheme" ? "is-scheme" : ""
+                      }`}
+                    >
                       <span className="admin-order-route-heading-dot" aria-hidden="true" />
                       {routeGroup.routeLabel}
                       <span className="admin-order-route-heading-count">{routeGroup.orders.length}</span>
@@ -2297,7 +2342,9 @@ export default function AdminOrdersPage() {
         .admin-route-scope-banner.tone-info .admin-route-scope-banner-reset:hover{ background:rgba(255,255,255,.9); }
 
         .admin-route-menu{
-          z-index:1401;
+          /* No z-index here on purpose - PopoverListMenu sets it inline on
+             both the scrim and this panel (MENU_SCRIM_Z/MENU_PANEL_Z in
+             ApplePickers.jsx) so the two can't drift apart again. */
           padding:10px;
           border-radius:20px;
           background:#fff;
@@ -2454,6 +2501,11 @@ export default function AdminOrdersPage() {
           letter-spacing:.03em;
         }
         .admin-order-route-heading.is-dispatcher-related{ color:var(--color-azure, #0071e3); }
+        /* Same amber as the SCHEME pill on each card (Pill tone="caution"),
+           so the section heading and the badges inside it read as one thing
+           rather than two unrelated highlights. */
+        .admin-order-route-heading.is-scheme{ color:var(--color-caution, #b64400); }
+        .admin-order-route-heading.is-scheme .admin-order-route-heading-dot{ background:var(--color-caution, #b64400); }
         .admin-order-route-heading-dot{
           width:7px;
           height:7px;

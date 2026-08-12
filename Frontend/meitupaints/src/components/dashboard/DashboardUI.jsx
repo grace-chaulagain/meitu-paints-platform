@@ -1734,7 +1734,7 @@ export function DashboardUIStyles() {
       }
 
       .apple-dropdown-menu{
-        z-index:1801;
+        /* z-index is set inline by PopoverListMenu - see ApplePickers.jsx. */
         max-height:340px;
         overflow-y:auto;
         overflow-x:hidden;

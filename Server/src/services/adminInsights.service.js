@@ -17,11 +17,15 @@ import ApiError from "../utils/apiError.js";
 import DealerProfile from "../models/DealerProfile.model.js";
 import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Order from "../models/Order.model.js";
+// Imported rather than redeclared: this list used to be a local copy that
+// silently drifted when SCHEME was added to the shared one, so free-of-cost
+// scheme grants were still being counted as real orders and revenue by the
+// admin mobile "Morning Brief" this file feeds. One definition, one place.
+import { INTERNAL_ORDER_ORIGINS } from "./adminInsights/insightsShared.js";
 
 const DAY_MS = 86400000;
 const ACCEPTED_ORDER_STATUSES = ["VERIFIED", "DISPATCHED", "COMPLETED"];
 const FULFILLED_ORDER_STATUSES = ["DISPATCHED", "COMPLETED"];
-const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT"];
 
 function isAcceptedOrder(order) {
   return ACCEPTED_ORDER_STATUSES.includes(normalizeUpper(order?.status));
