@@ -800,7 +800,18 @@ export function OrderThumbnails({ items, productsMap, familyMap }) {
   );
 }
 
-export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap, familyMap }) {
+// `onEditScheme` is optional - pages that don't own the scheme modal (the
+// per-dealer order list, for one) simply don't pass it and get no edit
+// affordance, rather than a button wired to nothing.
+export function AdminOrderTimelineRow({
+  item,
+  onOpen,
+  onVerify,
+  onEditScheme,
+  isArrived,
+  productsMap,
+  familyMap,
+}) {
   const status = normalizeStatus(item.status);
   const meta = adminOrderStatusMeta(status);
   const items = Array.isArray(item.items) ? item.items : [];
@@ -811,6 +822,12 @@ export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, produ
   // order - reusing it here means the inline button and the detail page's
   // action area can never disagree about what's actually offered.
   const verifyTransition = getTransitions(item, "ADMIN").find((t) => t.action === "verify");
+  // Mirrors SCHEME_EDITABLE_STATUSES on the server: a scheme is only
+  // amendable while the factory still has it in the Inbox. Past that the
+  // goods have shipped and the API refuses, so the button would only ever
+  // produce an error.
+  const canEditScheme =
+    typeof onEditScheme === "function" && item?.orderOrigin === "SCHEME" && status === "VERIFIED";
   // The one binary distinction that actually matters at a glance: is this
   // Factory's normal work, or is it routed through a dispatcher in some way
   // (a dealer order fulfilled via dispatcher, or a dispatcher's own restock
@@ -852,6 +869,19 @@ export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, produ
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {canEditScheme ? (
+            <ActionButton
+              icon="edit"
+              onClick={(event) => {
+                // The whole card is a button that opens the detail page -
+                // without this the edit modal and that navigation both fire.
+                event.stopPropagation();
+                onEditScheme(item);
+              }}
+            >
+              Edit
+            </ActionButton>
+          ) : null}
           {verifyTransition ? (
             <ActionButton icon="checkmark" onClick={() => onVerify(item, verifyTransition)}>
               Verify
@@ -1635,6 +1665,8 @@ export default function AdminOrdersPage() {
   // navigated away and came back, this restores the exact text they searched.
   const [search, setSearch] = useState(() => listState.committedSearch);
   const [schemeModalOpen, setSchemeModalOpen] = useState(false);
+  // null = raising a new scheme; an order = amending that one.
+  const [editScheme, setEditScheme] = useState(null);
 
   const updateListState = useCallback(
     (patch) => {
@@ -1892,6 +1924,24 @@ export default function AdminOrdersPage() {
       page: 1,
     });
   const changeRouteMode = (next) => updateListState({ routeMode: next, page: 1 });
+
+  function openNewScheme() {
+    setEditScheme(null);
+    setSchemeModalOpen(true);
+  }
+
+  // Only offered while the factory still has it: once dispatched the goods
+  // have gone and the server refuses the edit anyway, so showing the action
+  // would just be a button that always fails.
+  function openSchemeForEdit(order) {
+    setEditScheme(order);
+    setSchemeModalOpen(true);
+  }
+
+  function closeSchemeModal() {
+    setSchemeModalOpen(false);
+    setEditScheme(null);
+  }
   // Deliberately narrower than resetFilters() - only snaps the routing scope
   // back to Factory (the universal default, see isDefaultRouteScope), leaving
   // search/date/status filters untouched. This is the banner's "wrong
@@ -1911,12 +1961,16 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="admin-orders-page" style={{ display: "grid", gap: 16 }}>
-      {/* Mounted only while open so the form always starts clean. */}
+      {/* Mounted only while open so the form always starts clean, and keyed
+          on the scheme being edited so switching between two of them
+          re-seeds the form rather than carrying the first one's basket over. */}
       {schemeModalOpen ? (
         <CreateSchemeOrderModal
+          key={editScheme?._id || "new"}
           open={schemeModalOpen}
-          onClose={() => setSchemeModalOpen(false)}
-          onCreated={() => setSchemeModalOpen(false)}
+          editOrder={editScheme}
+          onClose={closeSchemeModal}
+          onCreated={closeSchemeModal}
         />
       ) : null}
 
@@ -1943,7 +1997,7 @@ export default function AdminOrdersPage() {
                 placeholder="Search order number or dealer…"
               />
             </div>
-            <PrimaryButton icon="plus" onClick={() => setSchemeModalOpen(true)}>
+            <PrimaryButton icon="plus" onClick={openNewScheme}>
               Scheme order
             </PrimaryButton>
           </div>
@@ -2096,6 +2150,7 @@ export default function AdminOrdersPage() {
                               setListActionError("");
                               setConfirmVerify({ order, action: transition.action, target: transition.target });
                             }}
+                            onEditScheme={openSchemeForEdit}
                             isArrived={arrivedIds.has(item._id)}
                             productsMap={productsMap}
                             familyMap={familyMap}

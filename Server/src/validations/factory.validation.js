@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { objectIdSchema, optionalTrimmedString } from "./common.validation.js";
+// Shared with the admin orders list so the two can't accept different sets
+// of origins - see the comment on ORDER_ORIGIN_VALUES there.
+import { orderOriginQuerySchema, excludeOriginsQuerySchema } from "./order.validation.js";
 
 export const factoryOrderParamsSchema = z
   .object({
@@ -13,14 +16,8 @@ export const factoryOrderListQuerySchema = z
       .enum(["ALL", "INBOX", "SHIPMENT", "COMPLETED", "all", "inbox", "shipment", "completed"])
       .optional(),
     status: optionalTrimmedString(40),
-    origin: z
-      .enum([
-        "DEALER",
-        "DISPATCHER_REPLENISHMENT",
-        "dealer",
-        "dispatcher_replenishment",
-      ])
-      .optional(),
+    origin: orderOriginQuerySchema.optional(),
+    excludeOrigins: excludeOriginsQuerySchema.optional(),
     dealerId: objectIdSchema.optional(),
     // Defaults to FACTORY-only in the service (matches the factory kanban's
     // existing behavior) - the Invoice Center is the one caller that passes

@@ -27,7 +27,11 @@ import DealerProfile from "../models/DealerProfile.model.js";
 import Dispatcher from "../models/Dispatcher.model.js";
 import ApiError from "../utils/apiError.js";
 import { generateUniqueOrderNumber } from "./order.service.js";
-import { reserveStockForOrder } from "./stock.service.js";
+import {
+  reserveStockForOrder,
+  releaseReservationForOrder,
+  adjustReservationForOrderAmendment,
+} from "./stock.service.js";
 
 function objectId(value, label) {
   if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -97,7 +101,14 @@ async function resolveRecipient({ recipientType, recipientId }) {
 // Zero-value order lines built from the live catalog. Prices are forced
 // to 0 rather than copied - a scheme is free by definition, and reading a
 // price here would let a catalog change turn a past giveaway into a bill.
-async function buildSchemeItems(rawItems) {
+//
+// `checkStock` is off for edits. On an edit the order's OWN units are already
+// counted in every product's reservedQuantity, so re-running this check would
+// see the scheme competing with itself and reject an unchanged quantity.
+// adjustReservationForOrderAmendment does the correct delta-based check in
+// that case - and unlike this one it expands kits into their components, so
+// it is the more accurate authority anyway.
+async function buildSchemeItems(rawItems, { checkStock = true } = {}) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     throw new ApiError(400, "At least one product is required");
   }
@@ -126,7 +137,7 @@ async function buildSchemeItems(rawItems) {
     const onHand = Number(product.stock?.currentQuantity || 0);
     const reserved = Number(product.stock?.reservedQuantity || 0);
     const available = Math.max(0, onHand - reserved);
-    if (quantity > available) {
+    if (checkStock && quantity > available) {
       shortfalls.push({
         productId: String(product._id),
         name: product.name,
@@ -225,6 +236,128 @@ export async function createSchemeOrder(payload = {}, actorUser = null) {
     itemCount: items.length,
     totalUnits: items.reduce((sum, item) => sum + item.quantity, 0),
   };
+}
+
+// A scheme can only be changed or withdrawn while it is still sitting in the
+// factory's Inbox. Once it is DISPATCHED the goods have physically left the
+// building and the reservation has been consumed - at that point the only
+// honest correction is a return workflow, not an edit. REJECTED/CANCELLED are
+// allowed through so a dead scheme can still be tidied away; they hold no
+// live reservation, and releaseReservationForOrder is a no-op for them.
+const SCHEME_EDITABLE_STATUSES = [ORDER_STATUS.VERIFIED];
+const SCHEME_DELETABLE_STATUSES = [
+  ORDER_STATUS.VERIFIED,
+  ORDER_STATUS.REJECTED,
+  ORDER_STATUS.CANCELLED,
+];
+
+async function loadSchemeOrder(orderId) {
+  const order = await Order.findOne({
+    _id: objectId(orderId, "orderId"),
+    isDeleted: { $ne: true },
+  });
+  if (!order) throw new ApiError(404, "Scheme order not found");
+  if (order.orderOrigin !== ORDER_ORIGIN.SCHEME) {
+    // Guards the whole feature: these endpoints skip the review/approval
+    // machinery that real orders go through, so they must never be able to
+    // reach one.
+    throw new ApiError(400, "This order is not a scheme order");
+  }
+  return order;
+}
+
+// Edits a scheme that the factory hasn't shipped yet: quantities, which
+// products are on it, and the campaign label/note. The recipient is
+// deliberately NOT editable - re-pointing a scheme at a different dealer is a
+// different grant, and the honest way to do it is to delete this one and
+// create that one, so the two show up as two decisions in the register.
+export async function updateSchemeOrder(orderId, payload = {}, actorUser = null) {
+  const order = await loadSchemeOrder(orderId);
+
+  if (!SCHEME_EDITABLE_STATUSES.includes(order.status)) {
+    throw new ApiError(
+      400,
+      `This scheme has already been ${order.status.toLowerCase()} and can no longer be edited. Only schemes still waiting in the factory's queue can be changed.`,
+    );
+  }
+
+  const previousItems = (order.items || []).map((item) => ({
+    productId: item.productId,
+    sku: item.sku,
+    quantity: item.quantity,
+  }));
+
+  const hasItems = Array.isArray(payload.items);
+  const nextItems = hasItems
+    ? await buildSchemeItems(payload.items, { checkStock: false })
+    : order.items;
+
+  if (hasItems) {
+    // Reservation first: it is the step that can fail on insufficient stock,
+    // and letting it throw before the order document is touched keeps a
+    // rejected edit from leaving the order and the reservation disagreeing.
+    await adjustReservationForOrderAmendment({
+      order,
+      previousItems,
+      nextItems,
+      actorUser,
+      reason: `Scheme order amended${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
+    });
+    order.items = nextItems;
+    order.totals = { subtotal: 0, total: 0, currency: "NPR" };
+  }
+
+  if (payload.label !== undefined) order.scheme.label = text(payload.label, 120);
+  if (payload.note !== undefined) order.scheme.note = text(payload.note, 500);
+
+  order.scheme.updatedBy = actorUser?._id || actorUser?.id || null;
+  order.scheme.updatedAt = new Date();
+
+  await order.save();
+
+  return {
+    orderId: order._id,
+    orderNumber: order.orderNumber,
+    itemCount: order.items.length,
+    totalUnits: order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+  };
+}
+
+// Withdraws a scheme entirely. Soft-delete rather than a hard removal so the
+// decision stays auditable, and rather than the shared 30-day "pending
+// deletion" grace period other records use: a scheme holds factory stock the
+// whole time it exists, so parking it in a queue would keep those units
+// unavailable for a month over what is usually a typo.
+export async function deleteSchemeOrder(orderId, actorUser = null, { reason = "" } = {}) {
+  const order = await loadSchemeOrder(orderId);
+
+  if (!SCHEME_DELETABLE_STATUSES.includes(order.status)) {
+    throw new ApiError(
+      400,
+      `This scheme has already been ${order.status.toLowerCase()} and can no longer be deleted. Goods that have left the factory need a return, not a deletion.`,
+    );
+  }
+
+  // Release before flagging deleted, so a failure here leaves the order
+  // visible and holding its stock rather than hidden and holding it forever.
+  await releaseReservationForOrder({
+    order,
+    actorUser,
+    reason: `Scheme order deleted${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
+    note: text(reason, 500),
+  });
+
+  order.isDeleted = true;
+  order.deletion = {
+    ...(order.deletion?.toObject?.() || order.deletion || {}),
+    pending: false,
+    requestedAt: new Date(),
+    requestedByUserId: actorUser?._id || actorUser?.id || null,
+    reason: text(reason, 500) || "Scheme withdrawn by admin",
+  };
+  await order.save();
+
+  return { orderId: order._id, orderNumber: order.orderNumber, deleted: true };
 }
 
 // Recipient picker for the create form: every verified dealer plus every

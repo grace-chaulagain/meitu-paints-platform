@@ -15,3 +15,19 @@ export const createSchemeOrderController = asyncHandler(async (req, res) => {
   const item = await schemeOrderService.createSchemeOrder(req.body || {}, req.user);
   res.status(201).json({ ok: true, item });
 });
+
+export const updateSchemeOrderController = asyncHandler(async (req, res) => {
+  const item = await schemeOrderService.updateSchemeOrder(
+    req.params.orderId,
+    req.body || {},
+    req.user,
+  );
+  res.status(200).json({ ok: true, item });
+});
+
+export const deleteSchemeOrderController = asyncHandler(async (req, res) => {
+  const item = await schemeOrderService.deleteSchemeOrder(req.params.orderId, req.user, {
+    reason: req.body?.reason,
+  });
+  res.status(200).json({ ok: true, item });
+});

@@ -40,6 +40,18 @@ function itemTags(type, items = []) {
   ];
 }
 
+// Creating, amending or withdrawing a scheme all move reserved factory stock
+// and change what the factory queue is holding, so all three invalidate the
+// same set rather than each keeping its own drifting list.
+const SCHEME_ORDER_INVALIDATES = [
+  listTag("SchemeOrder"),
+  listTag("Order"),
+  listTag("AdminOrder"),
+  listTag("Stock"),
+  listTag("Insight"),
+  listTag("AdminInsight"),
+];
+
 function listResponseTags(type, response) {
   return itemTags(type, getItems(response));
 }
@@ -1557,6 +1569,8 @@ export const meituApi = createApi({
     // Account-keeping rebuild (see admin.insights.routes.js) - per-section
     // endpoints, lazy-loaded per active tab, rather than the single
     // combined getAdminInsights blob above.
+    // Shared by create/update/delete: every one of them moves reserved
+    // factory stock and changes what the factory queue is holding.
     getSchemeRecipients: builder.query({
       query: () => ({ url: "/api/admin/scheme-orders/recipients" }),
       transformResponse: getItems,
@@ -1574,13 +1588,33 @@ export const meituApi = createApi({
       query: (body) => ({ url: "/api/admin/scheme-orders", method: "POST", body }),
       // A scheme reserves factory stock and lands in the factory queue,
       // so orders, stock and insights all change with it.
-      invalidatesTags: () => [
-        listTag("SchemeOrder"),
-        listTag("Order"),
-        listTag("Stock"),
-        listTag("Insight"),
-        listTag("AdminInsight"),
+      invalidatesTags: () => SCHEME_ORDER_INVALIDATES,
+    }),
+
+    // Both only apply while the scheme is still in the factory's queue; the
+    // server refuses once it has been dispatched. They invalidate the same
+    // set as create - an amended basket moves reserved stock, and a deleted
+    // scheme hands it back.
+    updateSchemeOrder: builder.mutation({
+      query: ({ orderId, ...body }) => ({
+        url: `/api/admin/scheme-orders/${orderId}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        ...SCHEME_ORDER_INVALIDATES,
+        { type: "AdminOrder", id: arg?.orderId },
+        { type: "Order", id: arg?.orderId },
       ],
+    }),
+
+    deleteSchemeOrder: builder.mutation({
+      query: ({ orderId, reason = "" }) => ({
+        url: `/api/admin/scheme-orders/${orderId}`,
+        method: "DELETE",
+        body: { reason },
+      }),
+      invalidatesTags: () => SCHEME_ORDER_INVALIDATES,
     }),
 
     getAdminInventoryOverview: builder.query({
@@ -2051,6 +2085,8 @@ export const {
   useGetSchemeRecipientsQuery,
   useGetSchemeOrdersQuery,
   useCreateSchemeOrderMutation,
+  useUpdateSchemeOrderMutation,
+  useDeleteSchemeOrderMutation,
   useGetAdminFactoryStockQuery,
   useGetAdminDispatcherStockLevelsQuery,
   useGetAdminDealerStockLevelsQuery,

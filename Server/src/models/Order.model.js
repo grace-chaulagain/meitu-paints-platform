@@ -416,6 +416,16 @@ const OrderSchema = new mongoose.Schema(
         ref: "User",
         default: null,
       },
+      // Set when an admin amends a scheme that the factory hasn't shipped
+      // yet. A scheme carries no price, so the usual "the totals changed"
+      // audit trail says nothing about it - this is the only record that the
+      // contents of the grant were revised after it was raised.
+      updatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      updatedAt: { type: Date, default: null },
     },
 
     // Snapshotted from dealer (or, for a DISPATCHER_REPLENISHMENT order,

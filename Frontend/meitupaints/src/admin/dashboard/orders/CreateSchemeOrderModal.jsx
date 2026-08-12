@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 
 import {
   useCreateSchemeOrderMutation,
+  useUpdateSchemeOrderMutation,
+  useDeleteSchemeOrderMutation,
   useGetSchemeRecipientsQuery,
   useGetProductsQuery,
 } from "../../../redux/api/meituApi.js";
@@ -31,17 +33,49 @@ function matchesScope(recipient, scope) {
   return false;
 }
 
-export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
-  const recipientsQuery = useGetSchemeRecipientsQuery(undefined, { skip: !open });
+// Lines already on the scheme carry `available: null` - "the server decides".
+// Their own units are counted inside every product's reservedQuantity, so the
+// usual current-minus-reserved figure would show the scheme competing with
+// itself and flag an unchanged quantity as over capacity. The server does the
+// correct delta-based check (and, unlike this one, expands kits into their
+// components), so its answer is authoritative and its message is surfaced
+// inline. Newly added lines still get a real number - those aren't reserved
+// yet, so the ordinary calculation is right for them.
+function linesFromOrder(order) {
+  if (!order) return [];
+  return (order.items || []).map((item) => ({
+    productId: String(item.productId?._id || item.productId || ""),
+    name: item.nameSnapshot || item.name || item.sku || "Product",
+    packLabel: item.packSnapshot || "",
+    available: null,
+    quantity: Number(item.quantity || 1),
+  }));
+}
+
+// Pass `editOrder` to amend an existing scheme instead of raising a new one.
+// The recipient is fixed once a scheme exists - pointing a grant at a
+// different dealer is a different decision, and the server rejects it - so in
+// edit mode the picker collapses to a read-only line.
+export default function CreateSchemeOrderModal({ open, onClose, onCreated, editOrder = null }) {
+  const isEdit = Boolean(editOrder);
+  const recipientsQuery = useGetSchemeRecipientsQuery(undefined, { skip: !open || isEdit });
   const [createScheme, createState] = useCreateSchemeOrderMutation();
+  const [updateScheme, updateState] = useUpdateSchemeOrderMutation();
+  const [deleteScheme, deleteState] = useDeleteSchemeOrderMutation();
 
   const [scope, setScope] = useState("");
   const [recipientKey, setRecipientKey] = useState("");
-  const [label, setLabel] = useState("");
-  const [lines, setLines] = useState([]);
+  // Seeded from the order rather than synced to it in an effect: the caller
+  // mounts this fresh per scheme (keyed on the order id), so the initial
+  // value IS the edit state and there's nothing to keep in sync afterwards.
+  const [label, setLabel] = useState(() => editOrder?.scheme?.label || "");
+  const [lines, setLines] = useState(() => linesFromOrder(editOrder));
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [shortfalls, setShortfalls] = useState([]);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const busy = createState.isLoading || updateState.isLoading || deleteState.isLoading;
 
   const trimmed = query.trim();
   const productsQuery = useGetProductsQuery({ q: trimmed }, { skip: !open || trimmed.length < 2 });
@@ -94,38 +128,58 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
     setQuery("");
     setError("");
     setShortfalls([]);
+    setConfirmingDelete(false);
   }
 
   function handleClose() {
-    if (createState.isLoading) return;
+    if (busy) return;
     reset();
     onClose();
   }
 
-  const overCapacity = lines.some((l) => Number(l.quantity) > l.available);
-  const canSubmit = Boolean(recipientId) && lines.length > 0 && !overCapacity;
+  // `available: null` means unknown-and-server-checked, so it can't be over.
+  const overCapacity = lines.some((l) => l.available !== null && Number(l.quantity) > l.available);
+  const canSubmit = (isEdit || Boolean(recipientId)) && lines.length > 0 && !overCapacity;
+
+  function handleError(err, fallback) {
+    const details = err?.data?.details;
+    if (details?.code === "SCHEME_STOCK_SHORTFALL") {
+      setShortfalls(details.shortfalls || []);
+      setError("Stock moved while you were editing:");
+    } else {
+      setError(getQueryErrorMessage(err, fallback));
+    }
+  }
 
   async function handleSubmit() {
     setError("");
     setShortfalls([]);
+    const items = lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) }));
     try {
-      await createScheme({
-        recipientType,
-        recipientId,
-        label: label.trim(),
-        items: lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) })),
-      }).unwrap();
+      if (isEdit) {
+        await updateScheme({ orderId: editOrder._id, label: label.trim(), items }).unwrap();
+      } else {
+        await createScheme({ recipientType, recipientId, label: label.trim(), items }).unwrap();
+      }
       onCreated?.();
       reset();
       onClose();
     } catch (err) {
-      const details = err?.data?.details;
-      if (details?.code === "SCHEME_STOCK_SHORTFALL") {
-        setShortfalls(details.shortfalls || []);
-        setError("Stock moved while you were editing:");
-      } else {
-        setError(getQueryErrorMessage(err, "Couldn't create the scheme order."));
-      }
+      handleError(err, isEdit ? "Couldn't save the changes." : "Couldn't create the scheme order.");
+    }
+  }
+
+  async function handleDelete() {
+    setError("");
+    setShortfalls([]);
+    try {
+      await deleteScheme({ orderId: editOrder._id, reason: "Withdrawn by admin" }).unwrap();
+      onCreated?.();
+      reset();
+      onClose();
+    } catch (err) {
+      setConfirmingDelete(false);
+      handleError(err, "Couldn't delete the scheme order.");
     }
   }
 
@@ -133,7 +187,12 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
 
   return createPortal(
     <div className="sch-overlay" onClick={(e) => e.target === e.currentTarget && handleClose()}>
-      <div className="sch-card" role="dialog" aria-modal="true" aria-label="Create scheme order">
+      <div
+        className="sch-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={isEdit ? "Edit scheme order" : "Create scheme order"}
+      >
         {/* Header and footer stay put; only the middle scrolls, so the
             card can never grow past the viewport however many products
             are added or however long the dropdown list is. */}
@@ -142,8 +201,12 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
             <DashboardIcon name="award" size={16} strokeWidth={2} />
           </span>
           <div className="sch-head-text">
-            <h3>Scheme order</h3>
-            <p>Free of cost · ships from factory</p>
+            <h3>{isEdit ? `Edit ${editOrder.orderNumber}` : "Scheme order"}</h3>
+            <p>
+              {isEdit
+                ? "Still in the factory queue · changes move reserved stock"
+                : "Free of cost · ships from factory"}
+            </p>
           </div>
           <button type="button" onClick={handleClose} aria-label="Close" className="sch-close">
             <DashboardIcon name="close" size={13} strokeWidth={2.4} />
@@ -171,6 +234,14 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
 
           <div className="sch-field">
             <label>Recipient</label>
+            {isEdit ? (
+              <div className="sch-locked">
+                <DashboardIcon name="user" size={14} strokeWidth={2} />
+                <span>{editOrder.dealerSnapshot?.companyName || "Recipient"}</span>
+                <em>Can't be changed — delete and raise a new scheme instead</em>
+              </div>
+            ) : (
+              <>
             <div className="sch-scopes">
               {SCOPES.map((s) => {
                 const count = scopeCounts[s.key] ?? 0;
@@ -206,6 +277,8 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
                 />
               </div>
             ) : null}
+            </>
+            )}
           </div>
 
           <div className="sch-field">
@@ -259,7 +332,13 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
                 {lines.map((line, index) => (
                   <li
                     key={line.productId}
-                    className={`sch-line ${Number(line.quantity) > line.available ? "is-over" : ""}`}
+                    // `available: null` is "server decides" (a line already on
+                    // the scheme). Without the explicit null guard this reads
+                    // as `n > 0` and paints every prefilled line as over
+                    // capacity the moment the edit modal opens.
+                    className={`sch-line ${
+                      line.available !== null && Number(line.quantity) > line.available ? "is-over" : ""
+                    }`}
                   >
                     <span className="sch-line-name">
                       {line.name}
@@ -325,28 +404,67 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
         </div>
 
         <footer className="sch-foot">
-          <span className="sch-total">
-            {lines.length ? (
-              <>
-                <b>{totalUnits}</b> units
-                {selectedRecipient ? ` · ${selectedRecipient.name}` : ""}
-              </>
+          {/* Delete confirms in place rather than opening a second dialog
+              over this one - one destructive action, one extra tap, no
+              stacked modals to dismiss. */}
+          {isEdit ? (
+            confirmingDelete ? (
+              <span className="sch-confirm">
+                <b>Delete this scheme?</b>
+                <button type="button" onClick={handleDelete} disabled={busy} className="sch-confirm-yes">
+                  {deleteState.isLoading ? <Spinner size={12} /> : null}
+                  Delete
+                </button>
+                <button type="button" onClick={() => setConfirmingDelete(false)} disabled={busy}>
+                  Keep
+                </button>
+              </span>
             ) : (
-              <span className="sch-muted">Nothing added yet</span>
-            )}
-          </span>
+              <button
+                type="button"
+                className="sch-btn is-danger"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={busy}
+              >
+                <DashboardIcon name="trash" size={13} strokeWidth={2.2} />
+                Delete
+              </button>
+            )
+          ) : (
+            <span className="sch-total">
+              {lines.length ? (
+                <>
+                  <b>{totalUnits}</b> units
+                  {selectedRecipient ? ` · ${selectedRecipient.name}` : ""}
+                </>
+              ) : (
+                <span className="sch-muted">Nothing added yet</span>
+              )}
+            </span>
+          )}
           <div className="sch-actions">
-            <button type="button" className="sch-btn" onClick={handleClose} disabled={createState.isLoading}>
+            {isEdit && !confirmingDelete ? (
+              <span className="sch-total sch-total-inline">
+                <b>{totalUnits}</b> units
+              </span>
+            ) : null}
+            <button type="button" className="sch-btn" onClick={handleClose} disabled={busy}>
               Cancel
             </button>
             <button
               type="button"
               className="sch-btn is-primary"
               onClick={handleSubmit}
-              disabled={!canSubmit || createState.isLoading}
+              disabled={!canSubmit || busy || confirmingDelete}
             >
-              {createState.isLoading ? <Spinner size={13} /> : null}
-              {createState.isLoading ? "Creating…" : "Create"}
+              {createState.isLoading || updateState.isLoading ? <Spinner size={13} /> : null}
+              {isEdit
+                ? updateState.isLoading
+                  ? "Saving…"
+                  : "Save changes"
+                : createState.isLoading
+                  ? "Creating…"
+                  : "Create"}
             </button>
           </div>
         </footer>
@@ -543,8 +661,44 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated }) {
         .sch-btn.is-primary{
           border-color:transparent; background:#0071e3; color:#fff;
         }
+        /* Quiet by default - deleting is available, not advertised. The
+           confirm step below is where it turns red. */
+        .sch-btn.is-danger{ color:#b42318; border-color:rgba(180,35,24,.22); }
         .sch-btn:disabled{ opacity:.45; cursor:not-allowed; }
         .sch-btn:not(:disabled):active{ transform:scale(0.97); }
+
+        .sch-total-inline{ flex:0 0 auto; margin-right:4px; }
+
+        .sch-confirm{
+          flex:1; min-width:0;
+          display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+          font-size:12.5px; color:var(--color-graphite,#707070);
+          animation:sch-in 180ms cubic-bezier(0.23,1,0.32,1) both;
+        }
+        .sch-confirm b{ color:#b42318; font-size:13px; font-weight:700; }
+        .sch-confirm button{
+          display:inline-flex; align-items:center; gap:6px;
+          height:30px; padding:0 13px; border-radius:999px; cursor:pointer;
+          font-size:12.5px; font-weight:650; font-family:inherit;
+          border:1px solid var(--color-silver-mist,#e8e8ed);
+          background:var(--color-snow,#fff); color:var(--color-ink,#1d1d1f);
+          transition:opacity 140ms ease-out, transform 110ms ease-out;
+        }
+        .sch-confirm .sch-confirm-yes{ border-color:transparent; background:#b42318; color:#fff; }
+        .sch-confirm button:disabled{ opacity:.45; cursor:not-allowed; }
+        .sch-confirm button:not(:disabled):active{ transform:scale(0.97); }
+
+        .sch-locked{
+          display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+          padding:11px 14px; border-radius:14px;
+          background:rgba(29,29,31,.035);
+          border:1px solid rgba(29,29,31,.07);
+          font-size:13.5px; font-weight:600; color:var(--color-ink,#1d1d1f);
+        }
+        .sch-locked em{
+          font-style:normal; font-size:11.5px; font-weight:500;
+          color:var(--color-graphite,#707070);
+        }
 
         @keyframes sch-fade{ from{ opacity:0; } to{ opacity:1; } }
         @keyframes sch-pop{ from{ opacity:0; transform:scale(0.97); } to{ opacity:1; transform:none; } }

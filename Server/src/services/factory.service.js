@@ -20,6 +20,7 @@ import {
   reserveStockForOrder,
 } from "./stock.service.js";
 import { creditDispatcherStock } from "./dispatcherStock.service.js";
+import { DISPATCHER_STOCK_MOVEMENT_TYPE } from "../models/DispatcherStockMovement.model.js";
 import Invoice from "../models/Invoice.model.js";
 import { issueInvoiceForOrder } from "./invoice.service.js";
 import { recordPurchaseMovement } from "./dealerInventory.service.js";
@@ -486,8 +487,12 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
       // dealerId) credit the dealer's own inventory ledger the moment
       // goods are physically handed over - this is the "Dealer receives
       // order from Meitu -> Inventory automatically increases" step.
+      const isScheme = updated.orderOrigin === ORDER_ORIGIN.SCHEME;
+      const schemeReason = `Scheme order received${
+        updated.scheme?.label ? `: ${updated.scheme.label}` : ""
+      }`;
+
       if (updated.dealerId) {
-        const isScheme = updated.orderOrigin === "SCHEME";
         await recordPurchaseMovement({
           dealerId: updated.dealerId,
           items: updated.items,
@@ -498,9 +503,22 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
           // Labels the dealer's stock history with where these units came
           // from, and keeps gifted stock out of PURCHASE-volume metrics.
           movementType: isScheme ? "SCHEME" : undefined,
-          reason: isScheme
-            ? `Scheme order received${updated.scheme?.label ? `: ${updated.scheme.label}` : ""}`
-            : undefined,
+          reason: isScheme ? schemeReason : undefined,
+        });
+      } else if (isScheme && updated.dispatcherCustomerId) {
+        // A scheme addressed to a dispatcher used to fall through both
+        // branches and record nothing at all: this one needs dealerId, and
+        // the creditDispatcherStock call in markOutForDelivery only fires
+        // for DISPATCHER_REPLENISHMENT. The goods left central stock with no
+        // trace on the receiving side. Ledger-only, same as the dealer rule.
+        await creditDispatcherStock({
+          dispatcherId: updated.dispatcherCustomerId,
+          items: updated.items,
+          orderId: updated._id,
+          actorUser: factoryUser,
+          movementType: DISPATCHER_STOCK_MOVEMENT_TYPE.SCHEME,
+          reason: schemeReason,
+          session,
         });
       }
 
