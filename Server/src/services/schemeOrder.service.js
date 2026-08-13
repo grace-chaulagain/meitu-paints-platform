@@ -115,7 +115,7 @@ async function buildSchemeItems(rawItems, { checkStock = true } = {}) {
 
   const ids = rawItems.map((item) => objectId(item.productId, "productId"));
   const products = await Product.find({ _id: { $in: ids } })
-    .select("sku name category pack stock code")
+    .select("sku name category pack uom stock code")
     .lean();
   const byId = new Map(products.map((product) => [String(product._id), product]));
 
@@ -147,14 +147,19 @@ async function buildSchemeItems(rawItems, { checkStock = true } = {}) {
       });
     }
 
+    // These are the OrderItem schema's real field names. This used to also
+    // write skuSnapshot/nameSnapshot/categorySnapshot/packSnapshot, which
+    // don't exist on the subschema - Mongoose dropped all four silently, so
+    // every scheme order was stored with no pack size at all and the edit
+    // form had nothing to show. Kept in step with how dispatcher.service.js
+    // builds its own order lines.
     items.push({
       productId: product._id,
       sku: product.sku,
-      skuSnapshot: product.sku,
       name: product.name,
-      nameSnapshot: product.name,
-      categorySnapshot: product.category || "",
-      packSnapshot: product.pack?.label || "",
+      category: product.category || "",
+      packLabel: product.pack?.label || "",
+      unit: product.uom?.base || product.pack?.unit || "PCS",
       quantity,
       unitPrice: 0,
       lineTotal: 0,

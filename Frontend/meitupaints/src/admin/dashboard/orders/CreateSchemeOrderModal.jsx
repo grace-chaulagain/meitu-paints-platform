@@ -45,8 +45,10 @@ function linesFromOrder(order) {
   if (!order) return [];
   return (order.items || []).map((item) => ({
     productId: String(item.productId?._id || item.productId || ""),
-    name: item.nameSnapshot || item.name || item.sku || "Product",
-    packLabel: item.packSnapshot || "",
+    name: item.name || item.sku || "Product",
+    // packSnapshot is the fallback only for schemes raised before the field
+    // name was corrected - those rows have neither, and simply show no size.
+    packLabel: item.packLabel || item.packSnapshot || "",
     available: null,
     quantity: Number(item.quantity || 1),
   }));
@@ -315,7 +317,16 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated, editO
                         onClick={() => addProduct(p)}
                         disabled={added || available === 0}
                       >
-                        <span className="sch-result-name">{p.name}</span>
+                        {/* Size leads the row. The catalog carries one
+                            product name across every pack size, so a search
+                            for "high glossy exterior" returns five rows that
+                            are otherwise character-for-character identical -
+                            without this the only way to tell 20L from 1L is
+                            to add one and see what lands. */}
+                        <span className="sch-result-name">
+                          {p.pack?.label ? <b className="sch-size">{p.pack.label}</b> : null}
+                          {p.name}
+                        </span>
                         <span className={`sch-chip ${available === 0 ? "is-out" : ""}`}>
                           {available === 0 ? "none" : available}
                         </span>
@@ -341,8 +352,8 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated, editO
                     }`}
                   >
                     <span className="sch-line-name">
+                      {line.packLabel ? <b className="sch-size">{line.packLabel}</b> : null}
                       {line.name}
-                      {line.packLabel ? <em>{line.packLabel}</em> : null}
                     </span>
                     <span className="sch-step">
                       <button
@@ -593,8 +604,19 @@ export default function CreateSchemeOrderModal({ open, onClose, onCreated, editO
           flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--color-ink,#1d1d1f);
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
-        .sch-line-name em{ font-style:normal; font-weight:500; color:var(--color-graphite,#707070); }
-        .sch-line-name em::before{ content:" · "; }
+        /* Pack size, set ahead of the name in both the search results and
+           the chosen lines. Fixed min-width and tabular figures so the sizes
+           form a column and the names all start on the same x - the point is
+           to scan down "20L / 10L / 4L / 1L", not to read each row. */
+        .sch-size{
+          display:inline-block; min-width:38px; margin-right:9px;
+          padding:2px 7px; border-radius:7px;
+          font-size:11px; font-weight:750; letter-spacing:.01em;
+          text-align:center; font-variant-numeric:tabular-nums;
+          background:rgba(29,29,31,.06); color:var(--color-graphite,#707070);
+          vertical-align:1px;
+        }
+        .sch-line .sch-size{ background:rgba(29,29,31,.08); }
 
         .sch-step{
           flex:0 0 auto; display:flex; align-items:center;
