@@ -1637,8 +1637,32 @@ export function DealerMobileStylesPages() {
       .dealer-m-sale-detail-total-value{ color:var(--color-azure,#0071e3); }
       .dealer-m-sale-detail-notes{ margin-top:12px; font-size:var(--t-footnote); color:var(--color-graphite,#707070); }
       .dealer-m-sale-detail-voided{ margin-top:14px; font-size:var(--t-footnote); font-weight:600; color:#b42318; }
-      .dealer-m-sale-detail-void{ margin-top:18px; display:flex; flex-direction:column; gap:8px; }
+      /* ---- Sale detail: void (spec §6-style danger zone, mobile-only) ----
+         Kept collapsed behind a trigger by default so opening a sale to
+         just glance at the receipt doesn't compete for attention with a
+         destructive action; expanding it commits to a Cancel/Confirm pair
+         instead of one tap-and-done button (V3 §5.2 confirm-before-destroy
+         convention used elsewhere in the dealer app). */
+      .dealer-m-sale-detail-manage{ margin-top:18px; }
+      .dealer-m-sale-detail-divider{ border-top:1px solid rgba(29,29,31,.06); margin-bottom:10px; }
+      .dealer-m-sale-void-trigger{
+        width:100%;
+        height:44px;
+        border-radius:12px;
+        border:none;
+        background:none;
+        color:#b42318;
+        font-size:var(--t-subhead);
+        font-weight:600;
+        cursor:pointer;
+        transition:transform 120ms ease-out, background-color 120ms ease-out;
+      }
+      .dealer-m-sale-void-trigger:active{ transform:scale(0.98); background:rgba(180,35,24,.06); }
+      .dealer-m-sale-detail-void{ display:flex; flex-direction:column; gap:8px; }
+      .dealer-m-sale-detail-void-actions{ display:flex; align-items:center; gap:14px; }
+      .dealer-m-sale-detail-void-actions .dealer-m-newsale-ghost{ flex-shrink:0; }
       .dealer-m-sale-void-btn{
+        flex:1;
         height:44px;
         border-radius:12px;
         border:1.5px solid rgba(180,35,24,.3);
@@ -1650,6 +1674,7 @@ export function DealerMobileStylesPages() {
         transition:transform 120ms ease-out;
       }
       .dealer-m-sale-void-btn:active{ transform:scale(0.98); }
+      .dealer-m-sale-void-btn:disabled, .dealer-m-sale-detail-void-actions .dealer-m-newsale-ghost:disabled{ opacity:.5; cursor:not-allowed; }
 
       /* ---- NewSaleMobileSheet ---- */
       .dealer-m-newsale-title{ font-size:var(--t-title3); font-weight:700; letter-spacing:-0.02em; color:var(--color-ink,#1d1d1f); }
