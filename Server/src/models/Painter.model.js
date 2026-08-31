@@ -55,7 +55,7 @@ const PainterSchema = new mongoose.Schema(
 
     trainingStatus: { type: String, enum: ["NOT_STARTED", "IN_PROGRESS", "COMPLETED", null], default: null },
 
-    registrationSource: { type: String, enum: ["ADMIN", "DEALER", null], default: null },
+    registrationSource: { type: String, enum: ["ADMIN", "DEALER", "DISPATCHER", null], default: null },
     registeredByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
 
     // Denormalized running totals, incremented atomically alongside every

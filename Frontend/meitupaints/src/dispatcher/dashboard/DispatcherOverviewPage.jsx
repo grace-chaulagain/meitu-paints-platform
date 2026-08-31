@@ -8,6 +8,8 @@ import {
 } from "../../redux/api/meituApi.js";
 import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
 import { DashboardUIStyles, MetricTile, SectionHeader, Surface } from "../../components/dashboard/DashboardUI.jsx";
+import { useIsMobileDispatcher } from "../mobile/useIsMobileDispatcher.js";
+import { DispatcherHomeMobileView } from "./mobile/DispatcherHomeMobileView.jsx";
 
 const RECENT_HANDLED_WINDOW_START_MS = Date.now() - 7 * 86400000;
 
@@ -69,6 +71,7 @@ function InfoRow({ icon, title, description }) {
 export default function DispatcherOverviewPage() {
   const { user } = useAuth();
   const notifications = useNotifications();
+  const isMobile = useIsMobileDispatcher();
   const pendingOrdersQuery = useGetDispatcherOrdersQuery({ status: "SUBMITTED", limit: 1 });
   const archiveOrdersQuery = useGetDispatcherOrdersArchiveQuery({ limit: 5 });
   const assignedDealersQuery = useGetDispatcherDealersQuery({ limit: 1 });
@@ -99,6 +102,12 @@ export default function DispatcherOverviewPage() {
     !hasCachedPulse && (pendingOrdersQuery.isLoading || archiveOrdersQuery.isLoading || assignedDealersQuery.isLoading);
   const refreshing =
     hasCachedPulse && (pendingOrdersQuery.isFetching || archiveOrdersQuery.isFetching || assignedDealersQuery.isFetching);
+
+  // DispatcherHomeMobileView is fully self-contained (fetches its own data,
+  // same as AdminHomeMobileView does relative to AdminDashboardPage.jsx's
+  // desktop DashboardOverview) rather than reusing this page's queries -
+  // the two surfaces intentionally don't share fetch/computation state.
+  if (isMobile) return <DispatcherHomeMobileView />;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>

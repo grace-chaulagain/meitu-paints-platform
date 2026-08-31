@@ -4,7 +4,7 @@ import { useGetCouponAttemptsQuery } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { DataTable, Pagination, Pill, Surface } from "../../../../components/dashboard/DashboardUI.jsx";
 import { AppleDropdown } from "../../../../components/dashboard/ApplePickers.jsx";
-import { formatDateTime, OUTCOME_OPTIONS, outcomeTone, PAGE_SIZE } from "../couponFormatting.js";
+import { formatDateTime, OUTCOME_OPTIONS, outcomeTone, PAGE_SIZE, redeemedByName } from "../couponFormatting.js";
 
 export default function AttemptsTab() {
   const [outcome, setOutcome] = useState("ALL");
@@ -38,7 +38,7 @@ export default function AttemptsTab() {
         render: (row) => <Pill tone={outcomeTone(row.outcome)} size="small">{row.outcome.replaceAll("_", " ")}</Pill>,
       },
       { key: "coupon", header: "Coupon", cellClassName: () => "dash-table-mono", render: (row) => row.couponId?.couponCode || "—" },
-      { key: "dealer", header: "Dealer", render: (row) => row.dealerId?.companyName || "—" },
+      { key: "dealer", header: "Redeemed By", render: (row) => (row.dealerId || row.dispatcherId ? redeemedByName(row) : "—") },
       {
         key: "user",
         header: "User",

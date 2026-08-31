@@ -60,6 +60,15 @@ const CouponSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // Parallel to redeemedByDealerId, not a replacement - exactly one of the
+    // two is set per redemption (dealer-redeemed vs dispatcher-redeemed),
+    // enforced in coupon.service.js:redeemCoupon, not at the schema level.
+    redeemedByDispatcherId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Dispatcher",
+      default: null,
+      index: true,
+    },
     redeemedByUserId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

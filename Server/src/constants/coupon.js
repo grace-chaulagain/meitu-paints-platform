@@ -21,6 +21,7 @@ export const COUPON_REDEMPTION_OUTCOME = Object.freeze({
   EXPIRED: "EXPIRED",
   ALREADY_REDEEMED: "ALREADY_REDEEMED",
   DEALER_NOT_APPROVED: "DEALER_NOT_APPROVED",
+  DISPATCHER_NOT_APPROVED: "DISPATCHER_NOT_APPROVED",
 });
 
 // Why a successful redemption's points/cash accrual to a Painter was

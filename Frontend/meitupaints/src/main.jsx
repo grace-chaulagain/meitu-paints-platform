@@ -151,6 +151,18 @@ function RequireDispatcher({ children }) {
   return children;
 }
 
+// For the handful of pages/flows genuinely shared by both roles (currently
+// just the QR/coupon redemption portal - see coupon.service.js's role-
+// conditional dealer/dispatcher logic on the backend for why this exists).
+function RequireDealerOrDispatcher({ children }) {
+  const { recoveringSession, user, sessionExpired } = useAuth();
+  if (recoveringSession) return null;
+  if (!user) return sessionExpired ? <SessionExpiredPrompt /> : <LoginRedirect />;
+  const role = String(user.role || "").toUpperCase();
+  if (role !== "DEALER" && role !== "DISPATCHER") return <NotFoundPage />;
+  return children;
+}
+
 function RequireFactory({ children }) {
   const { recoveringSession, user, sessionExpired } = useAuth();
   if (recoveringSession) return null;
@@ -432,15 +444,18 @@ const router = createBrowserRouter([
       {
         // Deliberately NOT wrapped in DealerDashboardPage's sidebar shell -
         // this is the QR-scan landing page, a focused single-task
-        // confirmation screen (dealer at the counter, painter waiting),
-        // not a page for browsing the dashboard. RequireDealer alone
-        // already handles "not logged in -> /login?returnTo=/redeem/:token
-        // -> back here after login" for free.
+        // confirmation screen (dealer or dispatcher at the counter, painter
+        // waiting), not a page for browsing the dashboard.
+        // RequireDealerOrDispatcher alone already handles "not logged in ->
+        // /login?returnTo=/redeem/:token -> back here after login" for free.
+        // Shared by both roles since the same physical printed QR can be
+        // scanned by either - see coupon.service.js's dealer/dispatcher
+        // branching on the backend.
         path: "/redeem/:token",
         element: (
-          <RequireDealer>
+          <RequireDealerOrDispatcher>
             <CouponRedeemPage />
-          </RequireDealer>
+          </RequireDealerOrDispatcher>
         ),
       },
 

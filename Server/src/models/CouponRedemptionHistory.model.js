@@ -14,7 +14,12 @@ const CouponRedemptionHistorySchema = new mongoose.Schema(
     points: { type: Number, required: true },
     cashAmount: { type: Number, required: true },
 
-    dealerId: { type: mongoose.Schema.Types.ObjectId, ref: "DealerProfile", required: true, index: true },
+    // Exactly one of dealerId/dispatcherId is set per row (dealer-redeemed vs
+    // dispatcher-redeemed) - enforced in coupon.service.js:redeemCoupon, not
+    // at the schema level. Neither is `required` so a dispatcher redemption
+    // can leave dealerId null (and vice versa).
+    dealerId: { type: mongoose.Schema.Types.ObjectId, ref: "DealerProfile", default: null, index: true },
+    dispatcherId: { type: mongoose.Schema.Types.ObjectId, ref: "Dispatcher", default: null, index: true },
     redeemedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     redeemedAt: { type: Date, required: true, default: Date.now },
     ipAddress: { type: String, default: "" },
@@ -40,6 +45,7 @@ const CouponRedemptionHistorySchema = new mongoose.Schema(
 );
 
 CouponRedemptionHistorySchema.index({ dealerId: 1, redeemedAt: -1 });
+CouponRedemptionHistorySchema.index({ dispatcherId: 1, redeemedAt: -1 });
 CouponRedemptionHistorySchema.index({ type: 1, redeemedAt: -1 });
 
 export default mongoose.model("CouponRedemptionHistory", CouponRedemptionHistorySchema);

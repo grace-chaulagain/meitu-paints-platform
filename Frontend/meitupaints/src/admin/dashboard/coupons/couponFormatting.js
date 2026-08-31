@@ -16,7 +16,7 @@ export const COUPON_TABS = [
   { key: "coupons", label: "Batches", subtitle: "Generated sets", icon: "invoice" },
   { key: "history", label: "Redeemed", subtitle: "Coupon history", icon: "history" },
   { key: "attempts", label: "Security", subtitle: "Scan audit", icon: "shield" },
-  { key: "settlement", label: "Payouts", subtitle: "Dealer payouts", icon: "chart" },
+  { key: "settlement", label: "Payouts", subtitle: "Dealer & dispatcher payouts", icon: "chart" },
 ];
 
 export const PRICING_MODE_OPTIONS = [
@@ -33,6 +33,7 @@ export const OUTCOME_OPTIONS = [
   { key: "EXPIRED", label: "Expired" },
   { key: "ALREADY_REDEEMED", label: "Already redeemed" },
   { key: "DEALER_NOT_APPROVED", label: "Dealer not approved" },
+  { key: "DISPATCHER_NOT_APPROVED", label: "Dispatcher not approved" },
 ];
 
 export const COUPON_DATE_PRESETS = [
@@ -182,8 +183,24 @@ export function redeemedPainterName(row) {
   return "—";
 }
 
-export function redeemedDealerName(row) {
-  return row?.dealerId?.companyName || row?.dealerId?.contactName || "Unknown dealer";
+// Generalized from the old dealer-only redeemedDealerName once DISPATCHER
+// gained redemption parity - a row now has exactly one of dealerId/
+// dispatcherId populated (see coupon.service.js:redeemCoupon). Used for
+// CouponRedemptionHistory/CouponRedemptionAttemptLog rows, where dealerId/
+// dispatcherId are Mongoose-populated ref objects.
+export function redeemedByName(row) {
+  if (row?.dealerId) return row.dealerId.companyName || row.dealerId.contactName || "Unknown dealer";
+  if (row?.dispatcherId) return row.dispatcherId.companyName || row.dispatcherId.name || "Unknown dispatcher";
+  return "Unknown";
+}
+
+// Settlement report rows have a different shape than the two above
+// (coupon.service.js:getSettlementReport) - dealerId/dispatcherId there are
+// raw ids from the aggregation's _id, with the looked-up profile documents
+// separately on `dealer`/`dispatcher`.
+export function settlementActorName(row) {
+  if (row?.actorType === "DISPATCHER") return row.dispatcher?.companyName || row.dispatcher?.name || "Unknown dispatcher";
+  return row?.dealer?.companyName || row?.dealer?.contactName || "Unknown dealer";
 }
 
 // Human label for a redemption that withheld painter points - covers every

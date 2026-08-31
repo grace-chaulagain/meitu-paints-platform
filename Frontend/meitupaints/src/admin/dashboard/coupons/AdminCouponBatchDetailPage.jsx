@@ -147,7 +147,15 @@ export default function AdminCouponBatchDetailPage() {
       header: "Expires",
       render: (coupon) => <span style={{ whiteSpace: "nowrap", color: "var(--color-graphite, #707070)" }}>{formatDateTime(coupon.expiresAt)}</span>,
     },
-    { key: "dealer", header: "Dealer", render: (coupon) => coupon.redeemedByDealerId?.companyName || "—" },
+    {
+      key: "dealer",
+      header: "Redeemed By",
+      render: (coupon) =>
+        coupon.redeemedByDealerId?.companyName ||
+        coupon.redeemedByDispatcherId?.companyName ||
+        coupon.redeemedByDispatcherId?.name ||
+        "—",
+    },
     { key: "painter", header: "Painter", render: (coupon) => coupon.painterId?.name || "—" },
     {
       key: "actions",

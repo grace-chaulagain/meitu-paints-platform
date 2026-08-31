@@ -90,7 +90,10 @@ export function AdminCouponBatchDetailMobileView({ summary, items, loading, load
                       <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-azure, #0071e3)" }}>{formatMoney(coupon.cashAmount)}</span>
                     </div>
                     <div style={{ marginTop: 4, fontSize: 12, color: "var(--color-graphite, #707070)" }}>
-                      {coupon.redeemedByDealerId?.companyName || "Unknown dealer"} · {coupon.painterId?.name || "Unknown painter"}
+                      {coupon.redeemedByDealerId?.companyName ||
+                        coupon.redeemedByDispatcherId?.companyName ||
+                        coupon.redeemedByDispatcherId?.name ||
+                        "Unknown"} · {coupon.painterId?.name || "Unknown painter"}
                     </div>
                   </div>
                 ))}
