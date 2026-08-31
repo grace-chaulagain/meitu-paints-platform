@@ -13,7 +13,7 @@ import {
   groupRedemptionsByDay,
   HISTORY_TYPE_OPTIONS,
   PAGE_SIZE,
-  redeemedDealerName,
+  redeemedByName,
   redeemedPainterName,
   resolveCouponDateRange,
   skipReasonPillLabel,
@@ -105,8 +105,8 @@ export default function HistoryTab() {
       },
       {
         key: "dealer",
-        header: "Dealer",
-        render: (row) => <span style={{ color: "var(--color-graphite,#707070)" }}>{redeemedDealerName(row)}</span>,
+        header: "Redeemed By",
+        render: (row) => <span style={{ color: "var(--color-graphite,#707070)" }}>{redeemedByName(row)}</span>,
       },
       {
         key: "painter",

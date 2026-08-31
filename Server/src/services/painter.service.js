@@ -477,9 +477,13 @@ export async function searchPaintersForDealer({ type, licenseId, citizenshipNumb
   throw new ApiError(400, "type must be TTP or RTP");
 }
 
-// Dealer-facing: register a brand-new RTP painter inline during
-// redemption. Immediately active/earning-eligible (no admin approval gate)
-// - see the Phase 2 plan doc for the accepted fraud-risk tradeoff.
+// Dealer- or dispatcher-facing: register a brand-new RTP painter inline
+// during redemption. Immediately active/earning-eligible (no admin approval
+// gate) - see the Phase 2 plan doc for the accepted fraud-risk tradeoff.
+// Despite the function name (kept for historical continuity - this was
+// dealer-only when written), registrationSource is derived from the actual
+// caller's role rather than hardcoded, since dispatchers now hit this same
+// path too.
 export async function registerPainterAsDealer({ name, citizenshipNumber, phones, address = "", actorUser } = {}) {
   const existing = await Painter.findOne({ citizenshipNumber: String(citizenshipNumber || "").trim() }).lean();
   if (existing) {
@@ -500,7 +504,7 @@ export async function registerPainterAsDealer({ name, citizenshipNumber, phones,
     address,
     type: "RTP",
     status: "ACTIVE",
-    registrationSource: "DEALER",
+    registrationSource: String(actorUser?.role || "").toUpperCase() === "DISPATCHER" ? "DISPATCHER" : "DEALER",
     registeredByUserId: actorId(actorUser),
   });
   return { item: painterSearchShape(painter.toObject()) };

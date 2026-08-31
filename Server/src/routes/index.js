@@ -9,6 +9,7 @@ import productFamilyRoutes from "./productFamily.routes.js";
 import adminCatalogRoutes from "./admin.catalog.routes.js";
 import announcementRoutes from "./announcement.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
+import redemptionRoutes from "./redemption.routes.js";
 import orderRoutes from "./order.routes.js";
 import notificationRoutes from "./notification.routes.js";
 import pushRoutes from "./push.routes.js";
@@ -70,6 +71,13 @@ router.get(
   checkDealerEmailAvailabilityController,
 );
 router.use("/dealer", auth, requireRole("DEALER"), dealerRoutes);
+
+// QR/coupon redemption + the painter search/register it needs - shared by
+// DEALER and DISPATCHER (some dispatchers act as dealer-style counters), so
+// it's its own mount rather than nested under the DEALER-only /dealer block
+// above, which would block dispatchers before requireRole even runs the
+// inner routes.
+router.use("/redemptions", auth, requireRole("DEALER", "DISPATCHER"), redemptionRoutes);
 
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);

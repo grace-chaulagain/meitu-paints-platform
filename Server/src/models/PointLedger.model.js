@@ -20,7 +20,11 @@ const PointLedgerSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    dealerId: { type: mongoose.Schema.Types.ObjectId, ref: "DealerProfile", required: true, index: true },
+    // Exactly one of dealerId/dispatcherId is set per row (who redeemed this
+    // on the painter's behalf) - enforced in coupon.service.js:redeemCoupon,
+    // not at the schema level.
+    dealerId: { type: mongoose.Schema.Types.ObjectId, ref: "DealerProfile", default: null, index: true },
+    dispatcherId: { type: mongoose.Schema.Types.ObjectId, ref: "Dispatcher", default: null, index: true },
 
     points: { type: Number, required: true },
     cashAmount: { type: Number, required: true },

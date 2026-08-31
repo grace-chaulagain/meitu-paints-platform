@@ -7,6 +7,7 @@ import CouponRedemptionAttemptLog from "../models/CouponRedemptionAttemptLog.mod
 import CouponRewardSettings from "../models/CouponRewardSettings.model.js";
 import Counter from "../models/Counter.model.js";
 import DealerProfile from "../models/DealerProfile.model.js";
+import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Painter from "../models/Painter.model.js";
 import PointLedger from "../models/PointLedger.model.js";
 import PointsCatalogProduct from "../models/PointsCatalogProduct.model.js";
@@ -66,9 +67,9 @@ async function reserveCouponCodeBlock(type, quantity) {
   return Array.from({ length: quantity }, (_, i) => `${prefix}-${String(startSeq + i).padStart(6, "0")}`);
 }
 
-async function logAttempt({ tokenHash = null, couponId = null, outcome, dealerId = null, userId = null, ipAddress = "" }) {
+async function logAttempt({ tokenHash = null, couponId = null, outcome, dealerId = null, dispatcherId = null, userId = null, ipAddress = "" }) {
   try {
-    await CouponRedemptionAttemptLog.create({ tokenHash, couponId, outcome, dealerId, userId, ipAddress });
+    await CouponRedemptionAttemptLog.create({ tokenHash, couponId, outcome, dealerId, dispatcherId, userId, ipAddress });
   } catch (_) {
     // Attempt logging is best-effort auditing - never let a logging failure
     // block or mask the real verify/redeem outcome.
@@ -81,6 +82,27 @@ async function assertDealerApproved(dealerId) {
   if (!dealer || dealer.status === DEALER_STATUS.SUSPENDED) {
     throw new ApiError(403, "Only approved dealers can redeem coupons", {
       code: "DEALER_NOT_APPROVED",
+    });
+  }
+}
+
+// Mirrors assertDealerApproved above, but for the DISPATCHER path - checks
+// the same {status: VERIFIED, isActive: true} condition
+// dispatcher.service.js:getVerifiedActiveDispatcher already gates every
+// other dispatcher self-service action on, so "approved to redeem coupons"
+// means the same thing here as it does everywhere else a dispatcher acts.
+// Deliberately NOT .lean() (unlike assertDealerApproved's single-enum
+// check above) - isActive defaults to true in the schema, and a hydrated
+// Mongoose document applies that default for any dispatcher whose stored
+// document predates the field, exactly like getVerifiedActiveDispatcher
+// itself relies on. A .lean() read here would incorrectly reject such a
+// dispatcher for coupons alone while every other gated action let them in.
+async function assertDispatcherApproved(dispatcherId) {
+  if (!dispatcherId) throw new ApiError(401, "Authentication required");
+  const dispatcher = await Dispatcher.findById(dispatcherId).select("status isActive");
+  if (!dispatcher || dispatcher.status !== DISPATCHER_STATUS.VERIFIED || !dispatcher.isActive) {
+    throw new ApiError(403, "Only approved dispatchers can redeem coupons", {
+      code: "DISPATCHER_NOT_APPROVED",
     });
   }
 }
@@ -283,20 +305,22 @@ export async function generateCoupons({
   };
 }
 
-// Dealer: read-only preview of a scanned coupon. Never mutates state.
-export async function getCouponPreview({ rawToken, dealerId, userId, ipAddress } = {}) {
+// Dealer or dispatcher: read-only preview of a scanned coupon. Never
+// mutates state. Exactly one of dealerId/dispatcherId is expected to be set
+// (see coupon.controller.js).
+export async function getCouponPreview({ rawToken, dealerId, dispatcherId, userId, ipAddress } = {}) {
   const tokenHash = hashToken(rawToken);
-  await assertDealerApprovedLogged({ dealerId, userId, ipAddress, tokenHash });
+  await assertActorApprovedLogged({ dealerId, dispatcherId, userId, ipAddress, tokenHash });
 
   const coupon = await Coupon.findOne({ tokenHash });
 
   if (!coupon) {
-    await logAttempt({ tokenHash, outcome: COUPON_REDEMPTION_OUTCOME.INVALID, dealerId, userId, ipAddress });
+    await logAttempt({ tokenHash, outcome: COUPON_REDEMPTION_OUTCOME.INVALID, dealerId, dispatcherId, userId, ipAddress });
     throw new ApiError(404, "This QR code is invalid or was not issued by Meitu.", { code: "COUPON_INVALID" });
   }
 
   if (coupon.status === COUPON_STATUS.REDEEMED) {
-    await logAttempt({ tokenHash, couponId: coupon._id, outcome: COUPON_REDEMPTION_OUTCOME.ALREADY_REDEEMED, dealerId, userId, ipAddress });
+    await logAttempt({ tokenHash, couponId: coupon._id, outcome: COUPON_REDEMPTION_OUTCOME.ALREADY_REDEEMED, dealerId, dispatcherId, userId, ipAddress });
     throw new ApiError(409, "This QR code has already been used to redeem the points inside.", {
       code: "COUPON_ALREADY_REDEEMED",
     });
@@ -309,20 +333,43 @@ export async function getCouponPreview({ rawToken, dealerId, userId, ipAddress }
   return couponPreviewShape(coupon);
 }
 
-async function assertDealerApprovedLogged({ dealerId, userId, ipAddress, tokenHash }) {
+// Branches to the dealer or dispatcher approval check based on which id is
+// present (exactly one is, per the controller - see coupon.controller.js).
+// Neither present means the caller isn't actually a dealer or dispatcher,
+// which the route-level requireRole("DEALER", "DISPATCHER") guard should
+// already have prevented - this 401 only fires if that guard is ever
+// bypassed or misconfigured.
+async function assertActorApprovedLogged({ dealerId, dispatcherId, userId, ipAddress, tokenHash }) {
   try {
-    await assertDealerApproved(dealerId);
+    if (dealerId) {
+      await assertDealerApproved(dealerId);
+    } else if (dispatcherId) {
+      await assertDispatcherApproved(dispatcherId);
+    } else {
+      throw new ApiError(401, "Authentication required");
+    }
   } catch (error) {
-    await logAttempt({ tokenHash, outcome: COUPON_REDEMPTION_OUTCOME.DEALER_NOT_APPROVED, dealerId, userId, ipAddress });
+    await logAttempt({
+      tokenHash,
+      outcome: dispatcherId ? COUPON_REDEMPTION_OUTCOME.DISPATCHER_NOT_APPROVED : COUPON_REDEMPTION_OUTCOME.DEALER_NOT_APPROVED,
+      dealerId,
+      dispatcherId,
+      userId,
+      ipAddress,
+    });
     throw error;
   }
 }
 
-// Dealer: the one write path. Painter resolution happens read-only before
-// any transaction opens (its errors - not found, ineligible, type
-// mismatch - should surface immediately, not roll back a coupon). The
-// transaction itself covers exactly what must move together atomically:
-// the coupon status flip (still guarded by the same
+// Dealer or dispatcher: the one write path. Exactly one of dealerId/
+// dispatcherId is expected to be set (see coupon.controller.js) - both are
+// carried through untouched so the transaction below can stamp whichever
+// one applies onto Coupon/CouponRedemptionHistory/PointLedger, while the
+// other stays null. Painter resolution happens read-only before any
+// transaction opens (its errors - not found, ineligible, type mismatch -
+// should surface immediately, not roll back a coupon). The transaction
+// itself covers exactly what must move together atomically: the coupon
+// status flip (still guarded by the same
 // {status: UNUSED, expiresAt: {$gt: now}} filter dealerInventory.service.js's
 // oversell guard also uses), the history write, and - unless this is a
 // cash-only unregistered-RTP redemption - the points ledger write plus the
@@ -330,9 +377,9 @@ async function assertDealerApprovedLogged({ dealerId, userId, ipAddress, tokenHa
 // separate, independently-valid call (painter.service.js:registerPainterAsDealer)
 // made by the frontend wizard before this function is ever called - see
 // the Phase 2 plan doc for why that's deliberately not folded in here.
-export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, painterType, painterId = null } = {}) {
+export async function redeemCoupon({ rawToken, dealerId, dispatcherId, userId, ipAddress, painterType, painterId = null } = {}) {
   const tokenHash = hashToken(rawToken);
-  await assertDealerApprovedLogged({ dealerId, userId, ipAddress, tokenHash });
+  await assertActorApprovedLogged({ dealerId, dispatcherId, userId, ipAddress, tokenHash });
 
   const now = new Date();
 
@@ -346,7 +393,7 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
   const precheck = await Coupon.findOne({ tokenHash });
   if (!precheck || precheck.status !== COUPON_STATUS.UNUSED) {
     const { outcome, error } = classifyCouponFailure(precheck);
-    await logAttempt({ tokenHash, couponId: precheck?._id, outcome, dealerId, userId, ipAddress });
+    await logAttempt({ tokenHash, couponId: precheck?._id, outcome, dealerId, dispatcherId, userId, ipAddress });
     throw error;
   }
 
@@ -377,7 +424,8 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
           $set: {
             status: COUPON_STATUS.REDEEMED,
             redeemedAt: now,
-            redeemedByDealerId: dealerId,
+            redeemedByDealerId: dealerId || null,
+            redeemedByDispatcherId: dispatcherId || null,
             redeemedByUserId: userId,
             painterId: resolved.painterId,
             painterType: resolved.painterType,
@@ -403,7 +451,8 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
             type: updated.type,
             points: updated.points,
             cashAmount: updated.cashAmount,
-            dealerId,
+            dealerId: dealerId || null,
+            dispatcherId: dispatcherId || null,
             redeemedByUserId: userId,
             redeemedAt: updated.redeemedAt,
             ipAddress,
@@ -423,7 +472,8 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
               painterId: resolved.painterId,
               couponId: updated._id,
               redemptionId: historyDoc._id,
-              dealerId,
+              dealerId: dealerId || null,
+              dispatcherId: dispatcherId || null,
               points: updated.points,
               cashAmount: updated.cashAmount,
               transactionType: "EARNED",
@@ -464,6 +514,7 @@ export async function redeemCoupon({ rawToken, dealerId, userId, ipAddress, pain
     couponId: redeemedCouponId,
     outcome: COUPON_REDEMPTION_OUTCOME.SUCCESS,
     dealerId,
+    dispatcherId,
     userId,
     ipAddress,
   });
@@ -497,6 +548,7 @@ export async function listCoupons({ status = "ALL", type = "ALL", batchId = "", 
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "redeemedByDealerId", select: "companyName contactName" })
+      .populate({ path: "redeemedByDispatcherId", select: "companyName name" })
       .populate({ path: "painterId", select: "name" })
       .lean(),
     Coupon.countDocuments(filter),
@@ -591,13 +643,14 @@ export async function listCouponBatches({ type = "ALL", q = "", page = 1, limit 
 }
 
 // Admin: redemption history report.
-export async function listRedemptionHistory({ type = "ALL", dealerId = "", q = "", from = "", to = "", page = 1, limit = 50 } = {}) {
+export async function listRedemptionHistory({ type = "ALL", dealerId = "", dispatcherId = "", q = "", from = "", to = "", page = 1, limit = 50 } = {}) {
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(200, Math.max(1, Number(limit || 50)));
 
   const filter = {};
   if (type && type !== "ALL") filter.type = type;
   if (dealerId) filter.dealerId = new mongoose.Types.ObjectId(String(dealerId));
+  if (dispatcherId) filter.dispatcherId = new mongoose.Types.ObjectId(String(dispatcherId));
   if (q) filter.couponCode = { $regex: String(q).trim(), $options: "i" };
   if (from || to) {
     filter.redeemedAt = {};
@@ -611,6 +664,7 @@ export async function listRedemptionHistory({ type = "ALL", dealerId = "", q = "
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "dealerId", select: "companyName contactName" })
+      .populate({ path: "dispatcherId", select: "companyName name" })
       .populate({ path: "redeemedByUserId", select: "username email" })
       .populate({ path: "painterId", select: "name type phones licenseId" })
       .lean(),
@@ -686,13 +740,14 @@ export async function deleteCouponBatches({ batchIds = [] } = {}) {
 
 // Admin: fraud-auditing feed over CouponRedemptionAttemptLog (every
 // verify/redeem attempt, success or failure).
-export async function listAttemptLog({ outcome = "", dealerId = "", page = 1, limit = 50 } = {}) {
+export async function listAttemptLog({ outcome = "", dealerId = "", dispatcherId = "", page = 1, limit = 50 } = {}) {
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(200, Math.max(1, Number(limit || 50)));
 
   const filter = {};
   if (outcome && outcome !== "ALL") filter.outcome = outcome;
   if (dealerId) filter.dealerId = dealerId;
+  if (dispatcherId) filter.dispatcherId = dispatcherId;
 
   const [items, total] = await Promise.all([
     CouponRedemptionAttemptLog.find(filter)
@@ -700,6 +755,7 @@ export async function listAttemptLog({ outcome = "", dealerId = "", page = 1, li
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .populate({ path: "dealerId", select: "companyName contactName" })
+      .populate({ path: "dispatcherId", select: "companyName name" })
       .populate({ path: "userId", select: "username email" })
       .populate({ path: "couponId", select: "couponCode type" })
       .lean(),
@@ -717,10 +773,13 @@ export async function listAttemptLog({ outcome = "", dealerId = "", page = 1, li
   };
 }
 
-// Admin: how much cash each dealer has paid out - the raw material for a
-// reimbursement/settlement report. Cash-only unregistered-RTP redemptions
-// count the same as any other, since cash was genuinely paid out
-// regardless of whether a painter profile is linked.
+// Admin: how much cash each dealer or dispatcher has paid out - the raw
+// material for a reimbursement/settlement report. Cash-only
+// unregistered-RTP redemptions count the same as any other, since cash was
+// genuinely paid out regardless of whether a painter profile is linked.
+// Grouping by the {dealerId, dispatcherId} pair (rather than just dealerId)
+// naturally separates dealer rows (dispatcherId always null on those) from
+// dispatcher rows (dealerId always null on those) into distinct groups.
 export async function getSettlementReport({ from = "", to = "" } = {}) {
   const match = {};
   if (from || to) {
@@ -733,7 +792,7 @@ export async function getSettlementReport({ from = "", to = "" } = {}) {
     { $match: match },
     {
       $group: {
-        _id: "$dealerId",
+        _id: { dealerId: "$dealerId", dispatcherId: "$dispatcherId" },
         totalCashPaid: { $sum: "$cashAmount" },
         totalPoints: { $sum: "$points" },
         redemptionCount: { $sum: 1 },
@@ -742,19 +801,33 @@ export async function getSettlementReport({ from = "", to = "" } = {}) {
     { $sort: { totalCashPaid: -1 } },
   ]);
 
-  const dealerIds = rows.map((row) => row._id).filter(Boolean);
-  const dealers = dealerIds.length
-    ? await DealerProfile.find({ _id: { $in: dealerIds } }).select("companyName contactName").lean()
-    : [];
+  const dealerIds = rows.map((row) => row._id.dealerId).filter(Boolean);
+  const dispatcherIds = rows.map((row) => row._id.dispatcherId).filter(Boolean);
+
+  const [dealers, dispatchers] = await Promise.all([
+    dealerIds.length
+      ? DealerProfile.find({ _id: { $in: dealerIds } }).select("companyName contactName").lean()
+      : [],
+    dispatcherIds.length
+      ? Dispatcher.find({ _id: { $in: dispatcherIds } }).select("companyName name").lean()
+      : [],
+  ]);
   const dealerById = new Map(dealers.map((dealer) => [String(dealer._id), dealer]));
+  const dispatcherById = new Map(dispatchers.map((dispatcher) => [String(dispatcher._id), dispatcher]));
 
   return {
-    items: rows.map((row) => ({
-      dealerId: row._id,
-      dealer: dealerById.get(String(row._id)) || null,
-      totalCashPaid: row.totalCashPaid || 0,
-      totalPoints: row.totalPoints || 0,
-      redemptionCount: row.redemptionCount || 0,
-    })),
+    items: rows.map((row) => {
+      const isDispatcher = Boolean(row._id.dispatcherId);
+      return {
+        dealerId: row._id.dealerId || null,
+        dispatcherId: row._id.dispatcherId || null,
+        actorType: isDispatcher ? "DISPATCHER" : "DEALER",
+        dealer: !isDispatcher ? dealerById.get(String(row._id.dealerId)) || null : null,
+        dispatcher: isDispatcher ? dispatcherById.get(String(row._id.dispatcherId)) || null : null,
+        totalCashPaid: row.totalCashPaid || 0,
+        totalPoints: row.totalPoints || 0,
+        redemptionCount: row.redemptionCount || 0,
+      };
+    }),
   };
 }

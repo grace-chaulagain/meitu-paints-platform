@@ -1,5 +1,10 @@
 import { Router } from "express";
 
+// QR/coupon redemption + painter search/register used to live here, but
+// moved to redemption.routes.js (mounted at /api/redemptions) once
+// DISPATCHER also needed them - this router stays blanket-gated to DEALER
+// only (see routes/index.js), which would have blocked dispatchers from
+// ever reaching those endpoints if they'd stayed nested under it.
 import {
   getMyProfileController,
   updateMyProfileController,
@@ -20,27 +25,16 @@ import {
   voidMySaleController,
 } from "../controllers/dealer.controller.js";
 import {
-  getCouponPreviewController,
-  redeemCouponController,
-} from "../controllers/coupon.controller.js";
-import {
-  searchPaintersForDealerController,
-  registerRtpPainterController,
-} from "../controllers/painter.controller.js";
-import {
   validateBody,
   validateParams,
   validateQuery,
 } from "../middlewares/validate.middleware.js";
-import { couponRedemptionRateLimit } from "../middlewares/rateLimit.middleware.js";
 import {
   orderIdParamsSchema,
   paginationQuerySchema,
   productIdParamsSchema,
   saleIdParamsSchema,
 } from "../validations/common.validation.js";
-import { couponTokenParamsSchema, redeemCouponBodySchema } from "../validations/coupon.validation.js";
-import { painterSearchQuerySchema, registerRtpPainterBodySchema } from "../validations/painter.validation.js";
 import {
   createOrderBodySchema,
   dealerPaymentBodySchema,
@@ -123,31 +117,6 @@ router.post(
   validateParams(saleIdParamsSchema),
   validateBody(voidSaleBodySchema),
   voidMySaleController,
-);
-
-router.get(
-  "/coupons/:token",
-  couponRedemptionRateLimit,
-  validateParams(couponTokenParamsSchema),
-  getCouponPreviewController,
-);
-router.post(
-  "/coupons/:token/redeem",
-  couponRedemptionRateLimit,
-  validateParams(couponTokenParamsSchema),
-  validateBody(redeemCouponBodySchema),
-  redeemCouponController,
-);
-
-router.get(
-  "/painters/search",
-  validateQuery(painterSearchQuerySchema),
-  searchPaintersForDealerController,
-);
-router.post(
-  "/painters",
-  validateBody(registerRtpPainterBodySchema),
-  registerRtpPainterController,
 );
 
 export default router;

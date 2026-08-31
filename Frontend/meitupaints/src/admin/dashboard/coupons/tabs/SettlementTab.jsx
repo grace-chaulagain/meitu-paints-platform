@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useGetSettlementReportQuery } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { DataTable } from "../../../../components/dashboard/DashboardUI.jsx";
-import { formatMoney } from "../couponFormatting.js";
+import { formatMoney, settlementActorName } from "../couponFormatting.js";
 
 export default function SettlementTab() {
   const settlementQuery = useGetSettlementReportQuery({});
@@ -25,7 +25,7 @@ export default function SettlementTab() {
 
   const columns = useMemo(
     () => [
-      { key: "dealer", header: "Dealer", render: (row) => <span style={{ fontWeight: 700 }}>{row.dealer?.companyName || "Unknown dealer"}</span> },
+      { key: "dealer", header: "Redeemed By", render: (row) => <span style={{ fontWeight: 700 }}>{settlementActorName(row)}</span> },
       { key: "redemptions", header: "Redemptions", align: "right", cellClassName: () => "dash-table-tabular", render: (row) => row.redemptionCount },
       { key: "points", header: "Points Paid Out", align: "right", cellClassName: () => "dash-table-tabular", render: (row) => row.totalPoints.toLocaleString() },
       {
@@ -56,10 +56,10 @@ export default function SettlementTab() {
         <DataTable
           columns={columns}
           rows={items}
-          getRowKey={(row) => row.dealerId}
+          getRowKey={(row) => row.dealerId || row.dispatcherId}
           loading={settlementQuery.isLoading && !settlementQuery.data}
           footerCells={footerCells}
-          emptyState={{ icon: "invoice", title: "No cash payouts yet", subtitle: "Dealer cash payout totals will show up here once coupons are redeemed." }}
+          emptyState={{ icon: "invoice", title: "No cash payouts yet", subtitle: "Dealer and dispatcher cash payout totals will show up here once coupons are redeemed." }}
           minWidth={640}
         />
       )}

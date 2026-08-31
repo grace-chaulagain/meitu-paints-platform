@@ -593,14 +593,15 @@ export const meituApi = createApi({
     }),
 
     getCouponPreview: builder.query({
-      query: (token) => ({ url: `/api/dealer/coupons/${token}` }),
+      // Shared by DEALER and DISPATCHER now - see Server/src/routes/redemption.routes.js.
+      query: (token) => ({ url: `/api/redemptions/coupons/${token}` }),
       transformResponse: getItem,
       providesTags: (_response, _error, token) => [{ type: "Coupon", id: token }],
     }),
 
     redeemCoupon: builder.mutation({
       query: ({ token, painterType, painterId }) => ({
-        url: `/api/dealer/coupons/${token}/redeem`,
+        url: `/api/redemptions/coupons/${token}/redeem`,
         method: "POST",
         data: { painterType, painterId: painterId || null },
       }),
@@ -1681,12 +1682,13 @@ export const meituApi = createApi({
     }),
 
     searchPainters: builder.query({
-      query: (params) => ({ url: "/api/dealer/painters/search", params }),
+      // Shared by DEALER and DISPATCHER now - see Server/src/routes/redemption.routes.js.
+      query: (params) => ({ url: "/api/redemptions/painters/search", params }),
       providesTags: () => [listTag("DealerPainterSearch")],
     }),
 
     registerRtpPainter: builder.mutation({
-      query: (payload) => ({ url: "/api/dealer/painters", method: "POST", data: payload }),
+      query: (payload) => ({ url: "/api/redemptions/painters", method: "POST", data: payload }),
       transformResponse: getItem,
       invalidatesTags: () => [listTag("DealerPainterSearch")],
     }),

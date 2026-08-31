@@ -691,7 +691,15 @@ export default function DispatcherOrdersPage() {
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
-  const [viewMode, setViewMode] = useState("PENDING");
+  // Seeded once from a ?view= param (e.g. a deep-link from the mobile Home
+  // screen's "needs attention" shelf) - mirrors the existing ?orderId=
+  // deep-link convention below. Read only at mount (lazy initializer), same
+  // as every other piece of local filter state here - it's not kept in sync
+  // with the URL afterward.
+  const [viewMode, setViewMode] = useState(() => {
+    const initialView = new URLSearchParams(location.search || "").get("view");
+    return VIEW_FILTERS.some((filter) => filter.key === initialView) ? initialView : "PENDING";
+  });
   const [dealerFilter, setDealerFilter] = useState("ALL");
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);

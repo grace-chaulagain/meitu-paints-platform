@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { useAuth } from "../../auth/AuthProvider.jsx";
 import { useGetCouponPreviewQuery, useRedeemCouponMutation } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
 import { DashboardIcon } from "../../components/dashboard/DashboardIcons.jsx";
@@ -41,6 +42,11 @@ const ERROR_CONTENT = {
     title: "Dealer not approved",
     subtitle: "Only approved Meitu dealers can redeem coupons. Please contact Meitu admin.",
   },
+  DISPATCHER_NOT_APPROVED: {
+    icon: "reject",
+    title: "Dispatcher not approved",
+    subtitle: "Only approved Meitu dispatchers can redeem coupons. Please contact Meitu admin.",
+  },
 };
 
 function formatMoney(value) {
@@ -77,6 +83,12 @@ const EMPTY_SELECTION = { painterType: null, painterId: null, painterName: null 
 
 export default function CouponRedeemPage() {
   const { token } = useParams();
+  const { user } = useAuth();
+  // Same page, same wizard, for either role - only the "back"/"done"
+  // destination differs, since a dealer and dispatcher land on different
+  // dashboards. RequireDealerOrDispatcher (main.jsx) guarantees the role is
+  // one of these two.
+  const homePath = user?.role === "DISPATCHER" ? "/dispatcher/dashboard" : "/dealer/catalog";
   const previewQuery = useGetCouponPreviewQuery(token);
   const [redeemCoupon, redeemState] = useRedeemCouponMutation();
   const [redeemed, setRedeemed] = useState(null);
@@ -137,7 +149,7 @@ export default function CouponRedeemPage() {
         <Surface padding={22}>
           <EmptyState icon={content.icon} title={content.title} subtitle={content.subtitle} />
           <div style={{ marginTop: 8, textAlign: "center" }}>
-            <Link to="/dealer/catalog" style={{ fontSize: 13, fontWeight: 700, color: "var(--color-azure, #0071e3)", textDecoration: "none" }}>
+            <Link to={homePath} style={{ fontSize: 13, fontWeight: 700, color: "var(--color-azure, #0071e3)", textDecoration: "none" }}>
               Back to dashboard
             </Link>
           </div>
@@ -210,7 +222,7 @@ export default function CouponRedeemPage() {
             </div>
           ) : null}
           <div style={{ marginTop: 22 }}>
-            <Link to="/dealer/catalog" style={{ textDecoration: "none" }}>
+            <Link to={homePath} style={{ textDecoration: "none" }}>
               <PrimaryButton style={{ width: "100%", justifyContent: "center" }}>Done</PrimaryButton>
             </Link>
           </div>
@@ -267,7 +279,7 @@ export default function CouponRedeemPage() {
               >
                 {coupon.isExpired ? "Redeem for cash" : "Continue"}
               </PrimaryButton>
-              <Link to="/dealer/catalog" style={{ textDecoration: "none" }}>
+              <Link to={homePath} style={{ textDecoration: "none" }}>
                 <GhostButton style={{ width: "100%", justifyContent: "center" }}>Cancel</GhostButton>
               </Link>
             </div>

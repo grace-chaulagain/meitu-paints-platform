@@ -18,6 +18,7 @@ const CouponRedemptionAttemptLogSchema = new mongoose.Schema(
       index: true,
     },
     dealerId: { type: mongoose.Schema.Types.ObjectId, ref: "DealerProfile", default: null, index: true },
+    dispatcherId: { type: mongoose.Schema.Types.ObjectId, ref: "Dispatcher", default: null, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     ipAddress: { type: String, default: "" },
   },
@@ -25,5 +26,6 @@ const CouponRedemptionAttemptLogSchema = new mongoose.Schema(
 );
 
 CouponRedemptionAttemptLogSchema.index({ dealerId: 1, createdAt: -1 });
+CouponRedemptionAttemptLogSchema.index({ dispatcherId: 1, createdAt: -1 });
 
 export default mongoose.model("CouponRedemptionAttemptLog", CouponRedemptionAttemptLogSchema);

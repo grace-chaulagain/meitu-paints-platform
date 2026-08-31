@@ -2,14 +2,18 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import ApiError from "../utils/apiError.js";
 import * as couponService from "../services/coupon.service.js";
 
-// Dealer-facing
+// Dealer or dispatcher facing - requireRole("DEALER", "DISPATCHER") on the
+// mounting route guarantees req.user is one or the other, so exactly one of
+// dealerId/dispatcherId will be truthy here (the other is null per
+// User.model.js's "only one is used depending on role" convention).
 export const getCouponPreviewController = asyncHandler(async (req, res) => {
   const { token } = req.params || {};
   if (!token) throw new ApiError(400, "Missing token");
 
   const item = await couponService.getCouponPreview({
     rawToken: token,
-    dealerId: req.user.dealerId,
+    dealerId: req.user.dealerId || null,
+    dispatcherId: req.user.dispatcherId || null,
     userId: req.user.id,
     ipAddress: req.ip,
   });
@@ -23,7 +27,8 @@ export const redeemCouponController = asyncHandler(async (req, res) => {
 
   const item = await couponService.redeemCoupon({
     rawToken: token,
-    dealerId: req.user.dealerId,
+    dealerId: req.user.dealerId || null,
+    dispatcherId: req.user.dispatcherId || null,
     userId: req.user.id,
     ipAddress: req.ip,
     painterType,
@@ -58,8 +63,8 @@ export const listCouponBatchesController = asyncHandler(async (req, res) => {
 });
 
 export const listCouponRedemptionHistoryController = asyncHandler(async (req, res) => {
-  const { type, dealerId, q, from, to, page, limit } = req.query || {};
-  const out = await couponService.listRedemptionHistory({ type, dealerId, q, from, to, page, limit });
+  const { type, dealerId, dispatcherId, q, from, to, page, limit } = req.query || {};
+  const out = await couponService.listRedemptionHistory({ type, dealerId, dispatcherId, q, from, to, page, limit });
   res.status(200).json({ ok: true, ...out });
 });
 
@@ -93,8 +98,8 @@ export const deleteCouponBatchesController = asyncHandler(async (req, res) => {
 });
 
 export const listCouponAttemptsController = asyncHandler(async (req, res) => {
-  const { outcome, dealerId, page, limit } = req.query || {};
-  const out = await couponService.listAttemptLog({ outcome, dealerId, page, limit });
+  const { outcome, dealerId, dispatcherId, page, limit } = req.query || {};
+  const out = await couponService.listAttemptLog({ outcome, dealerId, dispatcherId, page, limit });
   res.status(200).json({ ok: true, ...out });
 });
 
