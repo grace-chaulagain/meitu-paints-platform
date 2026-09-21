@@ -46,6 +46,10 @@ async function applyMovement({
   orderId = null,
   saleId = null,
   relatedMovementId = null,
+  // True only when this credit is undoing a sale the dealer already made
+  // (a void). It restores the stock like any other credit, but the dealer
+  // never bought these units back - see the counters below.
+  reversesSale = false,
   actorUser,
   actorRole = "",
   ipAddress = "",
@@ -77,9 +81,19 @@ async function applyMovement({
     throw new ApiError(400, "Invalid movement quantity");
   }
 
+  // currentQuantity is the real balance; the three totals beside it are
+  // lifetime counters the dealer's "Total In / Total Sold" cards and the
+  // admin's Sales & Purchases valuation read.
   const incFields = { currentQuantity: delta };
   if (isScheme) incFields.totalSchemeQuantity = Math.abs(delta);
-  else if (isCredit) incFields.totalReceivedQuantity = Math.abs(delta);
+  else if (reversesSale) {
+    // Voiding a sale UNDOES it. Counting the returned units as freshly
+    // received instead made every void look like a purchase the dealer
+    // never made: "Total In" climbed, "Total Sold" kept the cancelled
+    // sale, and the admin's purchase valuation inflated with it - even
+    // though the stock balance itself came back correctly.
+    incFields.totalSoldQuantity = -Math.abs(delta);
+  } else if (isCredit) incFields.totalReceivedQuantity = Math.abs(delta);
   if (isDebit) incFields.totalSoldQuantity = Math.abs(delta);
 
   const filter = { dealerId, productId, branchId };
@@ -283,6 +297,7 @@ export async function reverseSaleMovements({
       reason: "Sale voided",
       saleId,
       relatedMovementId: movement._id,
+      reversesSale: true,
       actorUser,
       actorRole,
       session,
