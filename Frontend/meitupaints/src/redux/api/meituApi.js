@@ -1012,6 +1012,17 @@ export const meituApi = createApi({
       ],
     }),
 
+    // Dealer-wide counterpart to getAdminDealerInventoryMovements - every
+    // purchase/sale across every product, not scoped to one productId.
+    // Powers the "All Sales & Purchases" tab.
+    getAdminDealerInventoryHistory: builder.query({
+      query: ({ dealerId, ...params }) => ({
+        url: `/api/admin/dealers/${dealerId}/inventory/history`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [{ type: "DealerInventoryMovement", id: `${arg?.dealerId}:history` }],
+    }),
+
     updateAdminDealer: builder.mutation({
       query: ({ dealerId, payload }) => ({
         url: `/api/admin/dealers/${dealerId}`,
@@ -2014,6 +2025,7 @@ export const {
   useGetAdminDealerAnalyticsQuery,
   useGetAdminDealerInventoryQuery,
   useGetAdminDealerInventoryMovementsQuery,
+  useGetAdminDealerInventoryHistoryQuery,
   useUpdateAdminDealerMutation,
   useUpdateAdminDealerStatusMutation,
   useDeleteAdminDealerMutation,

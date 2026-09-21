@@ -24,7 +24,7 @@ export function Toast({ toast, onDismiss }) {
 
   useEffect(() => {
     if (!toast) return undefined;
-    const timer = window.setTimeout(() => onDismiss?.(), AUTO_DISMISS_MS);
+    const timer = window.setTimeout(() => onDismiss?.(), toast.duration || AUTO_DISMISS_MS);
     return () => window.clearTimeout(timer);
   }, [toast, onDismiss]);
 

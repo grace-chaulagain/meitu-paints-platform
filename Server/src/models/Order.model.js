@@ -255,6 +255,15 @@ const OrderAmendmentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // "" for an ordinary amend; "SCHEME_UPDATE" for an admin edit of a scheme
+    // grant after it was created/verified, so the activity feed can word it
+    // as such.
+    kind: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     amendedAt: {
       type: Date,
       default: Date.now,

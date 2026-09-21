@@ -14,4 +14,7 @@ export const PDF_COLORS = {
   logoGrey: "#aeaeb4",
   red: "#b42318",
   redSoft: "rgba(180,35,24,.08)",
+  // Mirrors the frontend's scheme (free-of-cost) amber identity.
+  caution: "#b64400",
+  cautionSoft: "rgba(182,68,0,.1)",
 };

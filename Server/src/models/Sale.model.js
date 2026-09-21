@@ -37,7 +37,12 @@ const SaleTotalsSchema = new mongoose.Schema(
 // purchase volume.
 const SaleSchema = new mongoose.Schema(
   {
-    saleNumber: { type: String, required: true, unique: true, index: true },
+    // Unique per dealer, not globally - each dealer has its own isolated
+    // SALE-{seq} sequence (see generateSaleNumber in sale.service.js), so
+    // two different dealers legitimately produce the identical string for
+    // their own first sale. The compound index below is what actually
+    // enforces uniqueness; this field alone is deliberately not `unique`.
+    saleNumber: { type: String, required: true, index: true },
 
     dealerId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -119,6 +124,9 @@ const SaleSchema = new mongoose.Schema(
   { timestamps: true, versionKey: false },
 );
 
+// Enforces "unique within one dealer's own sequence" rather than globally
+// unique - see the comment on saleNumber above.
+SaleSchema.index({ dealerId: 1, saleNumber: 1 }, { unique: true });
 SaleSchema.index({ dealerId: 1, saleDate: -1 });
 SaleSchema.index({ dealerId: 1, billId: 1 });
 SaleSchema.index({ dealerId: 1, projectId: 1 });

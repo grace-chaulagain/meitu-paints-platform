@@ -25,6 +25,12 @@ const DealerProductStockSchema = new mongoose.Schema(
     currentQuantity: { type: Number, default: 0, min: 0 },
     totalReceivedQuantity: { type: Number, default: 0, min: 0 },
     totalSoldQuantity: { type: Number, default: 0, min: 0 },
+    // Lifetime units received via a free admin scheme grant - tracked
+    // separately from totalReceivedQuantity so "Purchase" keeps meaning
+    // "the dealer paid for this" while currentQuantity (the sellable,
+    // spendable figure every page actually reads) folds both together.
+    // See dealerInventory.service.js:applyMovement's SCHEME handling.
+    totalSchemeQuantity: { type: Number, default: 0, min: 0 },
 
     lowStockThreshold: { type: Number, default: 0, min: 0 },
     // Simple valuation basis (last purchase rate paid) - currentQuantity x

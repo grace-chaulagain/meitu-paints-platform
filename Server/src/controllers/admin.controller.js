@@ -221,6 +221,28 @@ export const getDealerInventoryMovementsController = asyncHandler(async (req, re
   res.status(200).json({ ok: true, ...out });
 });
 
+// Dealer-wide counterpart to getDealerInventoryMovementsController - every
+// purchase/sale across every product this dealer carries, not just one
+// product. Admin-side view of the same ledger the dealer's own "History"
+// tab reads (getDealerStockHistory), for the "All Sales & Purchases" tab.
+export const getDealerInventoryHistoryController = asyncHandler(async (req, res) => {
+  const { dealerId } = req.params || {};
+  if (!dealerId) throw new ApiError(400, "Missing dealerId");
+
+  const { q, type, from, to, sort, page, limit } = req.query || {};
+  const out = await dealerInventoryService.getDealerStockHistory({
+    dealerId,
+    q,
+    type,
+    from,
+    to,
+    sort,
+    page,
+    limit,
+  });
+  res.status(200).json({ ok: true, ...out });
+});
+
 // Sales (fleet-wide, across all dealers)
 export const listAdminSalesController = asyncHandler(async (req, res) => {
   const { dealerId, status, q, from, to, page, limit, dealerPage, dealerLimit } = req.query || {};

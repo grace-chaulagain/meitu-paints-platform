@@ -68,7 +68,20 @@ const styles = StyleSheet.create({
   companyName: { fontSize: 16, fontWeight: 700 },
   companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: PDF_COLORS.graphite },
   docTitle: { marginTop: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
+  // Filled title bar so a free-of-cost grant can't be mistaken for a billable
+  // order - kept identical to the frontend copy of this document.
+  schemeTitleBar: {
+    marginTop: 10,
+    paddingVertical: 7,
+    alignSelf: "stretch",
+    alignItems: "center",
+    borderRadius: 3,
+    backgroundColor: PDF_COLORS.caution,
+  },
+  schemeTitleText: { fontSize: 13, fontWeight: 700, color: "#ffffff", letterSpacing: 1.6 },
+  schemeSubline: { marginTop: 6, fontSize: 9, fontWeight: 700, color: PDF_COLORS.caution, letterSpacing: 0.3 },
   infoSection: { marginTop: 20, paddingTop: 16, borderTopWidth: 1.5, borderTopColor: PDF_COLORS.red },
+  infoSectionScheme: { borderTopColor: PDF_COLORS.caution },
   infoRow: { flexDirection: "row", gap: 18 },
   infoCol: { flex: 1 },
   infoLine: { flexDirection: "row", marginBottom: 6 },
@@ -90,6 +103,7 @@ const styles = StyleSheet.create({
     borderBottomColor: PDF_COLORS.red,
     paddingBottom: 7,
   },
+  tableHeaderRowScheme: { borderBottomColor: PDF_COLORS.caution },
   tableRow: {
     flexDirection: "row",
     columnGap: 6,
@@ -114,10 +128,12 @@ const styles = StyleSheet.create({
     borderTopColor: PDF_COLORS.lineSoft,
   },
   totalsRowEmphasis: { borderTopWidth: 1.5, borderTopColor: PDF_COLORS.red, marginTop: 2, paddingTop: 8 },
+  totalsRowEmphasisScheme: { borderTopColor: PDF_COLORS.caution },
   totalsLabel: { fontSize: 8.5, fontWeight: 500, color: PDF_COLORS.graphite },
   totalsLabelEmphasis: { fontSize: 10, fontWeight: 700, color: PDF_COLORS.ink },
   totalsValue: { fontSize: 8.5, fontWeight: 700, color: PDF_COLORS.ink },
   totalsValueEmphasis: { fontSize: 13, fontWeight: 700, color: PDF_COLORS.red },
+  totalsValueEmphasisScheme: { color: PDF_COLORS.caution },
   noteBlock: {
     marginTop: 16,
     paddingTop: 10,
@@ -152,6 +168,7 @@ function SummaryPage({ order, dealer }) {
   const items = resolveItems(order);
   const currency = order?.totals?.currency || "NPR";
   const totals = order?.totals || {};
+  const isScheme = order?.orderOrigin === "SCHEME";
 
   const totalsRows = [
     { label: "Subtotal", value: totals.subtotal },
@@ -162,13 +179,22 @@ function SummaryPage({ order, dealer }) {
   return e(Page, { size: "A4", style: styles.page }, [
     e(View, { style: styles.header, key: "header" }, [
       e(View, { style: styles.statusPill, key: "pill" }, e(Text, { style: styles.statusPillText }, titleCase(order?.status))),
-      e(MeituLogoMark, { width: 38, style: styles.logo, color: PDF_COLORS.red, key: "logo" }),
+      e(MeituLogoMark, { width: 38, style: styles.logo, color: isScheme ? PDF_COLORS.caution : PDF_COLORS.red, key: "logo" }),
       e(Text, { style: styles.companyName, key: "companyName" }, "Meitu Construction Materials Pvt. Ltd."),
       e(Text, { style: styles.companyAddress, key: "companyAddress" }, "Madhyapur Thimi-08, Bhaktapur"),
-      e(Text, { style: styles.docTitle, key: "docTitle" }, "ORDER SUMMARY"),
+      isScheme
+        ? e(View, { style: styles.schemeTitleBar, key: "schemeTitle" }, e(Text, { style: styles.schemeTitleText }, "SCHEME ORDER SUMMARY"))
+        : e(Text, { style: styles.docTitle, key: "docTitle" }, "ORDER SUMMARY"),
+      isScheme
+        ? e(
+            Text,
+            { style: styles.schemeSubline, key: "schemeSubline" },
+            `${order?.scheme?.label ? `${order.scheme.label} · ` : ""}FREE OF COST — NOT A BILLABLE ORDER`,
+          )
+        : null,
     ]),
 
-    e(View, { style: styles.infoSection, key: "infoSection" }, [
+    e(View, { style: [styles.infoSection, isScheme && styles.infoSectionScheme], key: "infoSection" }, [
       e(View, { style: styles.infoRow, key: "infoRow" }, [
         e(View, { style: styles.infoCol, key: "col1" }, [
           e(InfoLine, { label: "Dealer", value: dealerInfo?.companyName, key: "dealer" }),
@@ -178,7 +204,9 @@ function SummaryPage({ order, dealer }) {
         e(View, { style: styles.infoCol, key: "col2" }, [
           e(InfoLine, { label: "Order No.", value: order?.orderNumber, key: "orderNo" }),
           e(InfoLine, { label: "Submitted", value: formatDateTime(order?.createdAt), key: "submitted" }),
-          e(InfoLine, { label: "Payment", value: order?.payment?.method, key: "payment" }),
+          isScheme
+            ? e(InfoLine, { label: "Scheme", value: order?.scheme?.label || "Free-of-cost grant", key: "scheme" })
+            : e(InfoLine, { label: "Payment", value: order?.payment?.method, key: "payment" }),
         ]),
       ]),
       e(
@@ -191,7 +219,7 @@ function SummaryPage({ order, dealer }) {
     e(View, { wrap: true, key: "table" }, [
       e(
         View,
-        { style: styles.tableHeaderRow, fixed: true, key: "tableHeaderRow" },
+        { style: [styles.tableHeaderRow, isScheme && styles.tableHeaderRowScheme], fixed: true, key: "tableHeaderRow" },
         [
           e(Text, { style: [styles.headerLabel, styles.colSN], key: "sn" }, "SN"),
           e(Text, { style: [styles.headerLabel, styles.colProduct], key: "product" }, "PRODUCT"),
@@ -221,16 +249,16 @@ function SummaryPage({ order, dealer }) {
             e(Text, { style: styles.totalsValue, key: "value" }, money(row.value, currency)),
           ]),
         ),
-        e(View, { style: [styles.totalsRow, styles.totalsRowEmphasis], key: "total" }, [
+        e(View, { style: [styles.totalsRow, styles.totalsRowEmphasis, isScheme && styles.totalsRowEmphasisScheme], key: "total" }, [
           e(Text, { style: styles.totalsLabelEmphasis, key: "label" }, "Total"),
-          e(Text, { style: styles.totalsValueEmphasis, key: "value" }, money(order?.totals?.total, currency)),
+          e(Text, { style: [styles.totalsValueEmphasis, isScheme && styles.totalsValueEmphasisScheme], key: "value" }, money(order?.totals?.total, currency)),
         ]),
       ]),
     ]),
 
     order?.dealerNote
       ? e(View, { style: styles.noteBlock, wrap: false, key: "dealerNote" }, [
-          e(Text, { style: styles.noteLabel, key: "label" }, "Dealer note"),
+          e(Text, { style: styles.noteLabel, key: "label" }, isScheme ? "Scheme note" : "Dealer note"),
           e(Text, { style: styles.noteValue, key: "value" }, order.dealerNote),
         ])
       : null,
@@ -243,12 +271,13 @@ function SummaryPage({ order, dealer }) {
       : null,
 
     e(View, { style: styles.footer, fixed: true, key: "footer" }, [
-      e(Text, { style: styles.footerText, key: "footerText" }, `Computer-generated order summary · ${formatDateTime(new Date())}`),
+      e(Text, { style: styles.footerText, key: "footerText" }, `Computer-generated order summary${isScheme ? " · Free-of-cost scheme grant, not a billable order" : ""} · ${formatDateTime(new Date())}`),
       e(Text, { style: styles.footerId, key: "footerId" }, `Order: ${safe(order?.orderNumber)}`),
     ]),
   ]);
 }
 
 export default function OrderSummaryPdfDocument({ order, dealer }) {
-  return e(Document, { title: `Order Summary ${order?.orderNumber || ""}` }, e(SummaryPage, { order, dealer }));
+  const docName = order?.orderOrigin === "SCHEME" ? "Scheme Order Summary" : "Order Summary";
+  return e(Document, { title: `${docName} ${order?.orderNumber || ""}` }, e(SummaryPage, { order, dealer }));
 }

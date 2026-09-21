@@ -33,7 +33,10 @@ export const factoryOrderListQuerySchema = z
 export const factoryShipmentBodySchema = z
   .object({
     driverName: z.string().trim().min(2).max(160),
-    driverPhone: z.string().trim().min(5).max(80),
+    // Deliberately no length rule: a driver's number being short, long or oddly
+    // formatted must never stop a load leaving the factory. The factory UI warns
+    // when generating the PI instead.
+    driverPhone: z.string().trim().min(1, "Driver phone is required").max(80),
     vehicleNumber: optionalTrimmedString(80),
     remarks: optionalTrimmedString(1000),
   })

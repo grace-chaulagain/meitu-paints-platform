@@ -44,7 +44,16 @@ function deriveEvents(order) {
 
   if (order.createdAt) {
     const placedBy = order.dealerSnapshot?.companyName || order.dealerSnapshot?.contactName || "the dealer";
-    events.push({ key: "created", at: order.createdAt, text: `Placed by ${placedBy}` });
+    // A scheme isn't placed by the recipient - the Admin grants it, and
+    // creating it is also its approval.
+    events.push({
+      key: "created",
+      at: order.createdAt,
+      text:
+        order.orderOrigin === "SCHEME"
+          ? `Scheme order created and approved by the Admin${order.scheme?.label ? ` · ${order.scheme.label}` : ""}`
+          : `Placed by ${placedBy}`,
+    });
   }
 
   for (const amendment of order.amendments || []) {
@@ -53,7 +62,10 @@ function deriveEvents(order) {
     events.push({
       key: `amend-${amendment.amendedAt}-${amendment.amendedByUserId || ""}`,
       at: amendment.amendedAt,
-      text: `Amended by ${actorPhrase(amendment.amendedByRole)} · ${detail}`,
+      text:
+        amendment.kind === "SCHEME_UPDATE"
+          ? `Scheme updated by ${actorPhrase(amendment.amendedByRole)} · ${detail}`
+          : `Amended by ${actorPhrase(amendment.amendedByRole)} · ${detail}`,
     });
   }
 

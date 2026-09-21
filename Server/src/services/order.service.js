@@ -417,7 +417,7 @@ function buildOrderTotals({ items, totals = {} }) {
 // Factory email helpers
 // ----------------------------
 
-async function buildFactoryRecipients() {
+export async function buildFactoryRecipients() {
   const FactorySettings = getFactorySettingsModel();
 
   const settings = await FactorySettings.findOne({}).lean();
@@ -597,6 +597,7 @@ export async function listOrdersForActor({
   q,
   fulfillmentMode,
   dispatcherId,
+  dealerId,
   orderOrigin,
   excludeOrigins,
   from,
@@ -662,12 +663,26 @@ export async function listOrdersForActor({
     query["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
   } else if (!isAdminReadScope(actorUser)) {
     throw new ApiError(403, "Access denied");
-  } else if (dispatcherId) {
-    if (!mongoose.Types.ObjectId.isValid(String(dispatcherId))) {
-      throw new ApiError(400, "Invalid dispatcherId");
+  } else {
+    // Admin/read-only-admin scope: dealerId and dispatcherId are independent
+    // opt-in narrowings (a dealer-profile "sales & purchases" view passes
+    // dealerId alone; a dispatcher performance view passes dispatcherId
+    // alone) - previously only dispatcherId was ever applied here, so a
+    // dealerId the caller sent was silently accepted by validation and then
+    // ignored, returning every dealer's orders instead of just this one's.
+    if (dispatcherId) {
+      if (!mongoose.Types.ObjectId.isValid(String(dispatcherId))) {
+        throw new ApiError(400, "Invalid dispatcherId");
+      }
+      query.dispatcherId = new mongoose.Types.ObjectId(String(dispatcherId));
+      query["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
     }
-    query.dispatcherId = new mongoose.Types.ObjectId(String(dispatcherId));
-    query["dealerSnapshot.fulfillmentMode"] = "DISPATCHER";
+    if (dealerId) {
+      if (!mongoose.Types.ObjectId.isValid(String(dealerId))) {
+        throw new ApiError(400, "Invalid dealerId");
+      }
+      query.dealerId = new mongoose.Types.ObjectId(String(dealerId));
+    }
   }
 
   const raw = normalizeText(q);
@@ -1108,7 +1123,7 @@ export async function ensureProformaInvoiceMetadata({ orderId, actorUser }) {
   }
 
   const existing = await Order.findById(orderId)
-    .select("serialNumber proformaIssuedAt status")
+    .select("serialNumber proformaIssuedAt status orderOrigin")
     .lean();
   if (!existing) {
     throw new ApiError(404, "Order not found");
@@ -1116,7 +1131,8 @@ export async function ensureProformaInvoiceMetadata({ orderId, actorUser }) {
 
   let serialNumber = existing.serialNumber;
   if (!serialNumber) {
-    const nextSerial = await getNextOrderSerialNumber();
+    // Scheme PIs draw from their own sequence - see orderSerialNumber.js.
+    const nextSerial = await getNextOrderSerialNumber({ orderOrigin: existing.orderOrigin });
     const updated = await Order.findOneAndUpdate(
       { _id: orderId, serialNumber: null },
       { $set: { serialNumber: nextSerial } },
@@ -1274,6 +1290,13 @@ export async function revertOrderVerification({ orderId, actorUser }) {
   const order = await Order.findById(orderId);
   if (!order) {
     throw new ApiError(404, "Order not found");
+  }
+
+  // A scheme is created already verified, so there is no review state to
+  // return it to - reverting would drop it into Pending and let it be
+  // "verified" and repriced like a real sale. Edit or delete it instead.
+  if (order.orderOrigin === ORDER_ORIGIN.SCHEME) {
+    throw new ApiError(400, "Scheme orders can't be reverted - edit the scheme or delete it instead.");
   }
 
   // Dispatcher-assigned orders are reviewed by their dispatcher, not Admin

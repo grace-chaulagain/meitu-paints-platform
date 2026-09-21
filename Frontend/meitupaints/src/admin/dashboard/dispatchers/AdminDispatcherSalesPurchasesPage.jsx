@@ -144,7 +144,11 @@ export default function AdminDispatcherSalesPurchasesPage() {
         category: item.category || "",
         pack: item.pack || {},
         purchase: Number(item.purchase || 0),
+        scheme: Number(item.scheme || 0),
         sales: Number(item.sales || 0),
+        // Straight from the live stock cache server-side (not derived), so
+        // it already correctly includes scheme-credited units - no
+        // Purchase+Scheme-Sales math needed here like the dealer page.
         balance: Number(item.balance || 0),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -177,11 +181,12 @@ export default function AdminDispatcherSalesPurchasesPage() {
     return rows.reduce(
       (acc, row) => {
         acc.purchase += row.purchase;
+        acc.scheme += row.scheme;
         acc.sales += row.sales;
         acc.balance += row.balance;
         return acc;
       },
-      { purchase: 0, sales: 0, balance: 0 },
+      { purchase: 0, scheme: 0, sales: 0, balance: 0 },
     );
   }, [rows]);
 
@@ -193,6 +198,7 @@ export default function AdminDispatcherSalesPurchasesPage() {
       { key: "sku", label: "SKU" },
       { key: "category", label: "Category", value: (row) => categoryLabel(row.category) },
       { key: "purchase", label: "Purchase" },
+      { key: "scheme", label: "Scheme" },
       { key: "sales", label: "Sales" },
       { key: "balance", label: "Balance" },
     ], filteredRows);
@@ -275,6 +281,7 @@ export default function AdminDispatcherSalesPurchasesPage() {
                     <div className="admin-sp-row admin-sp-head">
                       <span>Product</span>
                       <span style={{ textAlign: "right" }}>Purchase</span>
+                      <span style={{ textAlign: "right" }}>Scheme</span>
                       <span style={{ textAlign: "right" }}>Sales</span>
                       <span style={{ textAlign: "right" }}>Balance</span>
                     </div>
@@ -312,6 +319,10 @@ export default function AdminDispatcherSalesPurchasesPage() {
                             {formatQty(row.purchase)}
                           </span>
                           <span style={{ textAlign: "right", fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                            <DashboardIcon name="award" size={13} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)" }} />
+                            {formatQty(row.scheme)}
+                          </span>
+                          <span style={{ textAlign: "right", fontSize: 13.5, fontWeight: 600, color: "var(--color-ink, #1d1d1f)", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
                             <DashboardIcon name="trend" size={13} strokeWidth={1.8} style={{ color: "var(--color-graphite, #707070)" }} />
                             {formatQty(row.sales)}
                           </span>
@@ -337,6 +348,7 @@ export default function AdminDispatcherSalesPurchasesPage() {
             <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
               <MetricTile label="Products Tracked" value={rows.length} icon="package" />
               <MetricTile label="Total Purchased" value={formatQty(totals.purchase)} icon="download" />
+              <MetricTile label="Total Scheme" value={formatQty(totals.scheme)} icon="award" />
               <MetricTile label="Total Dispatched" value={formatQty(totals.sales)} icon="trend" tone="accent" />
               <MetricTile label="Total Balance" value={formatQty(totals.balance)} icon="stock" tone="accent" />
             </div>
@@ -347,7 +359,7 @@ export default function AdminDispatcherSalesPurchasesPage() {
       <style>{`
         .admin-sp-row{
           display:grid;
-          grid-template-columns:minmax(0,1fr) 120px 120px 120px;
+          grid-template-columns:minmax(0,1fr) 110px 100px 100px 110px;
           gap:14px;
           align-items:center;
           padding:14px 18px;
@@ -400,9 +412,9 @@ export default function AdminDispatcherSalesPurchasesPage() {
         }
         @media (max-width:720px){
           .admin-sp-row{
-            grid-template-columns:minmax(0,1fr) 84px 84px 84px;
-            gap:8px;
-            padding:12px 14px;
+            grid-template-columns:minmax(0,1fr) 70px 64px 64px 74px;
+            gap:6px;
+            padding:12px 10px;
           }
         }
       `}</style>

@@ -35,7 +35,7 @@ export async function buildOrderSummaryPdfBuffer(order, dealer) {
 
 export async function buildOrderSummaryPdfAttachment(order, dealer) {
   return {
-    filename: `${filenameSafe(order?.orderNumber || "order-summary")}.pdf`,
+    filename: `${order?.orderOrigin === "SCHEME" ? "SCHEME-" : ""}${filenameSafe(order?.orderNumber || "order-summary")}.pdf`,
     content: await buildOrderSummaryPdfBuffer(order, dealer),
     contentType: "application/pdf",
   };

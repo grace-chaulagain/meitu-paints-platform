@@ -84,11 +84,16 @@ export function AppleDateField({ value, onChange, disabled = false }) {
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const firstWeekday = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayKey = dateKey(new Date());
+  const today = new Date();
+  const todayKey = dateKey(today);
   const cells = [
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
+  // Every AppleDateField in this codebase filters past activity (order/
+  // sale/stock history) - a future date can never match anything, so it's
+  // disabled at the source rather than trusted to the caller.
+  const isCurrentOrFutureMonth = year > today.getFullYear() || (year === today.getFullYear() && month >= today.getMonth());
 
   function selectDay(day) {
     onChange(dateKey(new Date(year, month, day)));
@@ -137,6 +142,7 @@ export function AppleDateField({ value, onChange, disabled = false }) {
                       type="button"
                       aria-label="Next month"
                       onClick={() => setViewMonth(new Date(year, month + 1, 1))}
+                      disabled={isCurrentOrFutureMonth}
                       className="apple-calendar-nav"
                     >
                       <DashboardIcon name="chevron" size={13} strokeWidth={2.2} />
@@ -156,12 +162,15 @@ export function AppleDateField({ value, onChange, disabled = false }) {
                     const key = dateKey(new Date(year, month, day));
                     const isSelected = value === key;
                     const isToday = todayKey === key;
+                    const isFuture = key > todayKey;
                     return (
                       <button
                         key={key}
                         type="button"
                         onClick={() => selectDay(day)}
-                        className={`apple-calendar-day ${isSelected ? "is-selected" : ""} ${isToday && !isSelected ? "is-today" : ""}`}
+                        disabled={isFuture}
+                        aria-disabled={isFuture}
+                        className={`apple-calendar-day ${isSelected ? "is-selected" : ""} ${isToday && !isSelected ? "is-today" : ""} ${isFuture ? "is-future" : ""}`}
                       >
                         {day}
                       </button>

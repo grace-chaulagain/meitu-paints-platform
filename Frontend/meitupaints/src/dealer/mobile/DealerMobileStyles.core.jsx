@@ -335,14 +335,9 @@ export function DealerMobileStylesCore() {
       .dealer-m-movement-delta.out{ color:#b42318; }
       .dealer-m-movement-balance{ font-size:var(--t-caption2); color:var(--color-graphite,#707070); font-variant-numeric:tabular-nums; }
 
-      /* ---- AppleSpinner ---- */
-      .dealer-m-apple-spinner{
-        animation:appleSpinnerRotate 0.8s linear infinite;
-      }
-      @keyframes appleSpinnerRotate{
-        from{ transform:rotate(0deg); }
-        to{ transform:rotate(360deg); }
-      }
+      /* AppleSpinner's rotation lives in src/index.css - it has to load in every
+         portal, and this sheet only ships with the dealer/admin/dispatcher
+         mobile shells. */
 
       /* ---- PrimaryButton ---- */
       .dealer-m-primary-btn{

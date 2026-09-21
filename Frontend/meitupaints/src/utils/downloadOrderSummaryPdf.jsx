@@ -12,7 +12,8 @@ export async function downloadOrderSummaryPdf({ order, dealer }) {
 
   const blob = await pdf(<OrderSummaryPdfDocument order={order} dealer={dealer} />).toBlob();
 
-  const filename = `${String(order?.orderNumber || "order-summary").replace(/\s+/g, "-")}.pdf`;
+  const baseName = String(order?.orderNumber || "order-summary").replace(/\s+/g, "-");
+  const filename = `${order?.orderOrigin === "SCHEME" ? "SCHEME-" : ""}${baseName}.pdf`;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

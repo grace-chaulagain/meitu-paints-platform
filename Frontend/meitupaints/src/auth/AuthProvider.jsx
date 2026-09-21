@@ -380,7 +380,15 @@ export function AuthProvider({ children }) {
     () => ({
       booting,
       refreshingSession,
-      recoveringSession: booting || refreshingSession,
+      // "We don't know who this is yet" - NOT "a refresh is in flight". Every
+      // route guard renders nothing while this is true, so tying it to any
+      // refresh meant the whole portal blanked and remounted each time the
+      // access token was renewed (~every 9 minutes), throwing away unsaved
+      // work like the Draft Order basket. While a signed-in session is being
+      // refreshed in the background we already know the user, so the page
+      // stays exactly where it is; a refresh that genuinely fails clears
+      // `user` and the guards take over from there.
+      recoveringSession: booting || (refreshingSession && !user),
       user,
       accessToken,
       sessionExpired,

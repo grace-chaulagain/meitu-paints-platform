@@ -522,7 +522,30 @@ export default function DraftOrderUtilityPage({
     ? getQueryErrorMessage(productsQuery.error, "Failed to load product catalog.")
     : "";
 
-  const [quantities, setQuantities] = useState({});
+  // Kept in localStorage, not just component state: this basket is slow to
+  // rebuild by hand, and it used to vanish on any remount or accidental
+  // refresh. Scoped per workspace so Admin's draft and any other role's
+  // never overwrite each other.
+  const draftKey = `meitu_draft_order_v1:${roleLabel}`;
+  const [quantities, setQuantities] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(draftKey) || "{}");
+      return Object.fromEntries(
+        Object.entries(saved).filter(([sku, qty]) => sku && Number(qty) > 0),
+      );
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (Object.keys(quantities).length) localStorage.setItem(draftKey, JSON.stringify(quantities));
+      else localStorage.removeItem(draftKey);
+    } catch {
+      // Private mode or a full quota - the draft just won't outlive the tab.
+    }
+  }, [quantities, draftKey]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
   const [draftOpen, setDraftOpen] = useState(false);

@@ -18,4 +18,11 @@ export const PDF_COLORS = {
   // app already does.
   red: "#b42318",
   redSoft: "rgba(180,35,24,.08)",
+  // The dashboard's own "caution" tone (see Pill's "caution" tone in
+  // DashboardUI.jsx, and OriginBadge's SCHEME badge) - reused here so a
+  // scheme (free-of-cost) order's PDF documents carry the exact same
+  // amber identity the dashboard already marks them with everywhere else,
+  // rather than the document inventing its own color for the same thing.
+  caution: "#b64400",
+  cautionSoft: "rgba(182,68,0,.1)",
 };

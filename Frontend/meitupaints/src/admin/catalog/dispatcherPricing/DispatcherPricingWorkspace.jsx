@@ -152,14 +152,18 @@ function fieldInputStyle() {
   };
 }
 
-function DispatcherPriceTablePage({ dispatcherId, onBack }) {
+function DispatcherPriceTablePage({ dispatcherId, onBack, initialSearch = "" }) {
   const pricingQuery = useGetDispatcherPricingQuery(dispatcherId, { skip: !dispatcherId });
   const [updatePricing, { isLoading: saving }] = useUpdateDispatcherPricingMutation();
 
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState({});
   const [banner, setBanner] = useState(null); // { tone: "info"|"success"|"error", text }
-  const [search, setSearch] = useState("");
+  // Seeded once from initialSearch (e.g. a SKU deep-linked from the product
+  // editor) - deliberately not re-synced on prop changes, since this is a
+  // one-time prefill for "the dispatcher this admin just picked," not a
+  // controlled value.
+  const [search, setSearch] = useState(initialSearch);
   const [preImportSnapshot, setPreImportSnapshot] = useState(null); // items' price right before the last import was applied
   const [undoing, setUndoing] = useState(false);
 
@@ -489,11 +493,17 @@ function DispatcherPriceTablePage({ dispatcherId, onBack }) {
   );
 }
 
-export default function DispatcherPricingWorkspace() {
+export default function DispatcherPricingWorkspace({ focusQuery = "" }) {
   const [selectedDispatcherId, setSelectedDispatcherId] = useState(null);
 
   if (selectedDispatcherId) {
-    return <DispatcherPriceTablePage dispatcherId={selectedDispatcherId} onBack={() => setSelectedDispatcherId(null)} />;
+    return (
+      <DispatcherPriceTablePage
+        dispatcherId={selectedDispatcherId}
+        onBack={() => setSelectedDispatcherId(null)}
+        initialSearch={focusQuery}
+      />
+    );
   }
 
   return <DispatcherPricingDirectory onOpen={setSelectedDispatcherId} />;

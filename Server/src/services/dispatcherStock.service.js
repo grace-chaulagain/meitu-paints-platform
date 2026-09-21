@@ -342,31 +342,28 @@ export async function creditDispatcherStock({
 } = {}) {
   if (!dispatcherId) throw new ApiError(400, "dispatcherId is required");
 
-  // A scheme grant is recorded but not stocked: the history row proves the
-  // goods arrived, while currentQuantity stays put so those units can never
-  // be dispatched to a dealer or counted as sellable regional stock. Same
-  // rule the dealer side already follows for scheme goods.
-  const isLedgerOnly = movementType === DISPATCHER_STOCK_MOVEMENT_TYPE.SCHEME;
-
   return withStockSession(session, async (txnSession) => {
     for (const item of items) {
       const productId = itemProductId(item);
       const quantity = itemQuantity(item);
       if (!productId || quantity <= 0) continue;
 
+      // A scheme grant is a real credit, same as REPLENISHMENT_IN - the
+      // dispatcher physically receives the goods and they're genuinely
+      // theirs to dispatch to an assigned dealer like any other stock.
+      // Kept as its own movementType purely so history says where the
+      // units came from - mirrors the dealer side's SCHEME handling in
+      // dealerInventory.service.js:applyMovement.
       const updated = await DispatcherProductStock.findOneAndUpdate(
         { dispatcherId, productId },
         {
-          ...(isLedgerOnly ? {} : { $inc: { currentQuantity: quantity } }),
+          $inc: { currentQuantity: quantity },
           $set: {
             lastUpdatedAt: new Date(),
             lastUpdatedBy: actorId(actorUser),
           },
         },
         {
-          // A ledger-only row still needs a stock document to hang the
-          // before/after balance off, so upsert stays on - it just gets
-          // created at quantity 0 rather than at `quantity`.
           upsert: true,
           new: true,
           session: txnSession,
@@ -381,11 +378,7 @@ export async function creditDispatcherStock({
             productId,
             type: movementType,
             quantity,
-            // Balance is unchanged for a ledger-only row, so both sides
-            // report the same figure rather than implying a movement.
-            previousQuantity: isLedgerOnly
-              ? updated.currentQuantity
-              : updated.currentQuantity - quantity,
+            previousQuantity: updated.currentQuantity - quantity,
             newQuantity: updated.currentQuantity,
             reason,
             orderId,

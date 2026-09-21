@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test tests/unit/*.test.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "start:prod": "NODE_ENV=production node src/server.js",
@@ -29,7 +29,8 @@
     "staging:seed:products": "DOTENV_CONFIG_PATH=.env.staging node src/seed/seedProducts.js",
     "staging:seed:families": "DOTENV_CONFIG_PATH=.env.staging node src/seed/seedProductFamilies.js",
     "staging:append:products": "DOTENV_CONFIG_PATH=.env.staging node src/seed/appendProducts.js",
-    "staging:append:families": "DOTENV_CONFIG_PATH=.env.staging node src/seed/appendProductFamilies.js"
+    "staging:append:families": "DOTENV_CONFIG_PATH=.env.staging node src/seed/appendProductFamilies.js",
+    "test:integration": "DOTENV_CONFIG_PATH=.env.staging RUN_DB_TESTS=1 node --test --test-force-exit --test-reporter=spec tests/integration/*.test.js"
   },
   "author": "",
   "license": "ISC",

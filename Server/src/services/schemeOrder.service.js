@@ -13,13 +13,15 @@
 //      with factory stock reserved at creation.
 //   4. Creation is BLOCKED if factory stock can't cover it, rather than
 //      promising goods that don't exist.
-//   5. On delivery the goods do NOT enter the recipient's sellable
-//      inventory. Factory stock is still consumed (they physically
-//      leave), and a SCHEME row is written to the dealer's stock history
-//      for the record, but currentQuantity and totalReceivedQuantity are
-//      untouched - scheme goods are handled outside the app and cannot
-//      be sold through the Sales Register. See applyMovement's
-//      isLedgerOnly branch in dealerInventory.service.js.
+//   5. On delivery the goods DO enter the recipient's sellable inventory,
+//      exactly like a paid order's stock - factory stock is consumed, and
+//      currentQuantity goes up by the same amount a PURCHASE would. The
+//      only difference is a SCHEME-typed row instead of PURCHASE, purely
+//      so stock history says where the units came from and so "Purchase"
+//      volume (a commercial figure) never counts a free grant as buying
+//      power - see applyMovement's isScheme branch in
+//      dealerInventory.service.js and its dispatcher-side mirror,
+//      creditDispatcherStock in dispatcherStock.service.js.
 import mongoose from "mongoose";
 import Order, { ORDER_ORIGIN, ORDER_STATUS } from "../models/Order.model.js";
 import Product from "../models/Product.model.js";
@@ -27,6 +29,7 @@ import DealerProfile from "../models/DealerProfile.model.js";
 import Dispatcher from "../models/Dispatcher.model.js";
 import ApiError from "../utils/apiError.js";
 import { generateUniqueOrderNumber } from "./order.service.js";
+import { notifySchemeOrderCreated } from "./schemeOrderNotification.service.js";
 import {
   reserveStockForOrder,
   releaseReservationForOrder,
@@ -189,6 +192,7 @@ export async function createSchemeOrder(payload = {}, actorUser = null) {
   const items = await buildSchemeItems(payload.items);
   const orderNumber = await generateUniqueOrderNumber();
   const actorId = actorUser?._id || actorUser?.id || null;
+  const note = text(payload.note, 500);
 
   const order = await Order.create({
     orderNumber,
@@ -207,9 +211,14 @@ export async function createSchemeOrder(payload = {}, actorUser = null) {
     reviewedByRole: "ADMIN",
     reviewedByUserId: actorId,
     submittedByUserId: actorId,
+    // The admin's note is stored as the order's dealerNote too - that's the
+    // field every order summary, detail page and PDF already prints, so the
+    // note shows up "like any other order's note" with no per-surface work.
+    // scheme.note stays as the scheme-scoped copy.
+    dealerNote: note,
     scheme: {
       label: text(payload.label, 120),
-      note: text(payload.note, 500),
+      note,
       createdBy: actorId,
     },
   });
@@ -234,6 +243,19 @@ export async function createSchemeOrder(payload = {}, actorUser = null) {
     throw error;
   }
 
+  // Factory told what to ship, recipient told what's coming and where to
+  // track it. Fire-and-forget: the scheme already exists and holds its
+  // stock, so a slow or failing mailbox must never delay or undo it (the
+  // notifier itself never rejects).
+  notifySchemeOrderCreated(order, {
+    recipientKind:
+      recipientType === "DISPATCHER"
+        ? "DISPATCHER"
+        : recipient.servedByDispatcherId
+          ? "DEALER_VIA_DISPATCHER"
+          : "DEALER",
+  });
+
   return {
     orderId: order._id,
     orderNumber: order.orderNumber,
@@ -251,16 +273,20 @@ export async function createSchemeOrder(payload = {}, actorUser = null) {
 // live reservation, and releaseReservationForOrder is a no-op for them.
 const SCHEME_EDITABLE_STATUSES = [ORDER_STATUS.VERIFIED];
 const SCHEME_DELETABLE_STATUSES = [
+  // SUBMITTED never happens for a scheme by design; it only exists on ones that
+  // were sent back to review before "undo verification" was blocked for
+  // schemes. Deleting is the way out for those, and they hold no stock.
+  ORDER_STATUS.SUBMITTED,
   ORDER_STATUS.VERIFIED,
   ORDER_STATUS.REJECTED,
   ORDER_STATUS.CANCELLED,
 ];
 
-async function loadSchemeOrder(orderId) {
+async function loadSchemeOrder(orderId, { session = null } = {}) {
   const order = await Order.findOne({
     _id: objectId(orderId, "orderId"),
     isDeleted: { $ne: true },
-  });
+  }).session(session);
   if (!order) throw new ApiError(404, "Scheme order not found");
   if (order.orderOrigin !== ORDER_ORIGIN.SCHEME) {
     // Guards the whole feature: these endpoints skip the review/approval
@@ -276,56 +302,153 @@ async function loadSchemeOrder(orderId) {
 // deliberately NOT editable - re-pointing a scheme at a different dealer is a
 // different grant, and the honest way to do it is to delete this one and
 // create that one, so the two show up as two decisions in the register.
+const MAX_CHANGE_PARTS = 4;
+
+function itemLabel(item) {
+  const pack = item?.packLabel ? ` (${item.packLabel})` : "";
+  return `${item?.name || item?.sku || "Product"}${pack}`;
+}
+
+// A short, human sentence per real change, for the order's activity history.
+// Empty when nothing actually changed, so re-saving an untouched scheme
+// doesn't leave a meaningless "updated" row behind.
+export function describeSchemeChanges(before, after) {
+  const parts = [];
+
+  if (before.label !== after.label) {
+    if (!after.label) parts.push(`name "${before.label}" removed`);
+    else if (!before.label) parts.push(`name set to "${after.label}"`);
+    else parts.push(`name "${before.label}" → "${after.label}"`);
+  }
+  if (before.note !== after.note) {
+    parts.push(!after.note ? "note removed" : before.note ? "note edited" : "note added");
+  }
+
+  const beforeById = new Map(before.items.map((item) => [String(item.productId), item]));
+  const afterById = new Map(after.items.map((item) => [String(item.productId), item]));
+  for (const [id, item] of afterById) {
+    const previous = beforeById.get(id);
+    if (!previous) parts.push(`added ${itemLabel(item)} × ${item.quantity}`);
+    else if (Number(previous.quantity) !== Number(item.quantity)) {
+      parts.push(`${itemLabel(item)} ${previous.quantity} → ${item.quantity}`);
+    }
+  }
+  for (const [id, item] of beforeById) {
+    if (!afterById.has(id)) parts.push(`removed ${itemLabel(item)}`);
+  }
+
+  if (parts.length <= MAX_CHANGE_PARTS) return parts.join("; ");
+  return `${parts.slice(0, MAX_CHANGE_PARTS).join("; ")}; +${parts.length - MAX_CHANGE_PARTS} more`;
+}
+
 export async function updateSchemeOrder(orderId, payload = {}, actorUser = null) {
-  const order = await loadSchemeOrder(orderId);
-
-  if (!SCHEME_EDITABLE_STATUSES.includes(order.status)) {
-    throw new ApiError(
-      400,
-      `This scheme has already been ${order.status.toLowerCase()} and can no longer be edited. Only schemes still waiting in the factory's queue can be changed.`,
-    );
-  }
-
-  const previousItems = (order.items || []).map((item) => ({
-    productId: item.productId,
-    sku: item.sku,
-    quantity: item.quantity,
-  }));
-
+  // Resolving the new lines only reads the catalogue, so it stays outside the
+  // transaction below.
   const hasItems = Array.isArray(payload.items);
-  const nextItems = hasItems
-    ? await buildSchemeItems(payload.items, { checkStock: false })
-    : order.items;
+  const nextItems = hasItems ? await buildSchemeItems(payload.items, { checkStock: false }) : null;
 
-  if (hasItems) {
-    // Reservation first: it is the step that can fail on insufficient stock,
-    // and letting it throw before the order document is touched keeps a
-    // rejected edit from leaving the order and the reservation disagreeing.
-    await adjustReservationForOrderAmendment({
-      order,
-      previousItems,
-      nextItems,
-      actorUser,
-      reason: `Scheme order amended${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
+  // The status check, the reservation change and the order write all happen in
+  // ONE transaction. The factory can dispatch this same scheme at any moment;
+  // with these as separate steps, an edit could land after the dispatch had
+  // already taken stock, leaving the order listing items that never shipped.
+  // Inside a transaction the two collide on the order document: whichever
+  // commits second is retried against the other's result - an edit sees
+  // "already dispatched" and is refused, a dispatch sees the edited
+  // reservation and ships exactly that. The callback is re-run on retry, so it
+  // reloads the order every time instead of holding one from before.
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const order = await loadSchemeOrder(orderId, { session });
+
+      if (!SCHEME_EDITABLE_STATUSES.includes(order.status)) {
+        throw new ApiError(
+          400,
+          `This scheme has already been ${order.status.toLowerCase()} and can no longer be edited. Only schemes still waiting in the factory's queue can be changed.`,
+        );
+      }
+
+      const snapshotItems = () =>
+        (order.items || []).map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          sku: item.sku,
+          packLabel: item.packLabel,
+          quantity: item.quantity,
+        }));
+
+      const previousItems = (order.items || []).map((item) => ({
+        productId: item.productId,
+        sku: item.sku,
+        quantity: item.quantity,
+      }));
+      // Snapshot for the activity history - taken before anything is mutated.
+      const before = {
+        label: order.scheme?.label || "",
+        note: order.scheme?.note || "",
+        items: snapshotItems(),
+      };
+
+      if (hasItems) {
+        // Reservation first: it is the step that can fail on insufficient stock,
+        // and letting it throw before the order's own fields are touched keeps
+        // a rejected edit from leaving the order and the reservation disagreeing.
+        await adjustReservationForOrderAmendment({
+          order,
+          previousItems,
+          nextItems,
+          actorUser,
+          reason: `Scheme order amended${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
+          session,
+        });
+        order.items = nextItems;
+        order.totals = { subtotal: 0, total: 0, currency: "NPR" };
+      }
+
+      if (payload.label !== undefined) order.scheme.label = text(payload.label, 120);
+      if (payload.note !== undefined) {
+        const note = text(payload.note, 500);
+        order.scheme.note = note;
+        order.dealerNote = note;
+      }
+
+      order.scheme.updatedBy = actorUser?._id || actorUser?.id || null;
+      order.scheme.updatedAt = new Date();
+
+      // Recorded on the order's Activity history (the same list a normal amend
+      // writes to), so an edit made after verification stays visible to
+      // everyone who can see the order instead of silently overwriting it.
+      const changeSummary = describeSchemeChanges(before, {
+        label: order.scheme?.label || "",
+        note: order.scheme?.note || "",
+        items: snapshotItems(),
+      });
+      const actorId = actorUser?._id || actorUser?.id;
+      if (changeSummary && actorId) {
+        order.amendments.push({
+          kind: "SCHEME_UPDATE",
+          amendedByUserId: actorId,
+          amendedByRole: String(actorUser?.role || "ADMIN").toUpperCase(),
+          reason: changeSummary,
+          amendedAt: new Date(),
+        });
+      }
+
+      await order.save({ session });
+
+      result = {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        itemCount: order.items.length,
+        totalUnits: order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+      };
     });
-    order.items = nextItems;
-    order.totals = { subtotal: 0, total: 0, currency: "NPR" };
+  } finally {
+    session.endSession();
   }
 
-  if (payload.label !== undefined) order.scheme.label = text(payload.label, 120);
-  if (payload.note !== undefined) order.scheme.note = text(payload.note, 500);
-
-  order.scheme.updatedBy = actorUser?._id || actorUser?.id || null;
-  order.scheme.updatedAt = new Date();
-
-  await order.save();
-
-  return {
-    orderId: order._id,
-    orderNumber: order.orderNumber,
-    itemCount: order.items.length,
-    totalUnits: order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-  };
+  return result;
 }
 
 // Withdraws a scheme entirely. Soft-delete rather than a hard removal so the
@@ -334,35 +457,50 @@ export async function updateSchemeOrder(orderId, payload = {}, actorUser = null)
 // whole time it exists, so parking it in a queue would keep those units
 // unavailable for a month over what is usually a typo.
 export async function deleteSchemeOrder(orderId, actorUser = null, { reason = "" } = {}) {
-  const order = await loadSchemeOrder(orderId);
+  // Same reasoning as updateSchemeOrder: the status check, the stock release
+  // and the "deleted" flag are one transaction, so a scheme the factory
+  // dispatches in the same instant is either withdrawn cleanly or refused -
+  // never released-and-shipped.
+  const session = await mongoose.startSession();
+  let result;
+  try {
+    await session.withTransaction(async () => {
+      const order = await loadSchemeOrder(orderId, { session });
 
-  if (!SCHEME_DELETABLE_STATUSES.includes(order.status)) {
-    throw new ApiError(
-      400,
-      `This scheme has already been ${order.status.toLowerCase()} and can no longer be deleted. Goods that have left the factory need a return, not a deletion.`,
-    );
+      if (!SCHEME_DELETABLE_STATUSES.includes(order.status)) {
+        throw new ApiError(
+          400,
+          `This scheme has already been ${order.status.toLowerCase()} and can no longer be deleted. Goods that have left the factory need a return, not a deletion.`,
+        );
+      }
+
+      // Release before flagging deleted, so a failure here leaves the order
+      // visible and holding its stock rather than hidden and holding it forever.
+      await releaseReservationForOrder({
+        order,
+        actorUser,
+        reason: `Scheme order deleted${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
+        note: text(reason, 500),
+        session,
+      });
+
+      order.isDeleted = true;
+      order.deletion = {
+        ...(order.deletion?.toObject?.() || order.deletion || {}),
+        pending: false,
+        requestedAt: new Date(),
+        requestedByUserId: actorUser?._id || actorUser?.id || null,
+        reason: text(reason, 500) || "Scheme withdrawn by admin",
+      };
+      await order.save({ session });
+
+      result = { orderId: order._id, orderNumber: order.orderNumber, deleted: true };
+    });
+  } finally {
+    session.endSession();
   }
 
-  // Release before flagging deleted, so a failure here leaves the order
-  // visible and holding its stock rather than hidden and holding it forever.
-  await releaseReservationForOrder({
-    order,
-    actorUser,
-    reason: `Scheme order deleted${order.scheme?.label ? `: ${order.scheme.label}` : ""}`,
-    note: text(reason, 500),
-  });
-
-  order.isDeleted = true;
-  order.deletion = {
-    ...(order.deletion?.toObject?.() || order.deletion || {}),
-    pending: false,
-    requestedAt: new Date(),
-    requestedByUserId: actorUser?._id || actorUser?.id || null,
-    reason: text(reason, 500) || "Scheme withdrawn by admin",
-  };
-  await order.save();
-
-  return { orderId: order._id, orderNumber: order.orderNumber, deleted: true };
+  return result;
 }
 
 // Recipient picker for the create form: every verified dealer plus every
@@ -383,6 +521,9 @@ export async function listSchemeRecipients() {
       recipientType: "DEALER",
       recipientId: String(dealer._id),
       name: dealer.companyName || dealer.contactName || "Dealer",
+      // Surfaced purely so the picker can match on it - admins hunt for a
+      // dealer by the person they deal with as often as by the trading name.
+      contactName: dealer.contactName || "",
       servedBy: dealer.fulfillmentMode === "DISPATCHER" ? "Dispatcher-served" : "Factory",
     })),
     ...dispatchers.map((dispatcher) => ({
@@ -390,6 +531,7 @@ export async function listSchemeRecipients() {
       recipientType: "DISPATCHER",
       recipientId: String(dispatcher._id),
       name: dispatcher.companyName || dispatcher.contactName || "Dispatcher",
+      contactName: dispatcher.contactName || "",
       servedBy: "Dispatcher",
     })),
   ];

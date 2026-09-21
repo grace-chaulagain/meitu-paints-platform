@@ -5,6 +5,7 @@ import { downloadProformaPdf } from "../../../factory/invoices/downloadProformaP
 import {
   useAmendAdminOrderMutation,
   useDeleteAdminOrderMutation,
+  useDeleteSchemeOrderMutation,
   useEnsureProformaInvoiceMetadataMutation,
   useGetAdminOrderQuery,
   useGetAdminOrderStockCheckQuery,
@@ -173,6 +174,7 @@ export default function AdminOrderDetailPage() {
   const [rejectAdminOrder] = useRejectAdminOrderMutation();
   const [amendAdminOrder] = useAmendAdminOrderMutation();
   const [deleteAdminOrder] = useDeleteAdminOrderMutation();
+  const [deleteSchemeOrder] = useDeleteSchemeOrderMutation();
   const [ensureProformaInvoiceMetadata] = useEnsureProformaInvoiceMetadataMutation();
   const [revertAdminOrderVerification] = useRevertAdminOrderVerificationMutation();
 
@@ -207,6 +209,11 @@ export default function AdminOrderDetailPage() {
   // no way to know about, so it's applied separately, same as the old
   // verify button's disabled logic.
   const availableTransitions = order ? getTransitions(order, "ADMIN") : [];
+  // A scheme's only admin action here is Delete (edit lives in the orders
+  // list). It can only be withdrawn while the goods are still in the factory's
+  // queue - once dispatched they've left the building and need a return.
+  const isScheme = order?.orderOrigin === "SCHEME";
+  const canDeleteOrder = !isScheme || ["SUBMITTED", "VERIFIED", "REJECTED", "CANCELLED"].includes(order?.status);
 
   async function runAction(actionKey, request) {
     try {
@@ -325,6 +332,8 @@ export default function AdminOrderDetailPage() {
         },
         items: order.items || [],
         totals: order.totals || {},
+        orderOrigin: order.orderOrigin,
+        scheme: order.scheme,
       });
     } catch (err) {
       setActionError(getQueryErrorMessage(err, "Failed to generate the Proforma Invoice."));
@@ -370,13 +379,15 @@ export default function AdminOrderDetailPage() {
     if (!order?._id) return;
 
     const success = await runAction(`delete-${order._id}`, () =>
-      deleteAdminOrder({
-        orderId: order._id,
-        payload: {
-          confirmation: deleteConfirmation,
-          reason: "Admin moved order to trash",
-        },
-      }).unwrap(),
+      isScheme
+        ? deleteSchemeOrder({ orderId: order._id, reason: "Withdrawn by admin" }).unwrap()
+        : deleteAdminOrder({
+            orderId: order._id,
+            payload: {
+              confirmation: deleteConfirmation,
+              reason: "Admin moved order to trash",
+            },
+          }).unwrap(),
     );
 
     if (success) goBackToOrders();
@@ -494,7 +505,7 @@ export default function AdminOrderDetailPage() {
                 </ActionButton>
               ) : null}
 
-              {order.status === "SUBMITTED" ? (
+              {order.status === "SUBMITTED" && !isScheme ? (
                 <ActionButton
                   subtle
                   icon="edit"
@@ -524,17 +535,19 @@ export default function AdminOrderDetailPage() {
                 );
               })}
 
-              <ActionButton
-                danger
-                icon="trash"
-                onClick={() => {
-                  setDeleteConfirmOpen(true);
-                  setDeleteConfirmation("");
-                }}
-                disabled={busyAction === `delete-${order._id}`}
-              >
-                {busyAction === `delete-${order._id}` ? "Moving..." : "Delete"}
-              </ActionButton>
+              {canDeleteOrder ? (
+                <ActionButton
+                  danger
+                  icon="trash"
+                  onClick={() => {
+                    setDeleteConfirmOpen(true);
+                    setDeleteConfirmation("");
+                  }}
+                  disabled={busyAction === `delete-${order._id}`}
+                >
+                  {busyAction === `delete-${order._id}` ? (isScheme ? "Deleting..." : "Moving...") : "Delete"}
+                </ActionButton>
+              ) : null}
             </div>
           }
         />
@@ -664,10 +677,14 @@ export default function AdminOrderDetailPage() {
 
       <AdminDecisionModal
         open={deleteConfirmOpen}
-        title="Delete Order"
-        subtitle="This moves the order to Settings Trash for 30 days before permanent database deletion. It can be restored during that window."
+        title={isScheme ? "Delete Scheme Order" : "Delete Order"}
+        subtitle={
+          isScheme
+            ? "This withdraws the scheme right away and gives its reserved factory stock back. It can't be undone."
+            : "This moves the order to Settings Trash for 30 days before permanent database deletion. It can be restored during that window."
+        }
         tone="danger"
-        confirmLabel="Move to Trash"
+        confirmLabel={isScheme ? "Delete Scheme" : "Move to Trash"}
         busy={busyAction === `delete-${order._id}`}
         details={[
           { label: "Order", value: order?.orderNumber },

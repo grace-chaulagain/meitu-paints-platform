@@ -104,8 +104,12 @@ Avoid:
 Use Apple-like system typography:
 
 ```css
---font-sf-pro-display: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
---font-sf-pro-text: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+--font-sf-pro-display:
+  Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+  system-ui, sans-serif;
+--font-sf-pro-text:
+  Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+  system-ui, sans-serif;
 ```
 
 ### Type Personality

@@ -70,16 +70,28 @@ function SaleDetailSheet({ sale, onClose }) {
   // Adjusted during render (not in an effect) so a re-open never commits a
   // stale/null frame first.
   const [renderedSale, setRenderedSale] = useState(sale);
+  const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [voidSale, voidState] = useVoidDealerSaleMutation();
 
+  // A new sale opening into the same still-mounted sheet must not inherit
+  // the previous sale's half-typed void reason or expanded void form.
   if (sale && sale !== renderedSale) {
     setRenderedSale(sale);
+    setVoiding(false);
+    setReason("");
+    setError("");
   }
 
   if (!renderedSale) return null;
   const canVoid = renderedSale.status === "COMPLETED";
+
+  function cancelVoid() {
+    setVoiding(false);
+    setReason("");
+    setError("");
+  }
 
   async function handleVoid() {
     setError("");
@@ -124,17 +136,32 @@ function SaleDetailSheet({ sale, onClose }) {
       {renderedSale.status === "VOIDED" ? (
         <div className="dealer-m-sale-detail-voided">Voided: {renderedSale.voidReason}</div>
       ) : canVoid ? (
-        <div className="dealer-m-sale-detail-void">
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason for voiding this sale"
-            className="dealer-m-newsale-input"
-          />
-          {error ? <div className="dealer-m-newsale-error">{error}</div> : null}
-          <button type="button" className="dealer-m-sale-void-btn" onClick={handleVoid} disabled={voidState.isLoading}>
-            {voidState.isLoading ? "Voiding…" : "Void this sale"}
-          </button>
+        <div className="dealer-m-sale-detail-manage">
+          <div className="dealer-m-sale-detail-divider" />
+          {voiding ? (
+            <div className="dealer-m-sale-detail-void">
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason for voiding this sale"
+                className="dealer-m-newsale-input"
+                autoFocus
+              />
+              {error ? <div className="dealer-m-newsale-error">{error}</div> : null}
+              <div className="dealer-m-sale-detail-void-actions">
+                <button type="button" className="dealer-m-newsale-ghost" onClick={cancelVoid} disabled={voidState.isLoading}>
+                  Cancel
+                </button>
+                <button type="button" className="dealer-m-sale-void-btn" onClick={handleVoid} disabled={voidState.isLoading}>
+                  {voidState.isLoading ? "Voiding…" : "Confirm void"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="dealer-m-sale-void-trigger" onClick={() => setVoiding(true)}>
+              Void this sale
+            </button>
+          )}
         </div>
       ) : null}
     </MobileSheet>
