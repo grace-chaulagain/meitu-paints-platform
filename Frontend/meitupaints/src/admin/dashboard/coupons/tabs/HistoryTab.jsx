@@ -98,7 +98,10 @@ export default function HistoryTab() {
   // Same forgiving matcher the scheme-order recipient picker uses, so a typo
   // or a set of initials still finds the right name.
   const suggestions = useMemo(
-    () => (wantsSuggestions ? rankByLooseSearch(people, draftQ, (p) => [p.name, p.contactName, p.label]).slice(0, 6) : []),
+    () =>
+      wantsSuggestions
+        ? rankByLooseSearch(people, draftQ, (p) => [p.name, p.contactName, p.label], { fallbackToPartial: false }).slice(0, 6)
+        : [],
     [people, draftQ, wantsSuggestions],
   );
 

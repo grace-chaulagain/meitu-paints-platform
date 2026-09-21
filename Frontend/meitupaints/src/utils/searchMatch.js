@@ -202,7 +202,12 @@ function looseMatch(query, fields) {
 // an empty list. Records matching every token win; only if there are none does
 // it fall back to those matching some, so a typo in one word still leaves the
 // user looking at the right shortlist. A blank query returns `items` unchanged.
-export function rankByLooseSearch(items, query, getFields) {
+//
+// `fallbackToPartial: false` drops that last courtesy. Use it where the same
+// box accepts something other than a name - the coupon history searches codes
+// too, and "GRN-002106" should return no people rather than the two whose
+// names happen to share a few letters with it.
+export function rankByLooseSearch(items, query, getFields, { fallbackToPartial = true } = {}) {
   if (!normalize(query)) return items;
 
   const full = [];
@@ -214,6 +219,6 @@ export function rankByLooseSearch(items, query, getFields) {
   }
 
   const byScore = (a, b) => b.matched - a.matched || b.score - a.score;
-  const pool = full.length ? full : partial;
+  const pool = full.length || !fallbackToPartial ? full : partial;
   return pool.sort(byScore).map((entry) => entry.item);
 }
