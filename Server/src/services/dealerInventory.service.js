@@ -51,21 +51,35 @@ async function applyMovement({
   ipAddress = "",
   session,
 }) {
-  const isCredit = [
-    INVENTORY_MOVEMENT_TYPE.PURCHASE,
-    INVENTORY_MOVEMENT_TYPE.RETURN,
-    INVENTORY_MOVEMENT_TYPE.TRANSFER_IN,
-  ].includes(type);
+  // Scheme goods are a real credit, same as a PURCHASE - the dealer
+  // physically receives them and they're genuinely theirs to sell through
+  // the Sales Register like anything else in stock. Tracked as its own
+  // type (not folded into PURCHASE) purely so stock history says where the
+  // units came from, and so "Purchase" volume - a commercial figure - never
+  // counts a free grant as buying power. See totalSchemeQuantity below.
+  const isScheme = type === INVENTORY_MOVEMENT_TYPE.SCHEME;
+  const isCredit =
+    isScheme ||
+    [
+      INVENTORY_MOVEMENT_TYPE.PURCHASE,
+      INVENTORY_MOVEMENT_TYPE.RETURN,
+      INVENTORY_MOVEMENT_TYPE.TRANSFER_IN,
+    ].includes(type);
   const isDebit = [INVENTORY_MOVEMENT_TYPE.SALE, INVENTORY_MOVEMENT_TYPE.TRANSFER_OUT].includes(type);
   const isAdjustment = type === INVENTORY_MOVEMENT_TYPE.ADJUSTMENT;
 
-  const delta = isAdjustment ? Number(quantity) : isDebit ? -Math.abs(Number(quantity)) : Math.abs(Number(quantity));
+  const delta = isAdjustment
+    ? Number(quantity)
+    : isDebit
+      ? -Math.abs(Number(quantity))
+      : Math.abs(Number(quantity));
   if (!Number.isFinite(delta) || delta === 0) {
     throw new ApiError(400, "Invalid movement quantity");
   }
 
   const incFields = { currentQuantity: delta };
-  if (isCredit) incFields.totalReceivedQuantity = Math.abs(delta);
+  if (isScheme) incFields.totalSchemeQuantity = Math.abs(delta);
+  else if (isCredit) incFields.totalReceivedQuantity = Math.abs(delta);
   if (isDebit) incFields.totalSoldQuantity = Math.abs(delta);
 
   const filter = { dealerId, productId, branchId };
@@ -86,6 +100,9 @@ async function applyMovement({
         ...(unitCost !== null ? { lastKnownUnitCost: unitCost } : {}),
       },
     },
+    // Upsert on a credit (scheme included) so the very first delivery of a
+    // product a dealer has never had before still creates its stock
+    // document, same as any other purchase would.
     { upsert: delta > 0, new: true, session, setDefaultsOnInsert: true },
   );
 
@@ -139,6 +156,10 @@ export async function recordPurchaseMovement({
   actorUser,
   actorRole = "SYSTEM",
   session = null,
+  // SCHEME for free-of-cost scheme orders; defaults to PURCHASE so every
+  // existing caller behaves exactly as before.
+  movementType = INVENTORY_MOVEMENT_TYPE.PURCHASE,
+  reason = "Order delivered",
 } = {}) {
   if (!dealerId) throw new ApiError(400, "dealerId is required");
 
@@ -152,10 +173,10 @@ export async function recordPurchaseMovement({
       const result = await applyMovement({
         dealerId,
         productId,
-        type: INVENTORY_MOVEMENT_TYPE.PURCHASE,
+        type: movementType,
         quantity,
         unitCost: itemUnitCost(item),
-        reason: "Order delivered",
+        reason,
         orderId,
         actorUser,
         actorRole,
@@ -211,12 +232,25 @@ export async function recordSaleMovements({
 // happen inside the caller's transaction (sale.service.js's create flow)
 // so the price is resolved against the same consistent snapshot as the
 // stock debit.
+// Returns each product's cost-basis row (not just the raw cost number) so
+// callers can distinguish "no cost on file because nothing was ever really
+// purchased" from "no cost on file because every unit came from a free
+// scheme grant" - see resolveItemPrices in sale.service.js, the one caller.
 export async function getLastKnownUnitCosts({ dealerId, productIds, session } = {}) {
   const rows = await DealerProductStock.find({ dealerId, productId: { $in: productIds } })
-    .select("productId lastKnownUnitCost")
+    .select("productId lastKnownUnitCost totalReceivedQuantity totalSchemeQuantity")
     .session(session)
     .lean();
-  return new Map(rows.map((row) => [String(row.productId), row.lastKnownUnitCost]));
+  return new Map(
+    rows.map((row) => [
+      String(row.productId),
+      {
+        lastKnownUnitCost: row.lastKnownUnitCost,
+        totalReceivedQuantity: row.totalReceivedQuantity || 0,
+        totalSchemeQuantity: row.totalSchemeQuantity || 0,
+      },
+    ]),
+  );
 }
 
 // Credits a dealer's inventory back for every SALE movement tied to a
@@ -259,13 +293,20 @@ export async function reverseSaleMovements({
 }
 
 // Shared between listDealerStock and getDealerStockItem so the list and the
-// detail page compute status/value identically.
+// detail page compute status/value identically. Scheme-received stock is
+// meant to look identical to purchased stock everywhere in this dealer's
+// portal, valuation included - so when there's no real purchase price on
+// file (a product the dealer has only ever gotten via scheme), the current
+// catalog price stands in as its value, same as the dispatcher side
+// already does for its own stock.
 function mapStockRow(row) {
   const product = row.productId;
   const currentQuantity = Number(row.currentQuantity || 0);
   const threshold = Number(row.lowStockThreshold || product.stock?.lowStockThreshold || 0);
   const stockStatus =
     currentQuantity <= 0 ? "OUT_OF_STOCK" : threshold > 0 && currentQuantity <= threshold ? "LOW_STOCK" : "IN_STOCK";
+  const catalogUnitPrice = Number(product.pricing?.tiers?.[0]?.pricePerPack || 0);
+  const unitCost = row.lastKnownUnitCost ?? (catalogUnitPrice > 0 ? catalogUnitPrice : null);
 
   return {
     productId: product._id,
@@ -278,9 +319,10 @@ function mapStockRow(row) {
     currentQuantity,
     totalReceivedQuantity: Number(row.totalReceivedQuantity || 0),
     totalSoldQuantity: Number(row.totalSoldQuantity || 0),
+    totalSchemeQuantity: Number(row.totalSchemeQuantity || 0),
     lowStockThreshold: threshold,
-    lastKnownUnitCost: row.lastKnownUnitCost ?? null,
-    inventoryValue: row.lastKnownUnitCost ? currentQuantity * row.lastKnownUnitCost : null,
+    lastKnownUnitCost: unitCost,
+    inventoryValue: unitCost ? currentQuantity * unitCost : null,
     lastMovementAt: row.lastMovementAt || null,
     status: stockStatus,
   };
@@ -291,13 +333,16 @@ export async function getDealerStockItem({ dealerId, productId } = {}) {
   if (!productId) throw new ApiError(400, "productId is required");
 
   const row = await DealerProductStock.findOne({ dealerId, productId })
-    .populate({ path: "productId", select: "name sku code category pack images stock.lowStockThreshold" })
+    .populate({ path: "productId", select: "name sku code category pack images pricing stock.lowStockThreshold" })
     .lean();
 
   if (!row || !row.productId) throw new ApiError(404, "Inventory item not found");
   return mapStockRow(row);
 }
 
+// SCHEME is a real credit (see applyMovement above) but deliberately kept
+// out of PURCHASE_LIKE_TYPES - it has to stay countable on its own so
+// "Purchase" never quietly includes gifted stock.
 const PURCHASE_LIKE_TYPES = [
   INVENTORY_MOVEMENT_TYPE.PURCHASE,
   INVENTORY_MOVEMENT_TYPE.RETURN,
@@ -321,6 +366,7 @@ async function getMovementTotalsByProduct({ dealerId, from, to }) {
       $group: {
         _id: "$productId",
         purchase: { $sum: { $cond: [{ $in: ["$type", PURCHASE_LIKE_TYPES] }, "$quantity", 0] } },
+        scheme: { $sum: { $cond: [{ $eq: ["$type", INVENTORY_MOVEMENT_TYPE.SCHEME] }, "$quantity", 0] } },
         sales: { $sum: { $cond: [{ $in: ["$type", SALE_LIKE_TYPES] }, "$quantity", 0] } },
       },
     },
@@ -328,7 +374,7 @@ async function getMovementTotalsByProduct({ dealerId, from, to }) {
 
   const map = new Map();
   for (const row of rows) {
-    map.set(String(row._id), { purchase: row.purchase || 0, sales: row.sales || 0 });
+    map.set(String(row._id), { purchase: row.purchase || 0, scheme: row.scheme || 0, sales: row.sales || 0 });
   }
   return map;
 }
@@ -355,7 +401,7 @@ export async function listDealerStock({
   const hasDateFilter = Boolean(fromDate || toDate);
 
   const rows = await DealerProductStock.find({ dealerId })
-    .populate({ path: "productId", select: "name sku code category pack images stock.lowStockThreshold" })
+    .populate({ path: "productId", select: "name sku code category pack images pricing stock.lowStockThreshold" })
     .lean();
 
   const query = String(q || "").trim().toLowerCase();
@@ -366,8 +412,13 @@ export async function listDealerStock({
   if (hasDateFilter) {
     const totalsByProduct = await getMovementTotalsByProduct({ dealerId, from: fromDate, to: toDate });
     items = items.map((item) => {
-      const totals = totalsByProduct.get(String(item.productId)) || { purchase: 0, sales: 0 };
-      return { ...item, totalReceivedQuantity: totals.purchase, totalSoldQuantity: totals.sales };
+      const totals = totalsByProduct.get(String(item.productId)) || { purchase: 0, scheme: 0, sales: 0 };
+      return {
+        ...item,
+        totalReceivedQuantity: totals.purchase,
+        totalSchemeQuantity: totals.scheme,
+        totalSoldQuantity: totals.sales,
+      };
     });
   }
 

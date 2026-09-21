@@ -105,6 +105,11 @@ function OrderCardSwipe({ order, isLive, image, itemCount, bucket, stagger, anim
           <span className="dealer-m-orders-card-meta">
             {cardDateLabel(order.createdAt)} · {itemCount} item{itemCount === 1 ? "" : "s"}
           </span>
+          {order.orderOrigin === "SCHEME" ? (
+            <span className="dealer-m-orders-card-scheme">
+              {order.scheme?.label ? `SCHEME · ${order.scheme.label}` : "SCHEME · Free of cost"}
+          </span>
+        ) : null}
         </span>
         <span className="dealer-m-orders-card-right">
           <span className="dealer-m-orders-card-total">{formatMoney(order?.totals?.total)}</span>

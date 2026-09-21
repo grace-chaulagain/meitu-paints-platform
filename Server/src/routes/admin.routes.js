@@ -35,6 +35,7 @@ import {
   updateDealerCreditController,
   getDealerInventoryController,
   getDealerInventoryMovementsController,
+  getDealerInventoryHistoryController,
 
   // Sales
   listAdminSalesController,
@@ -132,6 +133,7 @@ import {
 import {
   inventoryListQuerySchema,
   inventoryMovementsQuerySchema,
+  inventoryHistoryQuerySchema,
 } from "../validations/dealerInventory.validation.js";
 import { adminSaleListQuerySchema } from "../validations/sale.validation.js";
 import { saleIdParamsSchema } from "../validations/common.validation.js";
@@ -233,6 +235,12 @@ router.get(
   validateParams(dealerIdParamsSchema),
   validateQuery(inventoryListQuerySchema),
   getDealerInventoryController,
+);
+router.get(
+  "/dealers/:dealerId/inventory/history",
+  validateParams(dealerIdParamsSchema),
+  validateQuery(inventoryHistoryQuerySchema),
+  getDealerInventoryHistoryController,
 );
 router.get(
   "/dealers/:dealerId/inventory/:productId/movements",

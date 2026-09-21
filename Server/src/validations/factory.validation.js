@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { objectIdSchema, optionalTrimmedString } from "./common.validation.js";
+// Shared with the admin orders list so the two can't accept different sets
+// of origins - see the comment on ORDER_ORIGIN_VALUES there.
+import { orderOriginQuerySchema, excludeOriginsQuerySchema } from "./order.validation.js";
 
 export const factoryOrderParamsSchema = z
   .object({
@@ -13,14 +16,8 @@ export const factoryOrderListQuerySchema = z
       .enum(["ALL", "INBOX", "SHIPMENT", "COMPLETED", "all", "inbox", "shipment", "completed"])
       .optional(),
     status: optionalTrimmedString(40),
-    origin: z
-      .enum([
-        "DEALER",
-        "DISPATCHER_REPLENISHMENT",
-        "dealer",
-        "dispatcher_replenishment",
-      ])
-      .optional(),
+    origin: orderOriginQuerySchema.optional(),
+    excludeOrigins: excludeOriginsQuerySchema.optional(),
     dealerId: objectIdSchema.optional(),
     // Defaults to FACTORY-only in the service (matches the factory kanban's
     // existing behavior) - the Invoice Center is the one caller that passes
@@ -36,7 +33,10 @@ export const factoryOrderListQuerySchema = z
 export const factoryShipmentBodySchema = z
   .object({
     driverName: z.string().trim().min(2).max(160),
-    driverPhone: z.string().trim().min(5).max(80),
+    // Deliberately no length rule: a driver's number being short, long or oddly
+    // formatted must never stop a load leaving the factory. The factory UI warns
+    // when generating the PI instead.
+    driverPhone: z.string().trim().min(1, "Driver phone is required").max(80),
     vehicleNumber: optionalTrimmedString(80),
     remarks: optionalTrimmedString(1000),
   })

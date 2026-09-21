@@ -295,26 +295,33 @@ function proformaBucketKey(item) {
 //   Wall Putty                    -> unitPrice / 1.13 / 1.05
 //   Tools & Accessories / Colorant -> unitPrice / 1.13            (0% excise)
 //   Everything else                -> unitPrice / 1.13 / 1.07
-// netUnitPrice rounds to the nearest whole rupee first (not just at
-// display time) - a proforma should never show paisa, and rounding the
-// Rate before deriving Amount keeps "Amount = Qty x Rate" reconcilable
-// by hand, which a reader checking the math would otherwise notice fails.
+// netUnitPrice (the printed "Rate") is kept at full float precision here -
+// it used to round to the nearest whole rupee at this exact step, which
+// then compounded through netAmount/exciseAmount/VAT and left the printed
+// Grand Total measurably off from the order's real (2-decimal) website
+// total on orders with many lines or large quantities. Rounding only
+// happens at display time now (see ProformaPdfDocument.jsx's `money(...,
+// { maximumFractionDigits: 2 })` calls) - the underlying numbers used for
+// every downstream calculation are always exact.
 export function computeProformaLineAmounts(item) {
   const rate = Number(item?.unitPrice || 0);
   const quantity = Number(item?.quantity || 0);
   const bucketKey = proformaBucketKey(item);
   const exciseMultiplier = PROFORMA_TAX_BUCKET_META[bucketKey].exciseMultiplier;
-  const netUnitPrice = Math.round(rate / (1 + PROFORMA_VAT_RATE) / exciseMultiplier);
-  const netAmount = Math.round(netUnitPrice * quantity);
-  const exciseAmount = Math.round(netAmount * (exciseMultiplier - 1));
+  const netUnitPrice = rate / (1 + PROFORMA_VAT_RATE) / exciseMultiplier;
+  const netAmount = netUnitPrice * quantity;
+  const exciseAmount = netAmount * (exciseMultiplier - 1);
   return { netUnitPrice, netAmount, exciseAmount, bucketKey };
 }
 
 // Per tax bucket: Basic Amount (net) + Excise Duty (skipped when the
 // bucket's rate is 0%, e.g. Tools and Accessories) = Taxable Amount.
 // Overall: Total Taxable Amount (sum of every bucket's Taxable Amount) minus
-// Discount, taxed at 13% VAT, gives the Grand Total - reconciles exactly to
-// the sum of the original tax-inclusive line totals when discount is 0.
+// Discount, taxed at 13% VAT, gives the Grand Total. Every amount here stays
+// at full float precision (no intermediate rounding) - with discount 0 this
+// makes Grand Total reconcile exactly (not just approximately) to the sum
+// of the order's own tax-inclusive line totals, i.e. the website's total.
+// Only the caller's display layer rounds, to 2 decimals.
 export function computeProformaTotals(items = [], { discount = 0 } = {}) {
   let basicAmount = 0;
   let totalExcise = 0;
@@ -354,8 +361,8 @@ export function computeProformaTotals(items = [], { discount = 0 } = {}) {
   });
 
   const taxableAmount = basicAmount + totalExcise;
-  const discountAmount = Math.min(Math.round(Number(discount || 0)), taxableAmount);
-  const vat = Math.round((taxableAmount - discountAmount) * PROFORMA_VAT_RATE);
+  const discountAmount = Math.min(Number(discount || 0), taxableAmount);
+  const vat = (taxableAmount - discountAmount) * PROFORMA_VAT_RATE;
   const grandTotal = taxableAmount - discountAmount + vat;
 
   return { lines, buckets, basicAmount, taxableAmount, discountAmount, vat, grandTotal };

@@ -166,7 +166,8 @@ export function AdminMobileStyles() {
         display: flex;
       }
       .admin-m-order-swipe-verify,
-      .admin-m-order-swipe-reject{
+      .admin-m-order-swipe-reject,
+      .admin-m-order-swipe-edit{
         flex: 1;
         border: none;
         display: flex;
@@ -181,6 +182,21 @@ export function AdminMobileStyles() {
       }
       .admin-m-order-swipe-verify{ background: var(--color-azure, #0071e3); }
       .admin-m-order-swipe-reject{ background: #b42318; }
+      /* Same amber as the SCHEME badge, so swiping a scheme card reveals an
+         action that visibly belongs to it. */
+      .admin-m-order-swipe-edit{ background: var(--color-caution, #b64400); }
+
+      .admin-m-orders-header-actions{ display:inline-flex; align-items:center; gap:8px; }
+      /* Creating a scheme is the one thing an admin previously could not do
+         from a phone at all - a real button, not a hidden gesture. */
+      .admin-m-scheme-btn{
+        display:inline-flex; align-items:center; gap:5px;
+        height:34px; padding:0 13px; border:0; border-radius:999px;
+        background: var(--color-azure, #0071e3); color:#fff;
+        font-size:13.5px; font-weight:650; white-space:nowrap; cursor:pointer;
+        transition: transform 160ms var(--ease-out, cubic-bezier(.23,1,.32,1)), background-color 160ms ease;
+      }
+      .admin-m-scheme-btn:active{ transform: scale(.96); }
 
       /* Catalog mobile (ADMIN_MOBILE_DESIGN_PROMPT.md §4) - family/variant
          row cards mirror .dealer-m-catalog-card's image+body shell, and the

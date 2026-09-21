@@ -18,7 +18,7 @@ export async function downloadProformaPdf(invoice) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${deriveProformaId(invoice)}.pdf`;
+  link.download = `${invoice.orderOrigin === "SCHEME" ? "SCHEME-" : ""}${deriveProformaId(invoice)}.pdf`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -13,6 +13,7 @@ import {
   Avatar,
   EmptyState,
   GhostButton,
+  MetricTile,
   Pill,
   PrimaryButton,
   SearchField,
@@ -77,37 +78,6 @@ function buildPageList(current, total) {
     prev = p;
   });
   return result;
-}
-
-// "up" isn't always good news - a rising Voided count is bad, so the tile
-// that shows it passes invert=true to flip the color read without changing
-// the underlying direction math.
-function TrendBadge({ trend, invert = false }) {
-  const { percent = 0, direction = "flat" } = trend || {};
-  const isGood = direction === "flat" ? null : invert ? direction === "down" : direction === "up";
-  const color = isGood === null ? "var(--color-graphite, #707070)" : isGood ? "#15803d" : "#b42318";
-  const arrow = direction === "up" ? "↑" : direction === "down" ? "↓" : "•";
-
-  return (
-    <span className="admin-sales-trend" style={{ color }}>
-      <span aria-hidden="true">{arrow}</span>
-      {Math.abs(percent).toFixed(1)}%
-      <span className="admin-sales-trend-label">vs last 30 days</span>
-    </span>
-  );
-}
-
-function SalesMetricTile({ label, value, icon, iconColor, iconBg, trend, invertTrend = false }) {
-  return (
-    <div className="admin-sales-metric-tile">
-      <div className="admin-sales-metric-icon" style={{ background: iconBg, color: iconColor }}>
-        <DashboardIcon name={icon} size={18} strokeWidth={1.9} />
-      </div>
-      <div className="admin-sales-metric-label">{label}</div>
-      <div className="admin-sales-metric-value">{value}</div>
-      <TrendBadge trend={trend} invert={invertTrend} />
-    </div>
-  );
 }
 
 // Self-contained trigger button + portal popover, mirroring the DateFilter
@@ -234,12 +204,11 @@ function SalesFiltersControl({ activeFilterCount, dateFrom, dateTo, onApply, onC
 
 function SalesDealerCard({ summary, onOpen }) {
   const dealerName = getDealerName(summary);
-  const initial = dealerName.trim().charAt(0).toUpperCase() || "D";
 
   return (
     <article className="admin-sales-dealer-card" onClick={onOpen}>
       <div className="admin-sales-dealer-top">
-        <div className="admin-sales-avatar">{initial}</div>
+        <Avatar label={dealerName} size={44} />
         <div className="admin-sales-dealer-copy">
           <h3>{dealerName}</h3>
           <p>{getDealerContact(summary)}</p>
@@ -442,7 +411,7 @@ export default function AdminSalesPage() {
 
   return (
     <div className="admin-sales-page">
-      <Surface padding={22} className="dash-fade-up admin-sales-hero">
+      <Surface padding={22} className="dash-fade-up">
         <SectionHeader
           icon="chart"
           title="Sales"
@@ -467,38 +436,26 @@ export default function AdminSalesPage() {
         />
 
         <div className="admin-sales-metrics">
-          <SalesMetricTile
-            label="Completed Sales"
-            value={Number(summary.completedCount || 0).toLocaleString()}
-            icon="checkSquare"
-            iconBg="rgba(239,68,68,.12)"
-            iconColor="#ef4444"
-            trend={summary.trend?.completedCount}
-          />
-          <SalesMetricTile
+          <MetricTile
             label="Total Revenue"
             value={formatMoney(summary.totalRevenue)}
             icon="chart"
-            iconBg="rgba(0,113,227,.12)"
-            iconColor="var(--color-azure, #0071e3)"
-            trend={summary.trend?.totalRevenue}
+            tone="accent"
           />
-          <SalesMetricTile
+          <MetricTile
+            label="Completed Sales"
+            value={Number(summary.completedCount || 0).toLocaleString()}
+            icon="checkSquare"
+          />
+          <MetricTile
             label="Average Sale"
             value={formatMoney(summary.averageSaleValue)}
             icon="trend"
-            iconBg="rgba(147,51,234,.12)"
-            iconColor="#9333ea"
-            trend={summary.trend?.averageSaleValue}
           />
-          <SalesMetricTile
+          <MetricTile
             label="Voided Sales"
             value={Number(summary.voidedCount || 0).toLocaleString()}
             icon="warning"
-            iconBg="rgba(245,158,11,.12)"
-            iconColor="#f59e0b"
-            trend={summary.trend?.voidedCount}
-            invertTrend
           />
         </div>
 
@@ -572,55 +529,11 @@ export default function AdminSalesPage() {
           display:grid;
           gap:16px;
         }
-        .admin-sales-hero{
-          border-radius:30px !important;
-          overflow:hidden;
-          background:
-            radial-gradient(circle at 92% 10%, rgba(0,113,227,.1), transparent 30%),
-            linear-gradient(145deg, rgba(255,255,255,.98), rgba(245,245,247,.9)) !important;
-        }
         .admin-sales-metrics{
           margin-top:16px;
           display:grid;
           grid-template-columns:repeat(4, minmax(0,1fr));
           gap:14px;
-        }
-        .admin-sales-metric-tile{
-          display:grid;
-          gap:8px;
-          padding:18px;
-          border-radius:20px;
-          background:#fff;
-          box-shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 26px rgba(15,23,42,.07);
-        }
-        .admin-sales-metric-icon{
-          width:38px;
-          height:38px;
-          border-radius:12px;
-          display:grid;
-          place-items:center;
-        }
-        .admin-sales-metric-label{
-          font-size:12.5px;
-          font-weight:650;
-          color:var(--color-graphite,#707070);
-        }
-        .admin-sales-metric-value{
-          font-size:24px;
-          font-weight:800;
-          letter-spacing:-.03em;
-          color:var(--color-ink,#1d1d1f);
-        }
-        .admin-sales-trend{
-          display:flex;
-          align-items:center;
-          gap:4px;
-          font-size:12px;
-          font-weight:700;
-        }
-        .admin-sales-trend-label{
-          color:var(--color-graphite,#707070);
-          font-weight:500;
         }
         .admin-sales-error{
           margin-top:14px;
@@ -843,13 +756,11 @@ export default function AdminSalesPage() {
           display:grid;
           gap:14px;
           cursor:pointer;
-          background:
-            radial-gradient(circle at 92% 8%, rgba(0,113,227,.07), transparent 30%),
-            linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.92));
-          transition:transform .18s ease, border-color .18s ease;
+          background:#fff;
+          transition:border-color .16s ease, background-color .16s ease;
         }
         .admin-sales-dealer-card:hover{
-          transform:translateY(-2px);
+          background:rgba(0,113,227,.03);
           border-color:rgba(0,113,227,.2);
         }
         .admin-sales-dealer-top{
@@ -857,18 +768,6 @@ export default function AdminSalesPage() {
           grid-template-columns:44px minmax(0,1fr) 34px;
           gap:12px;
           align-items:center;
-        }
-        .admin-sales-avatar{
-          width:44px;
-          height:44px;
-          border-radius:16px;
-          display:grid;
-          place-items:center;
-          color:var(--color-azure,#0071e3);
-          background:rgba(0,113,227,.08);
-          font-size:17px;
-          font-weight:850;
-          letter-spacing:-.03em;
         }
         .admin-sales-dealer-copy{
           min-width:0;

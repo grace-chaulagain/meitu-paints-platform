@@ -34,10 +34,11 @@ import { DispatcherOrdersMobileView } from "../../mobile/DispatcherOrdersMobileV
 
 const PAGE_SIZE = 10;
 
+// Same tabs, in the same order, as the dealer orders page (All Orders first).
 const ORDER_FILTERS = [
+  { key: "ALL", label: "All Orders" },
   { key: "PENDING", label: "Pending" },
   { key: "COMPLETED", label: "Completed" },
-  { key: "ALL", label: "All Orders" },
 ];
 
 function formatDayKey(value) {
@@ -177,6 +178,13 @@ function OrderTimelineRow({ order, onOpen, productsMap, familyMap }) {
           <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span className="dealer-order-number">{order.orderNumber || "Unnamed Order"}</span>
             <Pill tone={meta.pillTone} size="small">{pillLabel}</Pill>
+            {/* A scheme is a free-of-cost grant from Meitu, not a stock
+                purchase - the badge explains the NPR 0 total. */}
+            {order.orderOrigin === "SCHEME" ? (
+              <Pill tone="caution" size="small">
+                {order.scheme?.label ? `SCHEME · ${order.scheme.label}` : "SCHEME · Free of cost"}
+              </Pill>
+            ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <span className="dealer-order-amount">{formatMoney(order?.totals?.total, order?.totals?.currency)}</span>
@@ -449,7 +457,7 @@ export default function DispatcherOrderHistoryPage() {
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("PENDING");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -582,7 +590,7 @@ export default function DispatcherOrderHistoryPage() {
       <Surface padding={18} className="dash-fade-up">
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <SectionHeader
-            icon="history"
+            icon="orders"
             title="Your stock orders"
             subtitle="Track every order you've placed with the Factory, from submission through delivery."
             action={isRefreshing ? <Pill tone="accent" size="small">Updating…</Pill> : null}

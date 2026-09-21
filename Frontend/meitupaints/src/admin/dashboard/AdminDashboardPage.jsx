@@ -60,7 +60,6 @@ import AdminDispatcherStockPage from "./dispatchers/AdminDispatcherStockPage.jsx
 import AdminDispatcherOrdersPage from "./dispatchers/AdminDispatcherOrdersPage.jsx";
 import AdminDispatcherSalesPurchasesPage from "./dispatchers/AdminDispatcherSalesPurchasesPage.jsx";
 import AdminDispatcherProductHistoryPage from "./dispatchers/AdminDispatcherProductHistoryPage.jsx";
-import AdminInsightsPage from "./insights/AdminInsightsPage.jsx";
 import AdminOrderDetailPage from "./orders/AdminOrderDetailPage.jsx";
 import AdminOrdersPage from "./orders/AdminOrdersPage.jsx";
 import AdminSalesPage from "./sales/AdminSalesPage.jsx";
@@ -103,7 +102,8 @@ const SECTION_ROUTE_MAP = {
   [SECTIONS.SALES]: "/admin/dashboard/sales",
   [SECTIONS.COUPONS]: "/admin/dashboard/coupons",
   [SECTIONS.NOTIFICATIONS]: "/admin/dashboard/notifications",
-  [SECTIONS.INSIGHTS]: "/admin/dashboard/insights",
+  // Leaves the dashboard shell entirely - Insights is its own workspace.
+  [SECTIONS.INSIGHTS]: "/admin/insights",
   [SECTIONS.SETTINGS]: "/admin/dashboard/settings",
 };
 
@@ -959,9 +959,6 @@ export default function AdminDashboard() {
 
       case SECTIONS.NOTIFICATIONS:
         return isMobile ? <AdminNotificationsMobileView /> : <NotificationCenterPage embedded />;
-
-      case SECTIONS.INSIGHTS:
-        return <AdminInsightsPage />;
 
       case SECTIONS.SETTINGS:
         return isMobile ? <AdminSettingsMobileView /> : <AdminSettingsPage />;

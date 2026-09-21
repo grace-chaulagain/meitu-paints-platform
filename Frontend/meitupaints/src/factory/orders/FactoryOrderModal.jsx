@@ -71,6 +71,13 @@ function TableWrap({ headers, cellPadding = "9px 12px", children }) {
   );
 }
 
+// Digits in a driver's number, ignoring spacing/punctuation and a leading
+// Nepal country code (+977 / 00977) so "+977 9800000000" reads as 10, not 13.
+function driverPhoneDigits(value) {
+  const digits = String(value || "").replace(/\D/g, "").replace(/^00/, "");
+  return digits.length === 13 && digits.startsWith("977") ? digits.slice(3) : digits;
+}
+
 export default function FactoryOrderModal({ orderId, orders, onClose, onDispatched, onDelivered, onRefetchList }) {
   const order = useMemo(() => (orders || []).find((item) => item._id === orderId) || null, [orders, orderId]);
 
@@ -200,13 +207,21 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
         driver,
         items: order.items || [],
         totals: order.totals || {},
+        orderOrigin: order.orderOrigin,
+        scheme: order.scheme,
       });
     });
     setPdfBusy(false);
   }
 
+  // Warn-only: a non-10-digit number never blocks the PI or the dispatch, but
+  // the PI is handed to the driver, so whoever's generating it should know.
+  const phoneDigitCount = driverPhoneDigits(driverPhone).length;
+  const phoneLooksOff = Boolean(driverPhone.trim()) && phoneDigitCount !== 10;
+
   async function handleCreateProforma() {
     const wasAlreadyGenerated = piGenerated;
+    const phoneWarning = phoneLooksOff;
     await generateProforma({ name: driverName, phone: driverPhone, vehicleNumber });
     setSavingDispatchPrep(true);
     const success = await run(() =>
@@ -220,19 +235,40 @@ export default function FactoryOrderModal({ orderId, orders, onClose, onDispatch
     setPiGenerated(true);
     setChecklist((current) => ({ ...current, invoice: true }));
     setGeneratingProforma(false);
-    setToast({
-      tone: "success",
-      title: wasAlreadyGenerated ? "Proforma Invoice updated" : "Proforma Invoice generated",
-      description: `${order.orderNumber} · download started.`,
-    });
+    setToast(
+      phoneWarning
+        ? {
+            tone: "caution",
+            title: "Driver number isn't 10 digits",
+            description: `It has ${phoneDigitCount} digit${phoneDigitCount === 1 ? "" : "s"}. The Proforma Invoice was still ${
+              wasAlreadyGenerated ? "updated" : "generated"
+            } - please double-check the number before handing it to the driver.`,
+            duration: 8000,
+          }
+        : {
+            tone: "success",
+            title: wasAlreadyGenerated ? "Proforma Invoice updated" : "Proforma Invoice generated",
+            description: `${order.orderNumber} · download started.`,
+          },
+    );
   }
 
-  function handleDownloadExistingProforma() {
-    return generateProforma({
+  async function handleDownloadExistingProforma() {
+    const savedPhone = order.factory?.driverPhone || "";
+    await generateProforma({
       name: order.factory?.driverName || "",
-      phone: order.factory?.driverPhone || "",
+      phone: savedPhone,
       vehicleNumber: order.factory?.vehicleNumber || "",
     });
+    const digits = driverPhoneDigits(savedPhone).length;
+    if (savedPhone.trim() && digits !== 10) {
+      setToast({
+        tone: "caution",
+        title: "Driver number isn't 10 digits",
+        description: `The saved number has ${digits} digit${digits === 1 ? "" : "s"}. The Proforma Invoice was still downloaded.`,
+        duration: 8000,
+      });
+    }
   }
 
   async function handleDownloadOrderSummary() {

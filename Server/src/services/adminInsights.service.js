@@ -1,14 +1,31 @@
+// NOTE (Insights rebuild, Phase 4): the admin Insights *page* no longer
+// calls this - it was replaced section-by-section by
+// src/services/adminInsights/{cashPosition,reconciliation,orderAnalytics,
+// dealerStatements,performance}.service.js (real Mongo aggregation
+// pipelines instead of the full-collection-scan-and-JS-reduce approach
+// below). This file, its route (GET /api/admin/insights), and its
+// controller (getAdminInsightsController) are kept alive ONLY because
+// Frontend/meitupaints/src/admin/mobile/AdminHomeMobileView.jsx's "Morning
+// Brief" hero (today's orders/revenue + a revenue trend sparkline) still
+// depends on this exact response shape (data.home.kpis, data.home.pulse,
+// data.orders.summary.totalOrders). Migrating that unrelated page's data
+// source was out of scope for the Insights rebuild - do not delete this
+// file without first checking AdminHomeMobileView.jsx.
 import mongoose from "mongoose";
 
 import ApiError from "../utils/apiError.js";
 import DealerProfile from "../models/DealerProfile.model.js";
 import Dispatcher, { DISPATCHER_STATUS } from "../models/Dispatcher.model.js";
 import Order from "../models/Order.model.js";
+// Imported rather than redeclared: this list used to be a local copy that
+// silently drifted when SCHEME was added to the shared one, so free-of-cost
+// scheme grants were still being counted as real orders and revenue by the
+// admin mobile "Morning Brief" this file feeds. One definition, one place.
+import { INTERNAL_ORDER_ORIGINS } from "./adminInsights/insightsShared.js";
 
 const DAY_MS = 86400000;
 const ACCEPTED_ORDER_STATUSES = ["VERIFIED", "DISPATCHED", "COMPLETED"];
 const FULFILLED_ORDER_STATUSES = ["DISPATCHED", "COMPLETED"];
-const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT"];
 
 function isAcceptedOrder(order) {
   return ACCEPTED_ORDER_STATUSES.includes(normalizeUpper(order?.status));

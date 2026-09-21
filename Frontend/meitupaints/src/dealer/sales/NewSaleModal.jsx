@@ -47,9 +47,14 @@ function CardLabel({ icon, children }) {
   );
 }
 
+// Keys a whole-number field must never accept: number inputs let through the
+// decimal point, exponent ("1e3") and signs, all of which read as a quantity
+// that means nothing for a count of units.
+const NON_INTEGER_KEYS = new Set([".", ",", "e", "E", "+", "-"]);
+
 function QuantityStepper({ value, max, onChange }) {
   function clamp(next) {
-    return Math.min(max, Math.max(MIN_QUANTITY, next));
+    return Math.min(max, Math.max(MIN_QUANTITY, Math.floor(next) || MIN_QUANTITY));
   }
 
   return (
@@ -65,9 +70,14 @@ function QuantityStepper({ value, max, onChange }) {
       </button>
       <input
         type="number"
+        inputMode="numeric"
+        step={1}
         min={MIN_QUANTITY}
         max={max}
         value={value}
+        onKeyDown={(event) => {
+          if (NON_INTEGER_KEYS.has(event.key)) event.preventDefault();
+        }}
         onChange={(event) => onChange(clamp(Number(event.target.value || 0)))}
         className="new-sale-stepper-input"
       />

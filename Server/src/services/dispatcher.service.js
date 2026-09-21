@@ -501,9 +501,17 @@ export async function listMyReplenishmentOrders({
   const perPage = Math.min(100, toPositiveInt(limit, 20));
   const skip = (currentPage - 1) * perPage;
 
+  // Both origins a dispatcher can be the CUSTOMER of: stock they bought, and
+  // free-of-cost scheme grants addressed to them. Schemes to their dealers
+  // are a different thing entirely and stay invisible here - those carry
+  // `dispatcherId: null`, and every dispatcher-facing query in this file
+  // scopes on `dispatcherId`, so a dealer's scheme is structurally out of
+  // reach rather than merely filtered out.
   const query = {
     dispatcherCustomerId: dispatcherId,
-    orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+    orderOrigin: {
+      $in: [ORDER_ORIGIN.DISPATCHER_REPLENISHMENT, ORDER_ORIGIN.SCHEME],
+    },
     isDeleted: { $ne: true },
   };
 
@@ -556,7 +564,9 @@ export async function getMyReplenishmentOrderById({ user, orderId } = {}) {
   const order = await Order.findOne({
     _id: orderId,
     dispatcherCustomerId: dispatcherId,
-    orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT,
+    orderOrigin: {
+      $in: [ORDER_ORIGIN.DISPATCHER_REPLENISHMENT, ORDER_ORIGIN.SCHEME],
+    },
     isDeleted: { $ne: true },
   }).lean();
 

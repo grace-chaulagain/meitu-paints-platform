@@ -22,9 +22,21 @@ const ORDER_STATUS = Object.freeze({
 // DISPATCHER_REPLENISHMENT: a dispatcher ordering their own regional
 // stock from the central Factory - reuses the same order lifecycle,
 // distinguished by this field rather than a parallel pipeline.
+// SCHEME: a free-of-cost order the admin creates to reward a dealer or
+// dispatcher (fiscal-year volume schemes). It reuses the whole order
+// pipeline, but differs in three ways that the rest of the code must
+// respect:
+//   1. It is ALWAYS fulfilled by the factory, even when the recipient
+//      dealer's own fulfillmentMode is DISPATCHER - so routing must key
+//      off orderOrigin here, not off dealerSnapshot.fulfillmentMode.
+//   2. Every line is zero-value, so it is excluded from revenue/AR the
+//      same way DISPATCHER_REPLENISHMENT is.
+//   3. It is created already VERIFIED (admin creating it is the
+//      approval) with stock reserved at creation.
 const ORDER_ORIGIN = Object.freeze({
   DEALER: "DEALER",
   DISPATCHER_REPLENISHMENT: "DISPATCHER_REPLENISHMENT",
+  SCHEME: "SCHEME",
 });
 
 const STOCK_RESERVATION_STATUS = Object.freeze({
@@ -243,6 +255,15 @@ const OrderAmendmentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // "" for an ordinary amend; "SCHEME_UPDATE" for an admin edit of a scheme
+    // grant after it was created/verified, so the activity feed can word it
+    // as such.
+    kind: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     amendedAt: {
       type: Date,
       default: Date.now,
@@ -390,6 +411,30 @@ const OrderSchema = new mongoose.Schema(
       ref: "Dispatcher",
       default: null,
       index: true,
+    },
+
+    // Set only on SCHEME orders. `label` is the campaign this giveaway
+    // belongs to (e.g. "Dashain 2083 Volume Scheme") so schemes can be
+    // reported on as a group rather than as a pile of anonymous
+    // zero-value orders.
+    scheme: {
+      label: { type: String, default: "", trim: true },
+      note: { type: String, default: "", trim: true },
+      createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      // Set when an admin amends a scheme that the factory hasn't shipped
+      // yet. A scheme carries no price, so the usual "the totals changed"
+      // audit trail says nothing about it - this is the only record that the
+      // contents of the grant were revised after it was raised.
+      updatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      updatedAt: { type: Date, default: null },
     },
 
     // Snapshotted from dealer (or, for a DISPATCHER_REPLENISHMENT order,
@@ -733,6 +778,16 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
         );
       }
       this.dealerId = null;
+    } else if (this.orderOrigin === ORDER_ORIGIN.SCHEME) {
+      // A scheme goes to exactly one recipient - a dealer or a
+      // dispatcher - never both and never neither.
+      const hasDealer = Boolean(this.dealerId);
+      const hasDispatcher = Boolean(this.dispatcherCustomerId);
+      if (hasDealer === hasDispatcher) {
+        throw new Error(
+          "A SCHEME order needs exactly one recipient: dealerId or dispatcherCustomerId",
+        );
+      }
     } else if (!this.dealerId) {
       throw new Error("dealerId is required for DEALER orders");
     }
@@ -743,7 +798,10 @@ OrderSchema.pre("validate", function normalizeOrderFields() {
       this.isModified("dealerSnapshot.fulfillmentMode") ||
       this.isModified("dispatcherId")) &&
     this.dealerSnapshot?.fulfillmentMode === "DISPATCHER" &&
-    !this.dispatcherId
+    !this.dispatcherId &&
+    // Schemes always ship direct from the factory, so a dispatcher-served
+    // dealer's scheme legitimately has no routing dispatcher.
+    this.orderOrigin !== ORDER_ORIGIN.SCHEME
   ) {
     throw new Error(
       "dispatcherId is required when dealer fulfillmentMode is DISPATCHER",

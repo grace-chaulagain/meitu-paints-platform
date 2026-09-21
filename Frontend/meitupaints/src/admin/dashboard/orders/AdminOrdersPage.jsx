@@ -9,11 +9,13 @@ import {
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import CreateSchemeOrderModal from "./CreateSchemeOrderModal.jsx";
 import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
 import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { adminOrderStatusMeta, formatTime, groupOrdersByDay, money } from "./orderFormatting.js";
 import { normalizeStatus, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
+import { getTierPrice } from "../../../dealer/pricing.js";
 import {
   EmptyState as DashboardEmptyState,
   GhostButton,
@@ -69,6 +71,14 @@ const ARCHIVE_STATUS_FILTERS = ORDER_STATUS_FILTERS.filter(
 // between these two - two different concepts (a dispatcher's own
 // restock order vs. a dealer's order fulfilled through a dispatcher) with
 // near-identical names. Spelled out so the label alone disambiguates them.
+//
+// Scheme orders are deliberately NOT their own segment here - they snapshot
+// `fulfillmentMode: "FACTORY"` (schemes always ship from the factory, even
+// for a dispatcher-served dealer) and show up mixed in with real dealer
+// sales under "Factory", same as any other order. They're still instantly
+// identifiable by their SCHEME badge and NPR 0 total (see OriginBadge) - a
+// separate isolate-to-schemes-only filter was more ceremony than a small,
+// self-identifying order type needs.
 const ROUTE_MODES = [
   { key: "ALL", label: "All" },
   { key: "FACTORY", label: "Factory" },
@@ -127,7 +137,10 @@ function describeRouteScope(routeMode, dispatchers) {
       text: "Showing dealer orders routed through dispatchers - these dealers aren't part of your Factory queue.",
     };
   }
-  return { tone: "info", text: "Showing every routing path - Factory, dispatcher-routed, and dispatchers' own orders." };
+  return {
+    tone: "info",
+    text: "Showing every routing path - Factory, scheme, dispatcher-routed, and dispatchers' own orders.",
+  };
 }
 
 const DATE_PRESETS = [
@@ -494,62 +507,6 @@ export function SectionHeader({ title, subtitle, action = null }) {
 }
 
 
-// The "All routes" scope is the one place Factory orders and dispatcher-
-// related orders legitimately land in the same list together (it's the
-// tab-level default there, not a mistake) - so it's also the one place a
-// flat day-grouped list can genuinely read as "whose order is this?" A
-// route section per routing type, each with its own day-grouped list
-// inside, keeps the day-grouping everyone's used to while making the type
-// boundary a real heading instead of a badge you have to read per card.
-// Returns a single ungrouped section when `active` is false, so callers
-// that don't need this (the normal single-route scopes) pay no extra cost.
-function groupOrdersByRoute(orders, { active }) {
-  if (!active) {
-    return [{ routeKey: null, routeLabel: null, dayGroups: groupOrdersByDay(orders) }];
-  }
-
-  const buckets = new Map();
-  orders.forEach((order) => {
-    const dealer = order?.dealerSnapshot || order?.dealerId || {};
-    const dispatcher = order?.dispatcherSnapshot || order?.dispatcherId || {};
-    const isReplenishment = order?.orderOrigin === "DISPATCHER_REPLENISHMENT";
-    const isDispatcherRouted = !isReplenishment && (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER";
-
-    let routeKey;
-    let routeLabel;
-    if (isReplenishment) {
-      routeKey = "dispatcher-replenishment";
-      routeLabel = "Dispatchers' Own Orders";
-    } else if (isDispatcherRouted) {
-      const name = dispatcher?.companyName || dispatcher?.name || "Unknown Dispatcher";
-      // Keyed on the actual dispatcherId (populated-or-not), not the
-      // display name - two dispatchers sharing a company name would
-      // otherwise merge into one section/count here, exactly the "wrong
-      // dealers grouped together" failure this feature exists to prevent.
-      const dispatcherIdValue = order?.dispatcherId?._id || order?.dispatcherId || name;
-      routeKey = `dispatcher:${String(dispatcherIdValue)}`;
-      routeLabel = `Routed via ${name}`;
-    } else {
-      routeKey = "factory";
-      routeLabel = "Factory Orders";
-    }
-
-    if (!buckets.has(routeKey)) {
-      buckets.set(routeKey, { routeKey, routeLabel, isDispatcherRelated: routeKey !== "factory", orders: [] });
-    }
-    buckets.get(routeKey).orders.push(order);
-  });
-
-  // Factory first (it's home base), then dispatcher-related groups
-  // alphabetically by label so the list order is stable across reloads.
-  return [...buckets.values()]
-    .sort((a, b) => {
-      if (a.isDispatcherRelated !== b.isDispatcherRelated) return a.isDispatcherRelated ? 1 : -1;
-      return a.routeLabel.localeCompare(b.routeLabel);
-    })
-    .map((bucket) => ({ ...bucket, dayGroups: groupOrdersByDay(bucket.orders) }));
-}
-
 function buildPageList(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
@@ -665,7 +622,18 @@ export function RoutingBadge({ mode, dispatcherName = "" }) {
   );
 }
 
-export function OriginBadge({ origin }) {
+// Keyed off orderOrigin rather than any derived signal (a zero total, for
+// instance) so a scheme is recognisable the instant it appears in any
+// list, and can never be confused with an ordinary order that happens to
+// total zero. Shared with AdminOrderDetailPage.
+export function OriginBadge({ origin, scheme = null }) {
+  if (origin === "SCHEME") {
+    return (
+      <Pill tone="caution" size="small" title={scheme?.label || "Free-of-cost scheme order"}>
+        {scheme?.label ? `SCHEME · ${scheme.label}` : "SCHEME · Free of cost"}
+      </Pill>
+    );
+  }
   if (origin !== "DISPATCHER_REPLENISHMENT") return null;
   return (
     <Pill tone="accent" size="small">
@@ -754,7 +722,18 @@ export function OrderThumbnails({ items, productsMap, familyMap }) {
   );
 }
 
-export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, productsMap, familyMap }) {
+// `onEditScheme` is optional - pages that don't own the scheme modal (the
+// per-dealer order list, for one) simply don't pass it and get no edit
+// affordance, rather than a button wired to nothing.
+export function AdminOrderTimelineRow({
+  item,
+  onOpen,
+  onVerify,
+  onEditScheme,
+  isArrived,
+  productsMap,
+  familyMap,
+}) {
   const status = normalizeStatus(item.status);
   const meta = adminOrderStatusMeta(status);
   const items = Array.isArray(item.items) ? item.items : [];
@@ -765,6 +744,12 @@ export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, produ
   // order - reusing it here means the inline button and the detail page's
   // action area can never disagree about what's actually offered.
   const verifyTransition = getTransitions(item, "ADMIN").find((t) => t.action === "verify");
+  // Mirrors SCHEME_EDITABLE_STATUSES on the server: a scheme is only
+  // amendable while the factory still has it in the Inbox. Past that the
+  // goods have shipped and the API refuses, so the button would only ever
+  // produce an error.
+  const canEditScheme =
+    typeof onEditScheme === "function" && item?.orderOrigin === "SCHEME" && status === "VERIFIED";
   // The one binary distinction that actually matters at a glance: is this
   // Factory's normal work, or is it routed through a dispatcher in some way
   // (a dealer order fulfilled via dispatcher, or a dispatcher's own restock
@@ -801,11 +786,24 @@ export function AdminOrderTimelineRow({ item, onOpen, onVerify, isArrived, produ
               mode={dealer?.fulfillmentMode || "FACTORY"}
               dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
             />
-            <OriginBadge origin={item?.orderOrigin} />
+            <OriginBadge origin={item?.orderOrigin} scheme={item?.scheme} />
             <OwnerChip order={item} role="ADMIN" />
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {canEditScheme ? (
+            <ActionButton
+              icon="edit"
+              onClick={(event) => {
+                // The whole card is a button that opens the detail page -
+                // without this the edit modal and that navigation both fire.
+                event.stopPropagation();
+                onEditScheme(item);
+              }}
+            >
+              Edit
+            </ActionButton>
+          ) : null}
           {verifyTransition ? (
             <ActionButton icon="checkmark" onClick={() => onVerify(item, verifyTransition)}>
               Verify
@@ -1186,7 +1184,7 @@ function ProductSearchPicker({ onSelect, onRemove, onCancel }) {
   );
 }
 
-function LineEditor({ item, onChange, onRemove, currency = "NPR" }) {
+function LineEditor({ item, productsById, onChange, onRemove, currency = "NPR" }) {
   // Whether to search is tracked as local UI state, not by clearing
   // item.productId - that way clicking "Change" and then backing out
   // (Cancel) leaves the previously-selected product completely intact
@@ -1200,8 +1198,13 @@ function LineEditor({ item, onChange, onRemove, currency = "NPR" }) {
         onRemove={onRemove}
         onCancel={item.productId ? () => setSearching(false) : null}
         onSelect={(product) => {
-          const unitPrice = Number(product.pricing?.tiers?.[0]?.pricePerPack || 0);
           const quantity = toSafeNumber(item.quantity) || 1;
+          // Price for the quantity already on this line, not just
+          // whichever tier happens to be listed first - matches how
+          // picking a product in the dealer/dispatcher cart prices it.
+          const unitPrice =
+            resolveTierUnitPrice(product, quantity) ??
+            Number(product.pricing?.tiers?.[0]?.pricePerPack || 0);
           onChange({
             ...item,
             productId: product._id,
@@ -1248,13 +1251,24 @@ function LineEditor({ item, onChange, onRemove, currency = "NPR" }) {
             type="number"
             min="0"
             value={item.quantity ?? 0}
-            onChange={(e) =>
+            onChange={(e) => {
+              const quantity = toSafeNumber(e.target.value);
+              // Re-price against the product's own tiers for the new
+              // quantity - this is the actual fix: quantity used to change
+              // without ever re-checking which tier it now falls into, so
+              // the line total just scaled at whatever rate was already
+              // sitting there. Falls back to the existing rate if the
+              // product isn't in the live catalog (e.g. deactivated since
+              // this order was placed) rather than guessing.
+              const product = productsById?.get(String(item.productId));
+              const unitPrice = resolveTierUnitPrice(product, quantity) ?? item.unitPrice;
               onChange({
                 ...item,
-                quantity: toSafeNumber(e.target.value),
-                lineTotal: deriveLineTotal(e.target.value, item.unitPrice),
-              })
-            }
+                quantity,
+                unitPrice,
+                lineTotal: deriveLineTotal(quantity, unitPrice),
+              });
+            }}
             style={inputStyle}
           />
         </div>
@@ -1328,8 +1342,42 @@ function buildAmendItems(order) {
   }));
 }
 
+// Re-resolves a product's unit price for a given quantity against its own
+// tiered pricing (the same engine the dealer/dispatcher cart uses to price
+// a line in the first place - see dealer/pricing.js:getTierPrice) - so
+// raising or lowering a line's quantity here can move it into a different
+// tier exactly like it would if the dealer built this order themselves.
+// Returns null (never 0) when the product is unknown or has no tier match,
+// so callers can fall back to keeping whatever price was already there
+// instead of silently zeroing out a line.
+function resolveTierUnitPrice(product, quantity) {
+  if (!product) return null;
+  const { unitPrice } = getTierPrice(
+    product.pricing?.tiers || [],
+    quantity,
+    product.pricing || {},
+    product.pack || {},
+  );
+  return unitPrice > 0 ? unitPrice : null;
+}
+
 export function AmendModal({ open, order, saving, onClose, onSave }) {
   const [items, setItems] = useState(() => buildAmendItems(order));
+  // Full active catalog (a separate, unfiltered cache entry from
+  // ProductSearchPicker's own `{q}`-scoped search below) - fetched purely so
+  // an existing line's price can be re-derived when its quantity changes.
+  // The order's stored item snapshot has no pricing.tiers of its own to
+  // recompute from, and this same list is small enough (this is a
+  // small-catalog paint company) that fetching it whole is cheap and
+  // already how the public catalog page itself works.
+  const catalogQuery = useGetProductsQuery({});
+  const productsById = useMemo(() => {
+    const map = new Map();
+    for (const product of catalogQuery.data || []) {
+      if (product?._id) map.set(String(product._id), product);
+    }
+    return map;
+  }, [catalogQuery.data]);
   const [dealerNote, setDealerNote] = useState(order?.dealerNote || "");
   const [internalNote, setInternalNote] = useState(order?.internalNote || "");
   const [reason, setReason] = useState("");
@@ -1440,6 +1488,7 @@ export function AmendModal({ open, order, saving, onClose, onSave }) {
                 <LineEditor
                   key={`${item.sku || item.code || "line"}-${index}`}
                   item={item}
+                  productsById={productsById}
                   onChange={(nextItem) => updateItem(index, nextItem)}
                   onRemove={() => removeItem(index)}
                   currency={currency}
@@ -1588,6 +1637,9 @@ export default function AdminOrdersPage() {
   // The search box shows whatever was last committed to the URL - if the admin
   // navigated away and came back, this restores the exact text they searched.
   const [search, setSearch] = useState(() => listState.committedSearch);
+  const [schemeModalOpen, setSchemeModalOpen] = useState(false);
+  // null = raising a new scheme; an order = amending that one.
+  const [editScheme, setEditScheme] = useState(null);
 
   const updateListState = useCallback(
     (patch) => {
@@ -1662,6 +1714,9 @@ export default function AdminOrdersPage() {
       params.fulfillmentMode = "DISPATCHER";
       params.dispatcherId = String(routeMode).split(":")[1] || "";
     } else if (routeMode !== "ALL") {
+      // Schemes snapshot fulfillmentMode FACTORY, so this scope shows them
+      // mixed in with real dealer sales - deliberate, not filtered out (see
+      // ROUTE_MODES's own comment).
       params.fulfillmentMode = routeMode;
     }
 
@@ -1743,11 +1798,9 @@ export default function AdminOrdersPage() {
     }
   }
 
-  const showRouteGroups = routeModeGroup(routeMode) === "ALL";
-  const routeGroups = useMemo(
-    () => groupOrdersByRoute(visibleOrders, { active: showRouteGroups }),
-    [visibleOrders, showRouteGroups],
-  );
+  // One date-ordered timeline whatever the routing scope: "All" routes means
+  // every route for the chosen status tab, not a separate section per route.
+  const dayGroups = useMemo(() => groupOrdersByDay(visibleOrders), [visibleOrders]);
   const pageList = useMemo(() => buildPageList(page, totalPages), [page, totalPages]);
 
   const loading = ordersQuery.isLoading && orders.length === 0;
@@ -1838,6 +1891,43 @@ export default function AdminOrdersPage() {
       page: 1,
     });
   const changeRouteMode = (next) => updateListState({ routeMode: next, page: 1 });
+
+  function openNewScheme() {
+    setEditScheme(null);
+    setSchemeModalOpen(true);
+  }
+
+  // Only offered while the factory still has it: once dispatched the goods
+  // have gone and the server refuses the edit anyway, so showing the action
+  // would just be a button that always fails.
+  function openSchemeForEdit(order) {
+    setEditScheme(order);
+    setSchemeModalOpen(true);
+  }
+
+  function closeSchemeModal() {
+    setSchemeModalOpen(false);
+    setEditScheme(null);
+  }
+
+  // A freshly created scheme is always VERIFIED, never SUBMITTED - the
+  // default "Pending" tab (status: SUBMITTED only) would never show it
+  // regardless of routing scope, so a plain close-the-modal left an admin
+  // staring at a list that looked unchanged. Jump to the "All" status tab
+  // (which also broadens the routing scope to "All", see
+  // defaultRouteModeFor) so the new scheme is immediately visible without a
+  // separate manual filter change. Editing or deleting an existing scheme
+  // doesn't need this - the admin already navigated to wherever they found
+  // it to open the modal in the first place.
+  //
+  // Deliberately doesn't close the modal itself: the modal plays its own
+  // short exit animation and then calls onClose (closeSchemeModal) - closing
+  // here would unmount it mid-fade.
+  function handleSchemeModalResult(reason) {
+    if (reason === "created") {
+      updateListState({ filterMode: "ALL", routeMode: "ALL", orderStatus: "ALL", page: 1 });
+    }
+  }
   // Deliberately narrower than resetFilters() - only snaps the routing scope
   // back to Factory (the universal default, see isDefaultRouteScope), leaving
   // search/date/status filters untouched. This is the banner's "wrong
@@ -1857,6 +1947,19 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="admin-orders-page" style={{ display: "grid", gap: 16 }}>
+      {/* Mounted only while open so the form always starts clean, and keyed
+          on the scheme being edited so switching between two of them
+          re-seeds the form rather than carrying the first one's basket over. */}
+      {schemeModalOpen ? (
+        <CreateSchemeOrderModal
+          key={editScheme?._id || "new"}
+          open={schemeModalOpen}
+          editOrder={editScheme}
+          onClose={closeSchemeModal}
+          onCreated={handleSchemeModalResult}
+        />
+      ) : null}
+
       <Surface padding={16} className="dash-fade-up">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <DashboardSectionHeader
@@ -1880,6 +1983,9 @@ export default function AdminOrdersPage() {
                 placeholder="Search order number or dealer…"
               />
             </div>
+            <PrimaryButton icon="plus" onClick={openNewScheme}>
+              Scheme order
+            </PrimaryButton>
           </div>
         </div>
 
@@ -1992,48 +2098,38 @@ export default function AdminOrdersPage() {
         ) : (
           <>
             <div className="admin-order-timeline">
-              {routeGroups.map((routeGroup) => (
-                <div key={routeGroup.routeKey || "flat"} className="admin-order-route-group">
-                  {routeGroup.routeLabel ? (
-                    <div className={`admin-order-route-heading ${routeGroup.isDispatcherRelated ? "is-dispatcher-related" : ""}`}>
-                      <span className="admin-order-route-heading-dot" aria-hidden="true" />
-                      {routeGroup.routeLabel}
-                      <span className="admin-order-route-heading-count">{routeGroup.orders.length}</span>
+              {dayGroups.map((group) => (
+                <div key={group.key} className="admin-order-timeline-day">
+                  <div className="admin-order-timeline-day-header">
+                    <div className="admin-order-timeline-day-label">
+                      {group.relativeLabel ? (
+                        <>
+                          <strong>{group.relativeLabel}</strong>
+                          <span className="admin-order-timeline-day-sep">•</span>
+                          <span>{group.dateText}</span>
+                        </>
+                      ) : (
+                        <strong>{group.dateText}</strong>
+                      )}
                     </div>
-                  ) : null}
-                  {routeGroup.dayGroups.map((group) => (
-                    <div key={group.key} className="admin-order-timeline-day">
-                      <div className="admin-order-timeline-day-header">
-                        <div className="admin-order-timeline-day-label">
-                          {group.relativeLabel ? (
-                            <>
-                              <strong>{group.relativeLabel}</strong>
-                              <span className="admin-order-timeline-day-sep">•</span>
-                              <span>{group.dateText}</span>
-                            </>
-                          ) : (
-                            <strong>{group.dateText}</strong>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {group.orders.map((item) => (
-                          <AdminOrderTimelineRow
-                            key={item._id}
-                            item={item}
-                            onOpen={openOrder}
-                            onVerify={(order, transition) => {
-                              setListActionError("");
-                              setConfirmVerify({ order, action: transition.action, target: transition.target });
-                            }}
-                            isArrived={arrivedIds.has(item._id)}
-                            productsMap={productsMap}
-                            familyMap={familyMap}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                  </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {group.orders.map((item) => (
+                      <AdminOrderTimelineRow
+                        key={item._id}
+                        item={item}
+                        onOpen={openOrder}
+                        onVerify={(order, transition) => {
+                          setListActionError("");
+                          setConfirmVerify({ order, action: transition.action, target: transition.target });
+                        }}
+                        onEditScheme={openSchemeForEdit}
+                        isArrived={arrivedIds.has(item._id)}
+                        productsMap={productsMap}
+                        familyMap={familyMap}
+                      />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2272,7 +2368,9 @@ export default function AdminOrdersPage() {
         .admin-route-scope-banner.tone-info .admin-route-scope-banner-reset:hover{ background:rgba(255,255,255,.9); }
 
         .admin-route-menu{
-          z-index:1401;
+          /* No z-index here on purpose - PopoverListMenu sets it inline on
+             both the scrim and this panel (MENU_SCRIM_Z/MENU_PANEL_Z in
+             ApplePickers.jsx) so the two can't drift apart again. */
           padding:10px;
           border-radius:20px;
           background:#fff;
@@ -2411,38 +2509,6 @@ export default function AdminOrdersPage() {
         .admin-dispatcher-picker{ display:inline-flex; }
 
         .admin-order-timeline{ position:relative; display:grid; gap:18px; }
-        .admin-order-route-group{ display:grid; gap:14px; }
-        /* Only rendered when the "All routes" scope could genuinely mix
-           Factory and dispatcher-related orders in one list - a real
-           heading per routing type instead of a per-card badge you have to
-           read every time, so "whose order is this" is answered once per
-           group instead of once per card. */
-        .admin-order-route-heading{
-          display:flex;
-          align-items:center;
-          gap:8px;
-          padding:0 2px;
-          font-size:12.5px;
-          font-weight:700;
-          color:var(--color-graphite, #707070);
-          text-transform:uppercase;
-          letter-spacing:.03em;
-        }
-        .admin-order-route-heading.is-dispatcher-related{ color:var(--color-azure, #0071e3); }
-        .admin-order-route-heading-dot{
-          width:7px;
-          height:7px;
-          border-radius:999px;
-          background:rgba(29,29,31,.25);
-          flex-shrink:0;
-        }
-        .admin-order-route-heading.is-dispatcher-related .admin-order-route-heading-dot{ background:var(--color-azure, #0071e3); }
-        .admin-order-route-heading-count{
-          font-weight:600;
-          color:var(--color-graphite, #707070);
-          text-transform:none;
-          letter-spacing:normal;
-        }
         .admin-order-timeline-day{ position:relative; display:grid; gap:8px; }
         .admin-order-timeline-day-header{ display:flex; align-items:center; padding:0 2px; }
         .admin-order-timeline-day-label{ display:flex; align-items:center; font-size:12px; color:var(--color-graphite, #707070); white-space:nowrap; }

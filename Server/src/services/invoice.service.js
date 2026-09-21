@@ -29,6 +29,21 @@ export async function issueInvoiceForOrder({ orderId, factoryUser } = {}) {
     throw new ApiError(400, "Invoice can only be issued once the order is completed");
   }
 
+  // A scheme order is a free-of-cost grant, not a sale. Nothing else stopped
+  // the factory's "generate invoice" action from firing on one, which would
+  // burn a number from the shared INV- sequence on a NPR 0 tax document for
+  // goods that were given away - an artifact that is hard to unpick once it
+  // exists and carries real tax implications. Blocked rather than silently
+  // issued: the free-of-cost proforma these actually need is a separate,
+  // deliberately-deferred piece of work pending the tax treatment for
+  // zero-value goods.
+  if (order.orderOrigin === ORDER_ORIGIN.SCHEME) {
+    throw new ApiError(
+      400,
+      "Scheme orders are free of cost and cannot be invoiced. Issue a free-of-cost challan outside the system instead.",
+    );
+  }
+
   const invoiceNumber = await generateInvoiceNumber();
 
   try {

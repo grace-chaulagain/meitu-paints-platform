@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { objectIdSchema, optionalTrimmedString } from "./common.validation.js";
 
-const quantitySchema = z.coerce.number().positive().max(1000000);
+// A quantity of paint is a count of units - "2.5 tins" is never a valid sale line.
+const quantitySchema = z.coerce.number().int("Quantity must be a whole number").positive().max(1000000);
 
 const optionalObjectIdSchema = z
   .union([objectIdSchema, z.literal(""), z.null()])

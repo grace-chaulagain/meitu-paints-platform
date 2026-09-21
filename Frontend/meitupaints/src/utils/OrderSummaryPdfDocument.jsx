@@ -67,7 +67,22 @@ const styles = StyleSheet.create({
   companyName: { fontSize: 16, fontWeight: 700 },
   companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: PDF_COLORS.graphite },
   docTitle: { marginTop: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
+  // Scheme documents get their own filled title bar instead of the plain
+  // heading, so a free-of-cost grant can't be mistaken for a billable order at
+  // a glance - even in a black-and-white printout, where the filled bar still
+  // reads as the heaviest thing on the page.
+  schemeTitleBar: {
+    marginTop: 10,
+    paddingVertical: 7,
+    alignSelf: "stretch",
+    alignItems: "center",
+    borderRadius: 3,
+    backgroundColor: PDF_COLORS.caution,
+  },
+  schemeTitleText: { fontSize: 13, fontWeight: 700, color: "#ffffff", letterSpacing: 1.6 },
+  schemeSubline: { marginTop: 6, fontSize: 9, fontWeight: 700, color: PDF_COLORS.caution, letterSpacing: 0.3 },
   infoSection: { marginTop: 20, paddingTop: 16, borderTopWidth: 1.5, borderTopColor: PDF_COLORS.red },
+  infoSectionScheme: { borderTopColor: PDF_COLORS.caution },
   infoRow: { flexDirection: "row", gap: 18 },
   infoCol: { flex: 1 },
   infoLine: { flexDirection: "row", marginBottom: 6 },
@@ -89,6 +104,7 @@ const styles = StyleSheet.create({
     borderBottomColor: PDF_COLORS.red,
     paddingBottom: 7,
   },
+  tableHeaderRowScheme: { borderBottomColor: PDF_COLORS.caution },
   tableRow: {
     flexDirection: "row",
     columnGap: 6,
@@ -113,10 +129,12 @@ const styles = StyleSheet.create({
     borderTopColor: PDF_COLORS.lineSoft,
   },
   totalsRowEmphasis: { borderTopWidth: 1.5, borderTopColor: PDF_COLORS.red, marginTop: 2, paddingTop: 8 },
+  totalsRowEmphasisScheme: { borderTopColor: PDF_COLORS.caution },
   totalsLabel: { fontSize: 8.5, fontWeight: 500, color: PDF_COLORS.graphite },
   totalsLabelEmphasis: { fontSize: 10, fontWeight: 700, color: PDF_COLORS.ink },
   totalsValue: { fontSize: 8.5, fontWeight: 700, color: PDF_COLORS.ink },
   totalsValueEmphasis: { fontSize: 13, fontWeight: 700, color: PDF_COLORS.red },
+  totalsValueEmphasisScheme: { color: PDF_COLORS.caution },
   noteBlock: {
     marginTop: 16,
     paddingTop: 10,
@@ -153,6 +171,7 @@ function SummaryPage({ order, dealer }) {
   const items = resolveItems(order);
   const currency = order?.totals?.currency || "NPR";
   const totals = order?.totals || {};
+  const isScheme = order?.orderOrigin === "SCHEME";
 
   const totalsRows = [
     { label: "Subtotal", value: totals.subtotal },
@@ -166,13 +185,24 @@ function SummaryPage({ order, dealer }) {
         <View style={styles.statusPill}>
           <Text style={styles.statusPillText}>{titleCase(order?.status)}</Text>
         </View>
-        <MeituLogoMark width={38} style={styles.logo} color={PDF_COLORS.red} />
+        <MeituLogoMark width={38} style={styles.logo} color={isScheme ? PDF_COLORS.caution : PDF_COLORS.red} />
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>
         <Text style={styles.companyAddress}>Madhyapur Thimi-08, Bhaktapur</Text>
-        <Text style={styles.docTitle}>ORDER SUMMARY</Text>
+        {isScheme ? (
+          <>
+            <View style={styles.schemeTitleBar}>
+              <Text style={styles.schemeTitleText}>SCHEME ORDER SUMMARY</Text>
+            </View>
+            <Text style={styles.schemeSubline}>
+              {order?.scheme?.label ? `${order.scheme.label} · ` : ""}FREE OF COST — NOT A BILLABLE ORDER
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.docTitle}>ORDER SUMMARY</Text>
+        )}
       </View>
 
-      <View style={styles.infoSection}>
+      <View style={[styles.infoSection, isScheme && styles.infoSectionScheme]}>
         <View style={styles.infoRow}>
           <View style={styles.infoCol}>
             <InfoLine label="Dealer" value={dealerInfo?.companyName} />
@@ -182,7 +212,11 @@ function SummaryPage({ order, dealer }) {
           <View style={styles.infoCol}>
             <InfoLine label="Order No." value={order?.orderNumber} />
             <InfoLine label="Submitted" value={formatDateTime(order?.createdAt)} />
-            <InfoLine label="Payment" value={order?.payment?.method} />
+            {isScheme ? (
+              <InfoLine label="Scheme" value={order?.scheme?.label || "Free-of-cost grant"} />
+            ) : (
+              <InfoLine label="Payment" value={order?.payment?.method} />
+            )}
           </View>
         </View>
 
@@ -192,7 +226,7 @@ function SummaryPage({ order, dealer }) {
       </View>
 
       <View wrap>
-        <View style={styles.tableHeaderRow} fixed>
+        <View style={[styles.tableHeaderRow, isScheme && styles.tableHeaderRowScheme]} fixed>
           <Text style={[styles.headerLabel, styles.colSN]}>SN</Text>
           <Text style={[styles.headerLabel, styles.colProduct]}>PRODUCT</Text>
           <Text style={[styles.headerLabel, styles.colQty]}>QTY</Text>
@@ -220,16 +254,18 @@ function SummaryPage({ order, dealer }) {
               <Text style={styles.totalsValue}>{money(row.value, currency)}</Text>
             </View>
           ))}
-          <View style={[styles.totalsRow, styles.totalsRowEmphasis]}>
+          <View style={[styles.totalsRow, styles.totalsRowEmphasis, isScheme && styles.totalsRowEmphasisScheme]}>
             <Text style={styles.totalsLabelEmphasis}>Total</Text>
-            <Text style={styles.totalsValueEmphasis}>{money(order?.totals?.total, currency)}</Text>
+            <Text style={[styles.totalsValueEmphasis, isScheme && styles.totalsValueEmphasisScheme]}>
+              {money(order?.totals?.total, currency)}
+            </Text>
           </View>
         </View>
       </View>
 
       {order?.dealerNote ? (
         <View style={styles.noteBlock} wrap={false}>
-          <Text style={styles.noteLabel}>Dealer note</Text>
+          <Text style={styles.noteLabel}>{isScheme ? "Scheme note" : "Dealer note"}</Text>
           <Text style={styles.noteValue}>{order.dealerNote}</Text>
         </View>
       ) : null}
@@ -242,7 +278,9 @@ function SummaryPage({ order, dealer }) {
       ) : null}
 
       <View style={styles.footer} fixed>
-        <Text style={styles.footerText}>Computer-generated order summary · {formatDateTime(new Date())}</Text>
+        <Text style={styles.footerText}>
+          Computer-generated order summary{isScheme ? " · Free-of-cost scheme grant, not a billable order" : ""} · {formatDateTime(new Date())}
+        </Text>
         <Text style={styles.footerId}>Order: {safe(order?.orderNumber)}</Text>
       </View>
     </Page>
@@ -251,7 +289,7 @@ function SummaryPage({ order, dealer }) {
 
 export default function OrderSummaryPdfDocument({ order, dealer }) {
   return (
-    <Document title={`Order Summary ${order?.orderNumber || ""}`}>
+    <Document title={`${order?.orderOrigin === "SCHEME" ? "Scheme Order Summary" : "Order Summary"} ${order?.orderNumber || ""}`}>
       <SummaryPage order={order} dealer={dealer} />
     </Document>
   );

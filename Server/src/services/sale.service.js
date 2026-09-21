@@ -35,14 +35,27 @@ function trendField(currentValue, previousValue) {
   return { percent, direction: trendDirection(percent) };
 }
 
-async function generateSaleNumber() {
-  const year = new Date().getFullYear();
+// One counter per dealer (never a shared global one - see
+// migrate-per-dealer-sale-numbers.js for the production backfill this
+// replaced) so each dealer's sequence is fully isolated: two different
+// dealers legitimately produce the identical "SALE-0001" for their own
+// first sale, disambiguated by the { dealerId, saleNumber } compound
+// unique index on Sale rather than by the text itself. Never resets - it
+// just keeps climbing for that dealer (SALE-0047, SALE-0048, ...);
+// padStart(4, "0") is a minimum width, not a ceiling, so it grows past 4
+// digits gracefully once a dealer passes 9999 sales rather than truncating.
+//
+// `session` is required (not optional) so this always participates in the
+// caller's transaction - counted here in createSale, this is called only
+// after resolveItemPrices/recordSaleMovements have already succeeded, so a
+// failed sale attempt never reaches this line and never burns a number.
+async function generateSaleNumber(dealerId, session) {
   const counter = await Counter.findOneAndUpdate(
-    { _id: "sale" },
+    { _id: `sale:${dealerId}` },
     { $inc: { seq: 1 } },
-    { upsert: true, new: true },
+    { upsert: true, new: true, session },
   );
-  return `MS-${year}-${String(counter.seq).padStart(6, "0")}`;
+  return `SALE-${String(counter.seq).padStart(4, "0")}`;
 }
 
 // Validates shape/quantity only - price is never trusted from the client
@@ -56,8 +69,8 @@ function normalizeItemShapes(rawItems = []) {
   return rawItems.map((item) => {
     const quantity = Number(item?.quantity || 0);
     if (!item?.productId) throw new ApiError(400, "Each sale item requires a productId");
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new ApiError(400, `Invalid quantity for ${item?.name || "item"}`);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError(400, `Quantity for ${item?.name || "item"} must be a whole number`);
     }
 
     return {
@@ -76,17 +89,31 @@ function normalizeItemShapes(rawItems = []) {
 // caller's transaction so it reads the same consistent snapshot as the
 // stock debit. Throws rather than silently recording a $0 line if a
 // product has never had a cost recorded, since that would corrupt revenue
-// reporting invisibly.
+// reporting invisibly - UNLESS every unit of that product this dealer has
+// ever had came from a free scheme grant (never a real purchase), in which
+// case $0 is the honest cost, not a gap: a scheme delivery deliberately
+// never sets lastKnownUnitCost (so a free grant can never overwrite a real
+// purchase price - see applyMovement's isScheme branch), so without this
+// carve-out a dealer who only ever received a product via scheme could
+// never record selling it at all, contradicting the whole point of scheme
+// stock being genuinely, indistinguishably sellable.
 async function resolveItemPrices({ dealerId, items, session }) {
-  const costByProduct = await getLastKnownUnitCosts({
+  const stockByProduct = await getLastKnownUnitCosts({
     dealerId,
     productIds: items.map((item) => item.productId),
     session,
   });
 
   return items.map((item) => {
-    const unitPrice = costByProduct.get(String(item.productId));
-    if (unitPrice === undefined || unitPrice === null) {
+    const stock = stockByProduct.get(String(item.productId));
+    const knownCost = stock?.lastKnownUnitCost;
+    let unitPrice;
+
+    if (knownCost !== undefined && knownCost !== null) {
+      unitPrice = knownCost;
+    } else if (stock && stock.totalReceivedQuantity === 0 && stock.totalSchemeQuantity > 0) {
+      unitPrice = 0;
+    } else {
       throw new ApiError(400, `No purchase cost on file for ${item.name} - record a purchase for this product before selling it.`);
     }
 
@@ -119,7 +146,6 @@ export async function createSale({
       const dealer = await DealerProfile.findById(dealerId).select("_id").session(session);
       if (!dealer) throw new ApiError(404, "Dealer not found");
 
-      const saleNumber = await generateSaleNumber();
       const saleId = new mongoose.Types.ObjectId();
       const saleDate = new Date();
 
@@ -138,6 +164,10 @@ export async function createSale({
         actorRole: "DEALER",
         session,
       });
+
+      // Generated last, only once every failure-prone step above has
+      // already succeeded - see generateSaleNumber's own comment for why.
+      const saleNumber = await generateSaleNumber(dealerId, session);
 
       const [created] = await Sale.create(
         [

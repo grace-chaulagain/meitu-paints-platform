@@ -270,6 +270,9 @@ export function getRailNodes(order) {
 // reservation check already fully capture - so the guard here mirrors
 // exactly what the backend's atomic revert filter can honestly enforce.
 function canRevertVerification(order) {
+  // A scheme is created already verified - there is no earlier "review" state
+  // to fall back to, so the honest correction is to edit or delete it.
+  if (order?.orderOrigin === "SCHEME") return false;
   return order?.status === "VERIFIED" && order?.stockReservation?.status !== "CONSUMED";
 }
 
@@ -278,7 +281,10 @@ export function getTransitions(order, role) {
   const dispatcherMode = isDispatcherFulfilled(order);
   const out = [];
 
-  if (role === "ADMIN" && !dispatcherMode) {
+  // Admin has no status actions on a scheme: it is created already approved, so
+  // there is nothing to verify, reject or undo - the only things an admin does
+  // with one are edit it (orders list) and delete it (the page's Delete button).
+  if (role === "ADMIN" && !dispatcherMode && order?.orderOrigin !== "SCHEME") {
     if (status === "SUBMITTED") {
       out.push({ action: "verify", target: "VERIFIED", kind: "primary", irreversible: false });
       out.push({ action: "reject", target: "REJECTED", kind: "destructive", irreversible: true });

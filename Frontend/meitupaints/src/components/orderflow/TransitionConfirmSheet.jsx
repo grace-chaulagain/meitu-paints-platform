@@ -61,15 +61,21 @@ export function TransitionConfirmSheet({ open, onClose, order, action, target, o
         <button type="button" className="orderflow-confirm-cancel" onClick={safeClose} disabled={busy}>
           Cancel
         </button>
-        <button type="button" className="orderflow-confirm-btn" onClick={handleConfirm} disabled={busy}>
-          <span className="orderflow-confirm-btn-label" style={{ opacity: busy ? 0 : 1 }}>
+        <button
+          type="button"
+          className={`orderflow-confirm-btn ${busy ? "is-busy" : ""}`}
+          onClick={handleConfirm}
+          disabled={busy}
+          aria-busy={busy}
+        >
+          <span className="orderflow-confirm-btn-label">
             {verb} {order.orderNumber}
           </span>
-          {busy ? (
-            <span className="orderflow-confirm-btn-spinner">
-              <AppleSpinner size={16} color="#fff" />
-            </span>
-          ) : null}
+          {/* Always mounted and crossfaded - mounting it on demand made the
+              spinner pop in while the label was still fading out. */}
+          <span className="orderflow-confirm-btn-spinner" aria-hidden={!busy}>
+            <AppleSpinner size={16} color="#fff" />
+          </span>
         </button>
       </div>
     </div>
@@ -157,7 +163,7 @@ export function TransitionConfirmSheetStyles() {
         font-size:13.5px;
         font-weight:600;
         cursor:pointer;
-        transition:transform 160ms var(--ease-out-strong, ease), background-color 160ms ease;
+        transition:transform 160ms var(--ease-out-strong, ease), background-color 160ms ease, opacity 160ms ease;
       }
       .orderflow-confirm-cancel:active{ transform:scale(.97); }
       .orderflow-confirm-cancel:disabled{ opacity:.5; cursor:default; }
@@ -180,16 +186,43 @@ export function TransitionConfirmSheetStyles() {
       }
       .orderflow-confirm-btn:active:not(:disabled){ transform:scale(.97); }
       .orderflow-confirm-btn:disabled{ cursor:default; opacity:.85; }
-      .orderflow-confirm-btn-label{ transition:opacity 140ms ease; white-space:nowrap; }
+      /* Busy is not "disabled": the button stays fully solid while it works,
+         so the only thing that changes is label -> spinner. */
+      .orderflow-confirm-btn.is-busy:disabled{ opacity:1; cursor:progress; }
+
+      /* Label and spinner trade places in the same footprint (the button never
+         changes width). Blur bridges the two states so it reads as one thing
+         changing, not two things swapping; both stay under 200ms. */
+      .orderflow-confirm-btn-label{
+        white-space:nowrap;
+        transition:opacity 160ms var(--ease-out-strong, ease-out), transform 160ms var(--ease-out-strong, ease-out), filter 160ms ease-out;
+      }
+      .orderflow-confirm-btn.is-busy .orderflow-confirm-btn-label{
+        opacity:0;
+        transform:scale(.94);
+        filter:blur(2px);
+      }
       .orderflow-confirm-btn-spinner{
         position:absolute;
         inset:0;
         display:grid;
         place-items:center;
+        opacity:0;
+        transform:scale(.8);
+        filter:blur(2px);
+        transition:opacity 160ms var(--ease-out-strong, ease-out), transform 160ms var(--ease-out-strong, ease-out), filter 160ms ease-out;
+        pointer-events:none;
+      }
+      .orderflow-confirm-btn.is-busy .orderflow-confirm-btn-spinner{
+        opacity:1;
+        transform:scale(1);
+        filter:blur(0);
       }
 
       @media (prefers-reduced-motion: reduce){
         .orderflow-confirm-cancel, .orderflow-confirm-btn{ transition:none; }
+        /* Keep the label/spinner swap as a plain fade - no scale or blur. */
+        .orderflow-confirm-btn-label, .orderflow-confirm-btn-spinner{ transform:none !important; filter:none !important; }
       }
     `}</style>
   );

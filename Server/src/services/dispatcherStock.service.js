@@ -336,6 +336,7 @@ export async function creditDispatcherStock({
   items = [],
   orderId = null,
   reason = "Replenishment order dispatched",
+  movementType = DISPATCHER_STOCK_MOVEMENT_TYPE.REPLENISHMENT_IN,
   actorUser,
   session = null,
 } = {}) {
@@ -347,6 +348,12 @@ export async function creditDispatcherStock({
       const quantity = itemQuantity(item);
       if (!productId || quantity <= 0) continue;
 
+      // A scheme grant is a real credit, same as REPLENISHMENT_IN - the
+      // dispatcher physically receives the goods and they're genuinely
+      // theirs to dispatch to an assigned dealer like any other stock.
+      // Kept as its own movementType purely so history says where the
+      // units came from - mirrors the dealer side's SCHEME handling in
+      // dealerInventory.service.js:applyMovement.
       const updated = await DispatcherProductStock.findOneAndUpdate(
         { dispatcherId, productId },
         {
@@ -356,7 +363,12 @@ export async function creditDispatcherStock({
             lastUpdatedBy: actorId(actorUser),
           },
         },
-        { upsert: true, new: true, session: txnSession, setDefaultsOnInsert: true },
+        {
+          upsert: true,
+          new: true,
+          session: txnSession,
+          setDefaultsOnInsert: true,
+        },
       );
 
       await DispatcherStockMovement.create(
@@ -364,7 +376,7 @@ export async function creditDispatcherStock({
           {
             dispatcherId,
             productId,
-            type: DISPATCHER_STOCK_MOVEMENT_TYPE.REPLENISHMENT_IN,
+            type: movementType,
             quantity,
             previousQuantity: updated.currentQuantity - quantity,
             newQuantity: updated.currentQuantity,

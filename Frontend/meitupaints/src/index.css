@@ -557,3 +557,28 @@ a:hover {
     font-size: 21px;
   }
 }
+
+/* ── Activity spinner ───────────────────────────────────────────── */
+
+/* AppleSpinner.jsx (the loading indicator inside Dispatch / Mark delivered /
+   every order-transition button). Global on purpose: this rotation used to sit
+   in the dealer-mobile stylesheet, which the factory portal never loads - so
+   there the spinner was a still picture, i.e. the "frozen" loader. Transform
+   only, so it keeps turning on the compositor even while the main thread is
+   busy handling the response. */
+.dealer-m-apple-spinner {
+  animation: appleSpinnerRotate 0.8s linear infinite;
+  will-change: transform;
+}
+
+@keyframes appleSpinnerRotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Reduced motion softens the spin, it doesn't stop it: a loader that stops
+   moving reads as a hung app, which is the one thing it must never do. */
+@media (prefers-reduced-motion: reduce) {
+  .dealer-m-apple-spinner {
+    animation-duration: 1.6s;
+  }
+}

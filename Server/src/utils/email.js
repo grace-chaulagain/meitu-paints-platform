@@ -211,6 +211,45 @@ export function renderLineItemsTable({ items = [], totals = {} } = {}) {
   `;
 }
 
+// Quantity-only counterpart to renderLineItemsTable, for free-of-cost grants
+// (scheme orders): Rate/Amount/Subtotal/Tax columns would just be a wall of
+// zeros that reads like a bill, which is exactly what a scheme isn't.
+export function renderItemsTable({ items = [] } = {}) {
+  const th = (label, align = "left") =>
+    `<th style="padding:11px 12px;text-align:${align};font-family:${FONT_STACK};font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:${COLOR.graphite};">${escapeHtml(label)}</th>`;
+
+  const rowsHtml = (items || [])
+    .map(
+      (item, index) => `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLOR.silverMist};font-family:${FONT_STACK};font-size:13px;color:${COLOR.slate};">${index + 1}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLOR.silverMist};font-family:${FONT_STACK};font-size:13px;color:${COLOR.ink};font-weight:600;">${escapeHtml(item.name || "")}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLOR.silverMist};font-family:${FONT_STACK};font-size:13px;color:${COLOR.slate};">${escapeHtml(item.packLabel || item.variantLabel || item.unit || "-")}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid ${COLOR.silverMist};font-family:${FONT_STACK};font-size:13px;color:${COLOR.ink};font-weight:700;text-align:right;">${Number(item.quantity || 0).toLocaleString()}</td>
+        </tr>
+      `,
+    )
+    .join("");
+
+  const totalUnits = (items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:22px;border:1px solid ${COLOR.silverMist};border-radius:14px;overflow:hidden;">
+      <thead>
+        <tr style="background:${COLOR.fog};">
+          ${th("#")}${th("Item")}${th("Pack / Variant")}${th("Qty", "right")}
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+    <div style="margin-top:12px;text-align:right;font-family:${FONT_STACK};font-size:13px;color:${COLOR.slate};">
+      Total units: <strong style="color:${COLOR.ink};">${totalUnits.toLocaleString()}</strong>
+    </div>
+  `;
+}
+
 // The shared shell every email in the app renders through: a restrained
 // white card on a fog canvas, small logo mark instead of a red gradient
 // banner, Apple-blue CTA pill. `bodyHtml`/`calloutHtml` accept pre-built

@@ -1918,12 +1918,30 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
   const dispatcherObjectId = new mongoose.Types.ObjectId(String(dispatcherId));
 
-  const [purchaseAgg, salesAgg, stockRows] = await Promise.all([
+  const [purchaseAgg, schemeAgg, salesAgg, stockRows] = await Promise.all([
     Order.aggregate([
       {
         $match: {
           dispatcherCustomerId: dispatcherObjectId,
           orderOrigin: "DISPATCHER_REPLENISHMENT",
+          status: { $in: DISPATCHER_RECEIVED_STATUSES },
+          isDeleted: { $ne: true },
+        },
+      },
+      { $unwind: "$items" },
+      { $match: { "items.productId": { $ne: null } } },
+      { $group: { _id: "$items.productId", quantity: { $sum: "$items.quantity" } } },
+    ]),
+    // Scheme grants addressed to this dispatcher - a separate order origin
+    // from DISPATCHER_REPLENISHMENT, so it needs its own aggregation rather
+    // than folding into "Purchase" (a commercial figure that a free grant
+    // shouldn't inflate). Mirrors the dealer side's totalSchemeQuantity in
+    // dealerInventory.service.js.
+    Order.aggregate([
+      {
+        $match: {
+          dispatcherCustomerId: dispatcherObjectId,
+          orderOrigin: "SCHEME",
           status: { $in: DISPATCHER_RECEIVED_STATUSES },
           isDeleted: { $ne: true },
         },
@@ -1949,10 +1967,11 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
   ]);
 
   const purchaseMap = new Map(purchaseAgg.map((row) => [String(row._id), row.quantity]));
+  const schemeMap = new Map(schemeAgg.map((row) => [String(row._id), row.quantity]));
   const salesMap = new Map(salesAgg.map((row) => [String(row._id), row.quantity]));
   const stockMap = new Map(stockRows.map((row) => [String(row.productId), row.currentQuantity]));
 
-  const productIds = new Set([...purchaseMap.keys(), ...salesMap.keys(), ...stockMap.keys()]);
+  const productIds = new Set([...purchaseMap.keys(), ...schemeMap.keys(), ...salesMap.keys(), ...stockMap.keys()]);
   const products = productIds.size
     ? await Product.find({ _id: { $in: Array.from(productIds) } })
         .select("name sku category pack")
@@ -1970,7 +1989,12 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
         category: product.category || "",
         pack: product.pack || {},
         purchase: purchaseMap.get(id) || 0,
+        scheme: schemeMap.get(id) || 0,
         sales: salesMap.get(id) || 0,
+        // Straight from the live stock cache, not derived - already
+        // correctly includes scheme-credited units once
+        // creditDispatcherStock treats SCHEME as a real credit, so no
+        // formula change is needed here for Scheme to be reflected.
         balance: stockMap.get(id) || 0,
       };
     })
@@ -2866,11 +2890,17 @@ export async function hardDeleteOrder({
   if (!orderId) throw new ApiError(400, "Missing orderId");
 
   const order = await Order.findById(orderId).select(
-    "_id orderNumber status dealerId dispatcherId isDeleted deletion stockReservation dealerSnapshot.fulfillmentMode",
+    "_id orderNumber orderOrigin status dealerId dispatcherId isDeleted deletion stockReservation dealerSnapshot.fulfillmentMode",
   );
   if (!order) throw new ApiError(404, "Order not found");
   if (order.deletion?.pending || order.isDeleted) {
     throw new ApiError(409, "Order deletion is already pending");
+  }
+  // A scheme holds factory stock the whole time it exists, so it is withdrawn
+  // immediately by its own delete (which hands that stock back and can't be
+  // "restored" into a state with no reservation) - not parked in the trash.
+  if (order.orderOrigin === "SCHEME") {
+    throw new ApiError(400, "Scheme orders are removed with the scheme delete action.");
   }
 
   requireExactConfirmation({
@@ -2996,7 +3026,17 @@ export async function listPayments({
   const skip = (Math.max(1, Number(page)) - 1) * perPage;
 
   const [items, total] = await Promise.all([
-    Payment.find(q).sort({ createdAt: -1 }).skip(skip).limit(perPage).lean(),
+    Payment.find(q)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(perPage)
+      // Populated so a verification-queue UI can show dealer/order names
+      // instead of raw ids - this endpoint had no frontend consumer before
+      // the Payment Reconciliation section, so nothing depended on the
+      // unpopulated shape.
+      .populate({ path: "dealerId", select: "companyName contactName" })
+      .populate({ path: "orderId", select: "orderNumber totals.total" })
+      .lean(),
     Payment.countDocuments(q),
   ]);
 
@@ -3054,10 +3094,14 @@ export async function getOrderOutstanding({ orderId } = {}) {
   const order = await Order.findById(orderId).select("totals dealerId");
   if (!order) throw new ApiError(404, "Order not found");
 
+  // PAYMENT_STATUS has no APPROVED/CONFIRMED member, so those two used to
+  // silently fall back to their literal string ("APPROVED"/"CONFIRMED"),
+  // which never matches a real payment - only VERIFIED payments counted
+  // as paid. PARTIAL/PAID are real received-money statuses too.
   const verifiedStatuses = [
-    PAYMENT_STATUS?.VERIFIED ?? "VERIFIED",
-    PAYMENT_STATUS?.APPROVED ?? "APPROVED",
-    PAYMENT_STATUS?.CONFIRMED ?? "CONFIRMED",
+    PAYMENT_STATUS.VERIFIED,
+    PAYMENT_STATUS.PARTIAL,
+    PAYMENT_STATUS.PAID,
   ];
 
   const rows = await Payment.find({

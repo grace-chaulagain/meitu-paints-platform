@@ -84,11 +84,16 @@ export function AppleDateField({ value, onChange, disabled = false }) {
   const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const firstWeekday = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayKey = dateKey(new Date());
+  const today = new Date();
+  const todayKey = dateKey(today);
   const cells = [
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
+  // Every AppleDateField in this codebase filters past activity (order/
+  // sale/stock history) - a future date can never match anything, so it's
+  // disabled at the source rather than trusted to the caller.
+  const isCurrentOrFutureMonth = year > today.getFullYear() || (year === today.getFullYear() && month >= today.getMonth());
 
   function selectDay(day) {
     onChange(dateKey(new Date(year, month, day)));
@@ -114,7 +119,7 @@ export function AppleDateField({ value, onChange, disabled = false }) {
       {open && position && typeof document !== "undefined"
         ? createPortal(
             <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={closePopover} />
+              <div style={{ position: "fixed", inset: 0, zIndex: 1800 }} onClick={closePopover} />
               <div
                 className="apple-calendar-pop"
                 role="dialog"
@@ -137,6 +142,7 @@ export function AppleDateField({ value, onChange, disabled = false }) {
                       type="button"
                       aria-label="Next month"
                       onClick={() => setViewMonth(new Date(year, month + 1, 1))}
+                      disabled={isCurrentOrFutureMonth}
                       className="apple-calendar-nav"
                     >
                       <DashboardIcon name="chevron" size={13} strokeWidth={2.2} />
@@ -156,12 +162,15 @@ export function AppleDateField({ value, onChange, disabled = false }) {
                     const key = dateKey(new Date(year, month, day));
                     const isSelected = value === key;
                     const isToday = todayKey === key;
+                    const isFuture = key > todayKey;
                     return (
                       <button
                         key={key}
                         type="button"
                         onClick={() => selectDay(day)}
-                        className={`apple-calendar-day ${isSelected ? "is-selected" : ""} ${isToday && !isSelected ? "is-today" : ""}`}
+                        disabled={isFuture}
+                        aria-disabled={isFuture}
+                        className={`apple-calendar-day ${isSelected ? "is-selected" : ""} ${isToday && !isSelected ? "is-today" : ""} ${isFuture ? "is-future" : ""}`}
                       >
                         {day}
                       </button>
@@ -185,6 +194,19 @@ export function AppleDateField({ value, onChange, disabled = false }) {
 // native <select> this replaces gave click/keyboard/touch accessibility
 // "for free"; rebuilt here with role="listbox"/"option" plus arrow-key +
 // Enter/Escape support so swapping to a custom menu doesn't regress that.
+// Stacking is owned HERE, inline on both layers, rather than being split
+// between this file (the scrim) and each consumer's CSS class (the panel).
+// That split is exactly what broke the admin/factory route pickers: when the
+// scrim was raised 1400 -> 1800 to clear modal surfaces, `.apple-dropdown-menu`
+// was raised with it but the locally-defined `.admin-route-menu` /
+// `.factory-route-menu` classes were left at 1401 - so the invisible scrim
+// sat ON TOP of the menu and swallowed every option click. The menu still
+// rendered and still closed on click, which is why it read as "the dropdown
+// is inactive" rather than as a stacking bug. Keeping both numbers on the
+// same two lines makes that desync impossible to reintroduce.
+const MENU_SCRIM_Z = 1800;
+const MENU_PANEL_Z = 1801;
+
 export function PopoverListMenu({ trigger, renderRow, options, value, onChange, menuClassName, ariaLabel }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
@@ -266,14 +288,20 @@ export function PopoverListMenu({ trigger, renderRow, options, value, onChange, 
       {open && position && typeof document !== "undefined"
         ? createPortal(
             <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={closeMenu} />
+              <div style={{ position: "fixed", inset: 0, zIndex: MENU_SCRIM_Z }} onClick={closeMenu} />
               <div
                 ref={menuRef}
                 role="listbox"
                 tabIndex={-1}
                 aria-label={ariaLabel}
                 className={menuClassName}
-                style={{ position: "fixed", top: position.top, left: position.left, width: position.width }}
+                style={{
+                  position: "fixed",
+                  top: position.top,
+                  left: position.left,
+                  width: position.width,
+                  zIndex: MENU_PANEL_Z,
+                }}
                 onClick={(event) => event.stopPropagation()}
               >
                 {options.map((option, index) =>

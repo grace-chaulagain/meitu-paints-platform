@@ -18,6 +18,7 @@ import { OrderStatusRail, OrderFlowRailStyles } from "../../components/orderflow
 import { OwnerChip, OwnerChipStyles } from "../../components/orderflow/OwnerChip.jsx";
 import { useQueueArrivals } from "../../components/orderflow/arrivals.js";
 import { ArrivalStyles, SoundMuteToggle } from "../../components/orderflow/ArrivalIndicators.jsx";
+import CreateSchemeOrderModal from "../dashboard/orders/CreateSchemeOrderModal.jsx";
 
 // ADMIN_MOBILE_DESIGN_PROMPT.md §3: 6-segment status filter, swipeable
 // cards (Verify/Reject via a confirm sheet), no <table>. Mirrors the real
@@ -66,13 +67,17 @@ function cardDateLabel(dateStr) {
 // for two actions instead of one. getTransitions (not a bare status===
 // check) decides whether they're offered, so a dispatcher-mode order -
 // which Admin never reviews - correctly shows neither (§Phase 1 "Deletions").
-function OrderCardSwipe({ order, revealedOrderId, onReveal, onNavigate, onVerify, onReject, isArrived }) {
+function OrderCardSwipe({ order, revealedOrderId, onReveal, onNavigate, onVerify, onReject, onEditScheme, isArrived }) {
   const status = normalizeStatus(order.status);
   const meta = adminOrderStatusMeta(status);
   const transitions = getTransitions(order, "ADMIN");
   const verifyTransition = transitions.find((t) => t.action === "verify");
   const rejectTransition = transitions.find((t) => t.action === "reject");
-  const canAct = Boolean(verifyTransition || rejectTransition);
+  // A scheme is created already approved, so it never offers verify/reject -
+  // that leaves its swipe slot free for the one thing an admin does need on a
+  // phone: fixing the basket before the factory ships it.
+  const canEditScheme = order?.orderOrigin === "SCHEME" && status === "VERIFIED" && typeof onEditScheme === "function";
+  const canAct = Boolean(verifyTransition || rejectTransition || canEditScheme);
   const dealer = order?.dealerSnapshot || order?.dealerId || {};
   const dealerName = dealer?.companyName || dealer?.contactName || "Unassigned dealer";
   const itemCount = order.items?.length || 0;
@@ -104,6 +109,12 @@ function OrderCardSwipe({ order, revealedOrderId, onReveal, onNavigate, onVerify
             <button type="button" className="admin-m-order-swipe-reject" onClick={() => onReject(order, rejectTransition)}>
               <DashboardIcon name="reject" size={16} strokeWidth={2.2} />
               Reject
+            </button>
+          ) : null}
+          {canEditScheme ? (
+            <button type="button" className="admin-m-order-swipe-edit" onClick={() => onEditScheme(order)}>
+              <DashboardIcon name="edit" size={16} strokeWidth={2.2} />
+              Edit
             </button>
           ) : null}
         </div>
@@ -150,6 +161,8 @@ export function AdminOrdersMobileView() {
   const [sheet, setSheet] = useState(null); // { order, action, target }
   const [sheetError, setSheetError] = useState("");
   const [reviewNote, setReviewNote] = useState("");
+  const [schemeModalOpen, setSchemeModalOpen] = useState(false);
+  const [editScheme, setEditScheme] = useState(null);
 
   const ordersQuery = useGetAdminOrdersQuery({ status: segment, limit: 50 }, { pollingInterval: 20000 });
   const [verifyAdminOrder, verifyState] = useVerifyAdminOrderMutation();
@@ -242,7 +255,22 @@ export function AdminOrdersMobileView() {
         <LargeTitleHeader
           title="Orders"
           contextLabel={activeOption ? `${activeOption.label} · ${ordersQuery.data?.total ?? orders.length}` : null}
-          trailing={<SoundMuteToggle />}
+          trailing={
+            <span className="admin-m-orders-header-actions">
+              <SoundMuteToggle />
+              <button
+                type="button"
+                className="admin-m-scheme-btn"
+                onClick={() => {
+                  setEditScheme(null);
+                  setSchemeModalOpen(true);
+                }}
+              >
+                <DashboardIcon name="plus" size={15} strokeWidth={2.6} />
+                Scheme
+              </button>
+            </span>
+          }
         />
 
         <SegmentedControl options={SEGMENTS} value={segment} onChange={setSegment} />
@@ -263,6 +291,11 @@ export function AdminOrdersMobileView() {
                 onNavigate={() => openOrder(order)}
                 onVerify={openSheet}
                 onReject={openSheet}
+                onEditScheme={(target) => {
+                  setRevealedOrderId(null);
+                  setEditScheme(target);
+                  setSchemeModalOpen(true);
+                }}
                 isArrived={arrivedIds.has(order._id)}
               />
             ))}
@@ -282,6 +315,22 @@ export function AdminOrdersMobileView() {
       >
         <TransitionNoteField action={sheet?.action} value={reviewNote} onChange={setReviewNote} disabled={busy} />
       </TransitionConfirmSheet>
+      {schemeModalOpen ? (
+        <CreateSchemeOrderModal
+          key={editScheme?._id || "new"}
+          open={schemeModalOpen}
+          editOrder={editScheme}
+          onClose={() => {
+            setSchemeModalOpen(false);
+            setEditScheme(null);
+          }}
+          onCreated={(reason) => {
+            ordersQuery.refetch();
+            toast(reason === "deleted" ? "Scheme deleted" : reason === "updated" ? "Scheme updated" : "Scheme order created");
+          }}
+        />
+      ) : null}
+
       <TransitionConfirmSheetStyles />
       <OrderFlowRailStyles />
       <OwnerChipStyles />

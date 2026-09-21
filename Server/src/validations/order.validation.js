@@ -1,5 +1,38 @@
 import { z } from "zod";
 import { objectIdSchema, optionalTrimmedString } from "./common.validation.js";
+import { ORDER_ORIGIN } from "../models/Order.model.js";
+
+// Derived from the model's own enum rather than hand-listed, so adding an
+// origin can't leave this schema behind. It previously did exactly that:
+// SCHEME was added to ORDER_ORIGIN but not here, and because the query
+// schema is .strict(), the admin orders page's new Scheme/Factory scopes
+// came back as a flat "Invalid request input" with nothing naming the
+// offending field.
+const ORDER_ORIGIN_VALUES = Object.values(ORDER_ORIGIN);
+export const orderOriginQuerySchema = z
+  .string()
+  .trim()
+  .max(120)
+  .refine(
+    (value) => ORDER_ORIGIN_VALUES.includes(value.toUpperCase()),
+    { message: `orderOrigin must be one of: ${ORDER_ORIGIN_VALUES.join(", ")}` },
+  );
+
+// Comma-separated list of origins to exclude, e.g. "SCHEME". Validated
+// per-entry so a typo is reported rather than silently ignored.
+export const excludeOriginsQuerySchema = z
+  .string()
+  .trim()
+  .max(200)
+  .refine(
+    (value) =>
+      value
+        .split(",")
+        .map((entry) => entry.trim().toUpperCase())
+        .filter(Boolean)
+        .every((entry) => ORDER_ORIGIN_VALUES.includes(entry)),
+    { message: `excludeOrigins entries must be one of: ${ORDER_ORIGIN_VALUES.join(", ")}` },
+  );
 
 const moneySchema = z.coerce.number().min(0).max(100000000);
 const quantitySchema = z.coerce.number().positive().max(1000000);
@@ -125,14 +158,8 @@ export const adminOrderListQuerySchema = z
     fulfillmentMode: z.enum(["FACTORY", "DISPATCHER", "factory", "dispatcher"]).optional(),
     dealerId: objectIdSchema.optional(),
     dispatcherId: objectIdSchema.optional(),
-    orderOrigin: z
-      .enum([
-        "DEALER",
-        "DISPATCHER_REPLENISHMENT",
-        "dealer",
-        "dispatcher_replenishment",
-      ])
-      .optional(),
+    orderOrigin: orderOriginQuerySchema.optional(),
+    excludeOrigins: excludeOriginsQuerySchema.optional(),
     from: optionalTrimmedString(40),
     to: optionalTrimmedString(40),
     page: z.coerce.number().int().min(1).max(10000).optional(),

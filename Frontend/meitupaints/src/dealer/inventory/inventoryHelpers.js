@@ -31,6 +31,10 @@ export function movementLabel(type) {
   return (
     {
       PURCHASE: "Received from Meitu",
+      // Free-of-cost goods from an admin scheme order - a real credit,
+      // same as PURCHASE (genuinely theirs to sell), just labeled
+      // separately so history says where the units came from.
+      SCHEME: "Scheme goods received",
       SALE: "Sold",
       RETURN: "Returned",
       ADJUSTMENT: "Manual adjustment",

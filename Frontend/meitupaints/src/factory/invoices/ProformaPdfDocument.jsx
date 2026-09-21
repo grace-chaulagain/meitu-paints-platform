@@ -2,6 +2,7 @@ import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { amountInWords, compactDateWithYear, deriveProformaId, money } from "../factoryHelpers.js";
 import { MeituLogoMark } from "../../utils/pdfBrand.jsx";
 import { resolvePiUnitLabel } from "../../utils/piUnitLabels.js";
+import { PDF_COLORS } from "../../utils/pdfColors.js";
 
 const MEITU_PAN = "606572561";
 
@@ -35,6 +36,20 @@ const styles = StyleSheet.create({
   companyName: { fontSize: 16, fontWeight: 700 },
   companyAddress: { marginTop: 3, fontSize: 9.5, fontWeight: 700, color: "#000000" },
   docTitle: { marginTop: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase" },
+  // A filled title bar rather than a corner badge - the two top corners are
+  // already taken by the serial-number watermark and the PAN label, and a
+  // free-of-cost order's proforma being mistaken for a real commercial
+  // invoice is exactly the failure this exists to prevent, so it needs to
+  // be impossible to miss, not tucked into a badge.
+  schemeTitleBar: {
+    marginTop: 10,
+    paddingVertical: 7,
+    alignSelf: "stretch",
+    alignItems: "center",
+    borderRadius: 3,
+    backgroundColor: PDF_COLORS.caution,
+  },
+  schemeTitleText: { fontSize: 13, fontWeight: 700, color: "#ffffff", letterSpacing: 1.6 },
   infoSection: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: "#000000" },
   infoRow: { flexDirection: "row", gap: 18 },
   infoColLeft: { flex: 1.3 },
@@ -71,14 +86,20 @@ const styles = StyleSheet.create({
   },
   headerLabel: { fontSize: 8, fontWeight: 700, color: "#000000", textTransform: "uppercase" },
   colSN: { width: 18, fontSize: 9, textAlign: "center", color: "#000000" },
-  // Product gets a larger share of the row (long paint names wrap less),
-  // the four numeric/short-text columns give up a little width each to
-  // compensate - same total flex as before, just redistributed.
-  colProduct: { flex: 2.9, fontSize: 9.5, fontWeight: 700 },
-  colQty: { flex: 0.5, fontSize: 9.5, textAlign: "right" },
-  colUnit: { flex: 0.6, fontSize: 9, paddingLeft: 12 },
-  colRate: { flex: 0.85, fontSize: 9.5, textAlign: "right" },
-  colAmount: { flex: 1.05, fontSize: 9.5, fontWeight: 700, textAlign: "right" },
+  // Rate/Amount now display exact (unrounded) values to 2 decimals rather
+  // than whole rupees, which run noticeably wider (e.g. "13,844.18" vs the
+  // old "13,844"). The repeated "NPR " on every single row was also pure
+  // waste once there are two currency-bearing columns per line - it's said
+  // once in the header (RATE (NPR) / AMOUNT (NPR)) instead, and the cells
+  // hold only the number, which combined with the wider flex share below
+  // gives real headroom instead of a guessed-at margin. Product gives up
+  // the difference (long paint names already wrap gracefully via Yoga,
+  // unlike a rate/amount figure splitting mid-number, which reads as broken).
+  colProduct: { flex: 2.4, fontSize: 9.5, fontWeight: 700 },
+  colQty: { flex: 0.45, fontSize: 9.5, textAlign: "right" },
+  colUnit: { flex: 0.55, fontSize: 9, paddingLeft: 12 },
+  colRate: { flex: 1.25, fontSize: 9.5, textAlign: "right" },
+  colAmount: { flex: 1.35, fontSize: 9.5, fontWeight: 700, textAlign: "right" },
   amountInWordsRow: {
     marginTop: 12,
     paddingTop: 8,
@@ -157,8 +178,16 @@ function productDisplayName(item) {
   return size ? `${item.name || "—"} (${size})` : item.name || "—";
 }
 
+// Bare number, no currency prefix - used for the per-line Rate/Amount cells
+// only, where the currency is already stated once in the column header
+// (RATE (NPR) / AMOUNT (NPR)) rather than repeated on every row.
+function decimalNumber(value) {
+  return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function InvoicePage({ invoice, proforma, proformaId }) {
   const currency = invoice.totals?.currency;
+  const isScheme = invoice?.orderOrigin === "SCHEME";
 
   return (
     <Page size="A4" style={styles.page}>
@@ -170,7 +199,15 @@ function InvoicePage({ invoice, proforma, proformaId }) {
         <MeituLogoMark width={38} style={styles.logo} color="#000000" />
         <Text style={styles.companyName}>Meitu Construction Materials Pvt. Ltd.</Text>
         <Text style={styles.companyAddress}>Madhyapur Thimi-08, Bhaktapur</Text>
-        <Text style={styles.docTitle}>PROFORMA INVOICE</Text>
+        {isScheme ? (
+          <>
+            <View style={styles.schemeTitleBar}>
+              <Text style={styles.schemeTitleText}>SCHEME PROFORMA INVOICE</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.docTitle}>PROFORMA INVOICE</Text>
+        )}
       </View>
 
       <View style={styles.infoSection}>
@@ -184,7 +221,11 @@ function InvoicePage({ invoice, proforma, proformaId }) {
           <View style={styles.infoColRight}>
             <InfoLine label="Proforma ID" value={proformaId} />
             <InfoLine label="Date" value={compactDateWithYear(invoice.generatedAt)} />
-            <InfoLine label="Payment Method" value={invoice.payment?.method} />
+            {isScheme ? (
+              <InfoLine label="Scheme" value={invoice.scheme?.label || "Free-of-cost grant"} />
+            ) : (
+              <InfoLine label="Payment Method" value={invoice.payment?.method} />
+            )}
             <InfoLine label="Address" value={invoice.dealer?.address} />
           </View>
         </View>
@@ -200,8 +241,8 @@ function InvoicePage({ invoice, proforma, proformaId }) {
           <Text style={[styles.headerLabel, styles.colProduct]}>PRODUCT</Text>
           <Text style={[styles.headerLabel, styles.colQty]}>QTY</Text>
           <Text style={[styles.headerLabel, styles.colUnit]}>UNIT</Text>
-          <Text style={[styles.headerLabel, styles.colRate]}>RATE</Text>
-          <Text style={[styles.headerLabel, styles.colAmount]}>AMOUNT</Text>
+          <Text style={[styles.headerLabel, styles.colRate]}>RATE ({currency})</Text>
+          <Text style={[styles.headerLabel, styles.colAmount]}>AMOUNT ({currency})</Text>
         </View>
         {proforma.lines.map((item, index) => (
           <View key={item.sku || item.name || index} style={styles.tableRow} wrap={false}>
@@ -209,12 +250,8 @@ function InvoicePage({ invoice, proforma, proformaId }) {
             <Text style={styles.colProduct}>{productDisplayName(item)}</Text>
             <Text style={styles.colQty}>{item.quantity ?? "—"}</Text>
             <Text style={styles.colUnit}>{resolvePiUnitLabel(item)}</Text>
-            <Text style={styles.colRate}>
-              {money(item.netUnitPrice, currency, { maximumFractionDigits: 0 })}
-            </Text>
-            <Text style={styles.colAmount}>
-              {money(item.netAmount, currency, { maximumFractionDigits: 0 })}
-            </Text>
+            <Text style={styles.colRate}>{decimalNumber(item.netUnitPrice)}</Text>
+            <Text style={styles.colAmount}>{decimalNumber(item.netAmount)}</Text>
           </View>
         ))}
       </View>
@@ -231,21 +268,21 @@ function InvoicePage({ invoice, proforma, proformaId }) {
               <View style={styles.totalsRow}>
                 <Text style={styles.totalsLabel}>Basic Amount</Text>
                 <Text style={styles.totalsValue}>
-                  {money(proforma.buckets[0].basicAmount, currency, { maximumFractionDigits: 0 })}
+                  {money(proforma.buckets[0].basicAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
               {proforma.buckets[0].exciseRatePercent > 0 ? (
                 <View style={styles.totalsRow}>
                   <Text style={styles.totalsLabel}>Excise Duty {proforma.buckets[0].exciseRatePercent}%</Text>
                   <Text style={styles.totalsValue}>
-                    {money(proforma.buckets[0].exciseAmount, currency, { maximumFractionDigits: 0 })}
+                    {money(proforma.buckets[0].exciseAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                 </View>
               ) : null}
               <View style={styles.totalsRow}>
                 <Text style={styles.totalsLabelEmphasis}>Taxable Amount</Text>
                 <Text style={styles.totalsValueEmphasis}>
-                  {money(proforma.buckets[0].taxableAmount, currency, { maximumFractionDigits: 0 })}
+                  {money(proforma.buckets[0].taxableAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               </View>
             </>
@@ -255,17 +292,17 @@ function InvoicePage({ invoice, proforma, proformaId }) {
                 <Text style={styles.bucketLabel}>{bucket.label}</Text>
                 <View style={styles.bucketRow}>
                   <Text>Basic Amount</Text>
-                  <Text>{money(bucket.basicAmount, currency, { maximumFractionDigits: 0 })}</Text>
+                  <Text>{money(bucket.basicAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                 </View>
                 {bucket.exciseRatePercent > 0 ? (
                   <View style={styles.bucketRow}>
                     <Text>Excise Duty {bucket.exciseRatePercent}%</Text>
-                    <Text>{money(bucket.exciseAmount, currency, { maximumFractionDigits: 0 })}</Text>
+                    <Text>{money(bucket.exciseAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                   </View>
                 ) : null}
                 <View style={[styles.bucketRow, styles.bucketRowEmphasis]}>
                   <Text>Taxable Amount</Text>
-                  <Text>{money(bucket.taxableAmount, currency, { maximumFractionDigits: 0 })}</Text>
+                  <Text>{money(bucket.taxableAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
                 </View>
               </View>
             ))
@@ -274,7 +311,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
             <View style={styles.totalsRow}>
               <Text style={styles.totalsLabel}>Total Taxable Amount</Text>
               <Text style={styles.totalsValue}>
-                {money(proforma.taxableAmount, currency, { maximumFractionDigits: 0 })}
+                {money(proforma.taxableAmount, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
           ) : null}
@@ -286,7 +323,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
             <View key={label} style={[styles.totalsRow, emphasize && styles.totalsRowEmphasis]}>
               <Text style={emphasize ? styles.totalsLabelEmphasis : styles.totalsLabel}>{label}</Text>
               <Text style={emphasize ? styles.totalsValueEmphasis : styles.totalsValue}>
-                {money(value, currency, { maximumFractionDigits: 0 })}
+                {money(value, currency, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
           ))}
@@ -301,7 +338,7 @@ function InvoicePage({ invoice, proforma, proformaId }) {
 
       <View style={styles.footer} fixed>
         <Text style={styles.footerText}>
-          Computer-generated proforma · Not a tax invoice · {compactDateWithYear(new Date())}
+          Computer-generated proforma · Not a tax invoice{isScheme ? " · Free-of-cost scheme grant, no payment due" : ""} · {compactDateWithYear(new Date())}
         </Text>
         <Text style={styles.footerId}>PI ID: {proformaId}</Text>
       </View>
@@ -313,7 +350,7 @@ export default function ProformaPdfDocument({ invoice, proforma }) {
   const proformaId = deriveProformaId(invoice);
 
   return (
-    <Document title={`Proforma ${invoice?.orderNumber || ""}`}>
+    <Document title={`${invoice?.orderOrigin === "SCHEME" ? "Scheme Proforma" : "Proforma"} ${invoice?.orderNumber || ""}`}>
       <InvoicePage invoice={invoice} proforma={proforma} proformaId={proformaId} />
     </Document>
   );

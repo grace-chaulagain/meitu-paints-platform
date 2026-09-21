@@ -4,10 +4,9 @@
 // hardcoded hex values. Everything here reads from the design tokens
 // already defined in src/index.css (--color-ink, --color-azure, etc.)
 // so dashboard chrome and the public site share one visual language.
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Fragment } from "react";
 import { DashboardIcon } from "./DashboardIcons.jsx";
+import { InfoTip } from "./InfoTip.jsx";
 import { scrollResultsToTop } from "../../utils/scrollResultsToTop.js";
 import { useMediaQuery } from "../../hooks/useMediaQuery.js";
 import {
@@ -109,165 +108,6 @@ export function SectionHeader({ title, subtitle, action = null, size = "default"
   );
 }
 
-// Optional "i" affordance for a MetricTile that needs a short explainer
-// (e.g. how a health score is computed). Positioned via getBoundingClientRect
-// and rendered through a portal so it never gets clipped by a card's
-// overflow, and can appear to either side depending on viewport space.
-function MetricInfoButton({ label, info }) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState(null);
-  const buttonRef = useRef(null);
-  const popoverRef = useRef(null);
-  const shouldReduceMotion = useReducedMotion();
-
-  const updatePosition = useCallback(() => {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const viewportPadding = 16;
-    const width = Math.min(340, window.innerWidth - viewportPadding * 2);
-    const rightSideLeft = rect.right + 12;
-    const placeRight = rightSideLeft + width <= window.innerWidth - viewportPadding;
-    const left = placeRight ? rightSideLeft : Math.max(viewportPadding, rect.left - width - 12);
-    const estimatedHeight = Math.min(420, window.innerHeight - viewportPadding * 2);
-    const top = Math.max(
-      viewportPadding,
-      Math.min(rect.top - 8, window.innerHeight - viewportPadding - estimatedHeight),
-    );
-    const maxHeight = Math.max(180, Math.min(420, window.innerHeight - top - viewportPadding));
-
-    // The popover renders to whichever side of the trigger has room, so its
-    // scale-in should originate from that same side (Emil Kowalski: popovers
-    // should scale from their trigger, not from a fixed corner).
-    setPosition({ left, top, width, maxHeight, origin: placeRight ? "top left" : "top right" });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handlePointerDown(event) {
-      if (popoverRef.current?.contains(event.target) || buttonRef.current?.contains(event.target)) return;
-      setOpen(false);
-    }
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setOpen(false);
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open, updatePosition]);
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-label={`About ${label}`}
-        aria-expanded={open}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setOpen((current) => {
-            const next = !current;
-            if (next) requestAnimationFrame(updatePosition);
-            return next;
-          });
-        }}
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 999,
-          border: "none",
-          background: "rgba(0,0,0,.06)",
-          color: "var(--color-graphite, #707070)",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 10.5,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        i
-      </button>
-      {typeof document !== "undefined"
-        ? createPortal(
-            <AnimatePresence>
-              {open && position ? (
-                <motion.div
-                  ref={popoverRef}
-                  role="dialog"
-                  aria-label={`${label} details`}
-                  onClick={(event) => event.stopPropagation()}
-                  initial={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.96 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.97 }}
-                  transition={{ duration: shouldReduceMotion ? 0.001 : 0.15, ease: [0.23, 1, 0.32, 1] }}
-                  style={{
-                    position: "fixed",
-                    top: position.top,
-                    left: position.left,
-                    zIndex: 9999,
-                    width: position.width,
-                    maxHeight: position.maxHeight,
-                    overflow: "auto",
-                    overscrollBehavior: "contain",
-                    padding: 14,
-                    borderRadius: 14,
-                    border: "1px solid rgba(29,29,31,.08)",
-                    background: "var(--color-snow, #fff)",
-                    boxShadow: "0 8px 28px rgba(0,0,0,.14)",
-                    color: "var(--color-ink, #1d1d1f)",
-                    transformOrigin: position.origin,
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{info.title}</div>
-                  {info.summary ? (
-                    <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-                      {info.summary}
-                    </div>
-                  ) : null}
-                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                    {(info.sections || []).map((section) => (
-                      <div key={section.title}>
-                        <div
-                          style={{
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            letterSpacing: ".03em",
-                            textTransform: "uppercase",
-                            color: "var(--color-graphite, #707070)",
-                          }}
-                        >
-                          {section.title}
-                        </div>
-                        <ul style={{ margin: "6px 0 0", paddingLeft: 15, display: "grid", gap: 4, fontSize: 12, lineHeight: 1.4, fontWeight: 500 }}>
-                          {section.items.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>,
-            document.body,
-          )
-        : null}
-    </>
-  );
-}
-
 export function MetricTile({ label, value, helper = "", icon = "", tone = "neutral", info = null }) {
   const accentColor = tone === "accent" ? "var(--color-azure, #0071e3)" : "var(--color-ink, #1d1d1f)";
   return (
@@ -301,7 +141,7 @@ export function MetricTile({ label, value, helper = "", icon = "", tone = "neutr
           {icon ? <DashboardIcon name={icon} size={14} /> : null}
           {label}
         </div>
-        {info ? <MetricInfoButton label={label} info={info} /> : null}
+        {info ? <InfoTip label={label} info={info} /> : null}
       </div>
       <div style={{ fontSize: 31, lineHeight: 1, fontWeight: 800, letterSpacing: "-0.045em", color: accentColor }}>
         {value}
@@ -1570,7 +1410,8 @@ export function DashboardUIStyles() {
         .dash-row-checkbox:active,
         .dash-pagination-btn:active,
         .factory-ui-close-btn:active{ transform:none !important; }
-        .dash-spinner{ animation:none; }
+        /* Slower, not stopped - a frozen spinner reads as a hung app. */
+        .dash-spinner{ animation-duration:1.6s; }
       }
 
       .apple-date-field-trigger{
@@ -1601,7 +1442,7 @@ export function DashboardUIStyles() {
       }
 
       .apple-calendar-pop{
-        z-index:1401;
+        z-index:1801;
         padding:18px;
         border-radius:20px;
         background:#fff;
@@ -1644,6 +1485,16 @@ export function DashboardUIStyles() {
       }
       .apple-calendar-nav:active{
         transform:scale(.9);
+      }
+      .apple-calendar-nav:disabled{
+        opacity:.3;
+        cursor:not-allowed;
+      }
+      .apple-calendar-nav:disabled:hover{
+        background:transparent;
+      }
+      .apple-calendar-nav:disabled:active{
+        transform:none;
       }
       .apple-calendar-weekdays{
         display:grid;
@@ -1696,6 +1547,17 @@ export function DashboardUIStyles() {
       .apple-calendar-day.is-selected:hover{
         background:var(--color-azure, #0071e3);
       }
+      .apple-calendar-day.is-future{
+        color:var(--color-graphite, #707070);
+        opacity:.32;
+        cursor:not-allowed;
+      }
+      .apple-calendar-day.is-future:hover{
+        background:transparent;
+      }
+      .apple-calendar-day.is-future:active{
+        transform:none;
+      }
       @media (prefers-reduced-motion: reduce){
         .apple-calendar-pop{ animation:none!important; }
         .apple-date-field-trigger{ transition:none!important; }
@@ -1734,7 +1596,7 @@ export function DashboardUIStyles() {
       }
 
       .apple-dropdown-menu{
-        z-index:1401;
+        /* z-index is set inline by PopoverListMenu - see ApplePickers.jsx. */
         max-height:340px;
         overflow-y:auto;
         overflow-x:hidden;

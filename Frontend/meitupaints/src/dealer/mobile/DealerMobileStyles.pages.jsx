@@ -2052,6 +2052,21 @@ export function DealerMobileStylesPages() {
         font-size:var(--t-footnote);
         color:var(--color-graphite,#707070);
       }
+      .dealer-m-orders-card-scheme{
+        align-self:flex-start;
+        max-width:100%;
+        margin-top:3px;
+        padding:2px 8px;
+        border-radius:999px;
+        background:rgba(182,68,0,.1);
+        color:#b64400;
+        font-size:var(--t-caption2);
+        font-weight:700;
+        letter-spacing:.02em;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+      }
       .dealer-m-orders-card-right{
         flex-shrink:0;
         display:flex;

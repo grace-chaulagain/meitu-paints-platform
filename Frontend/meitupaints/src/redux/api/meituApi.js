@@ -40,6 +40,18 @@ function itemTags(type, items = []) {
   ];
 }
 
+// Creating, amending or withdrawing a scheme all move reserved factory stock
+// and change what the factory queue is holding, so all three invalidate the
+// same set rather than each keeping its own drifting list.
+const SCHEME_ORDER_INVALIDATES = [
+  listTag("SchemeOrder"),
+  listTag("Order"),
+  listTag("AdminOrder"),
+  listTag("Stock"),
+  listTag("Insight"),
+  listTag("AdminInsight"),
+];
+
 function listResponseTags(type, response) {
   return itemTags(type, getItems(response));
 }
@@ -174,6 +186,8 @@ export const meituApi = createApi({
     "Report",
     "Insight",
     "AdminInsight",
+    "AdminPayment",
+    "SchemeOrder",
     "DispatcherStock",
     "DispatcherStockMovement",
     "DispatcherCatalog",
@@ -998,6 +1012,17 @@ export const meituApi = createApi({
       ],
     }),
 
+    // Dealer-wide counterpart to getAdminDealerInventoryMovements - every
+    // purchase/sale across every product, not scoped to one productId.
+    // Powers the "All Sales & Purchases" tab.
+    getAdminDealerInventoryHistory: builder.query({
+      query: ({ dealerId, ...params }) => ({
+        url: `/api/admin/dealers/${dealerId}/inventory/history`,
+        params,
+      }),
+      providesTags: (_response, _error, arg) => [{ type: "DealerInventoryMovement", id: `${arg?.dealerId}:history` }],
+    }),
+
     updateAdminDealer: builder.mutation({
       query: ({ dealerId, payload }) => ({
         url: `/api/admin/dealers/${dealerId}`,
@@ -1553,6 +1578,224 @@ export const meituApi = createApi({
       providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
     }),
 
+    // Account-keeping rebuild (see admin.insights.routes.js) - per-section
+    // endpoints, lazy-loaded per active tab, rather than the single
+    // combined getAdminInsights blob above.
+    // Shared by create/update/delete: every one of them moves reserved
+    // factory stock and changes what the factory queue is holding.
+    getSchemeRecipients: builder.query({
+      query: () => ({ url: "/api/admin/scheme-orders/recipients" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: () => [listTag("SchemeOrder")],
+    }),
+
+    getSchemeOrders: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/scheme-orders", params }),
+      transformResponse: getItems,
+      providesTags: () => [listTag("SchemeOrder")],
+    }),
+
+    createSchemeOrder: builder.mutation({
+      query: (body) => ({ url: "/api/admin/scheme-orders", method: "POST", body }),
+      // A scheme reserves factory stock and lands in the factory queue,
+      // so orders, stock and insights all change with it.
+      invalidatesTags: () => SCHEME_ORDER_INVALIDATES,
+    }),
+
+    // Both only apply while the scheme is still in the factory's queue; the
+    // server refuses once it has been dispatched. They invalidate the same
+    // set as create - an amended basket moves reserved stock, and a deleted
+    // scheme hands it back.
+    updateSchemeOrder: builder.mutation({
+      query: ({ orderId, ...body }) => ({
+        url: `/api/admin/scheme-orders/${orderId}`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_r, _e, arg) => [
+        ...SCHEME_ORDER_INVALIDATES,
+        { type: "AdminOrder", id: arg?.orderId },
+        { type: "Order", id: arg?.orderId },
+      ],
+    }),
+
+    deleteSchemeOrder: builder.mutation({
+      query: ({ orderId, reason = "" }) => ({
+        url: `/api/admin/scheme-orders/${orderId}`,
+        method: "DELETE",
+        body: { reason },
+      }),
+      invalidatesTags: () => SCHEME_ORDER_INVALIDATES,
+    }),
+
+    getAdminInventoryOverview: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/overview", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminFactoryStock: builder.query({
+      query: () => ({ url: "/api/admin/insights/inventory/factory" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminDispatcherStockLevels: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/dispatcher", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminDealerStockLevels: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/dealer", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminStockMovements: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/inventory/movements", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminInsight")],
+    }),
+
+    getAdminPayablePartyList: builder.query({
+      query: () => ({ url: "/api/admin/insights/payments/parties" }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminPaymentLedger: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminPartyDues: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments/dues", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("AdminPayment")],
+    }),
+
+    getAdminAllocationPreview: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/payments/allocation-preview", params }),
+      transformResponse: getItem,
+    }),
+
+    createAdminPayment: builder.mutation({
+      query: (body) => ({ url: "/api/admin/insights/payments", method: "POST", body }),
+      // A recorded payment changes AR, aging, reconciliation and cash
+      // position, so the whole insights surface is invalidated with it.
+      invalidatesTags: () => [listTag("AdminPayment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminCashPosition: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/cash-position", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminPaymentReconciliation: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/reconciliation", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight"), listTag("Payment")],
+    }),
+
+    getAdminOrderAnalytics: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/orders", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    // Performance sub-tabs (see admin.insights.routes.js). Dealers
+    // deliberately calls the existing, previously-orphaned dealer
+    // leaderboard endpoint directly rather than a new insights-domain
+    // proxy - it was already correct, just unwired to any frontend.
+    getAdminDealerLeaderboard: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/dealers/analytics/leaderboard", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminProductPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/products", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminDispatcherPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/dispatchers", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminRoutingPerformance: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/performance/routing", params }),
+      transformResponse: getItem,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminArSummary: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/ar/summary", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    getAdminArAging: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/insights/ar/aging", params }),
+      transformResponse: getItems,
+      keepUnusedDataFor: INSIGHT_CACHE_SECONDS,
+      providesTags: () => [listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    // Payments (verification queue) - the Payment model/routes were already
+    // backend-complete but had zero frontend consumers before this section.
+    getAdminPayments: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/payments", params }),
+      transformResponse: (response) => ({
+        items: response?.items || [],
+        total: response?.total || 0,
+        page: response?.page || 1,
+        limit: response?.limit || 20,
+      }),
+      keepUnusedDataFor: WORKFLOW_CACHE_SECONDS,
+      providesTags: (response) => listResponseTags("Payment", response),
+    }),
+
+    verifyAdminPayment: builder.mutation({
+      query: ({ paymentId, note = "" }) => ({
+        url: `/api/admin/payments/${paymentId}/verify`,
+        method: "POST",
+        data: { note },
+      }),
+      invalidatesTags: () => [listTag("Payment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
+    rejectAdminPayment: builder.mutation({
+      query: ({ paymentId, note = "" }) => ({
+        url: `/api/admin/payments/${paymentId}/reject`,
+        method: "POST",
+        data: { note },
+      }),
+      invalidatesTags: () => [listTag("Payment"), listTag("Insight"), listTag("AdminInsight")],
+    }),
+
     getAdminPointsCatalogProducts: builder.query({
       query: (params = {}) => ({ url: "/api/admin/points-catalog-products", params }),
       providesTags: (response) => listResponseTags("PointsCatalogProduct", response),
@@ -1782,6 +2025,7 @@ export const {
   useGetAdminDealerAnalyticsQuery,
   useGetAdminDealerInventoryQuery,
   useGetAdminDealerInventoryMovementsQuery,
+  useGetAdminDealerInventoryHistoryQuery,
   useUpdateAdminDealerMutation,
   useUpdateAdminDealerStatusMutation,
   useDeleteAdminDealerMutation,
@@ -1840,6 +2084,33 @@ export const {
   useIssueFactoryInvoiceMutation,
   useLazyGetAdminOrderStatementReportQuery,
   useGetAdminInsightsQuery,
+  useGetAdminCashPositionQuery,
+  useGetAdminPaymentReconciliationQuery,
+  useGetAdminOrderAnalyticsQuery,
+  useGetAdminDealerLeaderboardQuery,
+  useGetAdminProductPerformanceQuery,
+  useGetAdminDispatcherPerformanceQuery,
+  useGetAdminRoutingPerformanceQuery,
+  useGetAdminArSummaryQuery,
+  useGetAdminArAgingQuery,
+  useGetAdminPaymentsQuery,
+  useGetAdminPaymentLedgerQuery,
+  useGetAdminInventoryOverviewQuery,
+  useGetSchemeRecipientsQuery,
+  useGetSchemeOrdersQuery,
+  useCreateSchemeOrderMutation,
+  useUpdateSchemeOrderMutation,
+  useDeleteSchemeOrderMutation,
+  useGetAdminFactoryStockQuery,
+  useGetAdminDispatcherStockLevelsQuery,
+  useGetAdminDealerStockLevelsQuery,
+  useGetAdminStockMovementsQuery,
+  useGetAdminPayablePartyListQuery,
+  useGetAdminPartyDuesQuery,
+  useGetAdminAllocationPreviewQuery,
+  useCreateAdminPaymentMutation,
+  useVerifyAdminPaymentMutation,
+  useRejectAdminPaymentMutation,
   useGetAdminPointsCatalogProductsQuery,
   useGetAdminPointsCatalogProductQuery,
   useCreatePointsCatalogProductMutation,

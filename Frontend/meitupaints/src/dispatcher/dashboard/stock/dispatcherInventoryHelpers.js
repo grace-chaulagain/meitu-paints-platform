@@ -58,6 +58,10 @@ export function movementLabel(type) {
       REPLENISHMENT_IN: "Received from Factory",
       DISPATCH_OUT: "Dispatched to dealer",
       ADJUSTMENT: "Manual adjustment",
+      // Free-of-cost goods from an admin scheme order - a real credit,
+      // same as REPLENISHMENT_IN (genuinely theirs to dispatch), just
+      // labeled separately so history says where the units came from.
+      SCHEME: "Scheme goods received",
     }[type] || type
   );
 }

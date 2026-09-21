@@ -20,10 +20,12 @@ import {
   reserveStockForOrder,
 } from "./stock.service.js";
 import { creditDispatcherStock } from "./dispatcherStock.service.js";
+import { DISPATCHER_STOCK_MOVEMENT_TYPE } from "../models/DispatcherStockMovement.model.js";
 import Invoice from "../models/Invoice.model.js";
 import { issueInvoiceForOrder } from "./invoice.service.js";
 import { recordPurchaseMovement } from "./dealerInventory.service.js";
 import { buildPublicAppUrl } from "../utils/publicUrl.js";
+import { buildRecipientOrderUrl } from "../utils/orderLinks.js";
 import {
   smtpConfigured,
   sendMail,
@@ -81,38 +83,51 @@ export async function sendDealerStatusEmail({ order, status, reason = "" }) {
   }
 
   const label = statusLabel(status);
-  const orderUrl = buildPublicAppUrl("/dealer/orders");
+  const isScheme = order?.orderOrigin === ORDER_ORIGIN.SCHEME;
+  const schemeLabel = isScheme ? clean(order?.scheme?.label) : "";
+  // A scheme deep-links straight to that order in the recipient's own portal
+  // (dealer or dispatcher); a normal order keeps the generic order list.
+  const orderUrl = isScheme ? buildRecipientOrderUrl(order) : buildPublicAppUrl("/dealer/orders");
   const dealerName =
     order.dealerSnapshot?.companyName || order.dealerSnapshot?.contactName || "Dealer";
   const orderNumber = order.orderNumber || "";
+  const orderNoun = isScheme ? "scheme order" : "order";
+  const orderDescriptor = `${orderNumber}${schemeLabel ? ` (${schemeLabel})` : ""}`;
 
   const text = [
     `Hello ${dealerName},`,
     "",
-    `Your order ${orderNumber} is now ${label}.`,
+    `Your ${orderNoun} ${orderDescriptor} is now ${label}.`,
+    isScheme ? "This is a free-of-cost scheme grant." : "",
     reason ? `\nReason: ${reason}` : "",
-    orderUrl ? `View your order history: ${orderUrl}` : "",
+    orderUrl ? `${isScheme ? "Track this scheme order" : "View your order history"}: ${orderUrl}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 
   const html = renderEmailShell({
-    preheader: `Your order ${orderNumber} is now ${label}.`,
-    eyebrow: "Order Update",
-    title: `Order ${label}`,
-    intro: `Hello ${dealerName}, your order ${orderNumber} is now ${label}.`,
+    preheader: `Your ${orderNoun} ${orderNumber} is now ${label}.`,
+    eyebrow: isScheme ? "Scheme Order Update" : "Order Update",
+    title: isScheme ? `Scheme Order ${label}` : `Order ${label}`,
+    intro: `Hello ${dealerName}, your ${orderNoun} ${orderDescriptor} is now ${label}.`,
     bodyHtml: renderDetailRows([
       { label: "Order Number", value: orderNumber },
+      ...(isScheme
+        ? [
+            { label: "Scheme", value: schemeLabel || "Free-of-cost grant" },
+            { label: "Cost", value: "Free of cost" },
+          ]
+        : []),
       { label: "Status", value: label },
     ]),
     calloutHtml: renderCallout(reason, { label: "Reason" }),
-    ctaLabel: "View Order",
+    ctaLabel: isScheme ? "Track Scheme Order" : "View Order",
     ctaUrl: orderUrl,
   });
 
   await sendMail({
     to,
-    subject: `Meitu Paints order ${orderNumber}: ${label}`.trim(),
+    subject: `Meitu Paints ${orderNoun} ${orderNumber}: ${label}`.trim(),
     text,
     html,
   });
@@ -120,32 +135,12 @@ export async function sendDealerStatusEmail({ order, status, reason = "" }) {
   return new Date();
 }
 
-// Sends the best-effort dealer notification email for a status transition
-// and returns the statusHistory entry to persist. Deliberately does NOT
-// mutate or save the order itself - the caller applies the transition via
-// an atomic, status-guarded findOneAndUpdate, which is what actually
-// prevents two concurrent requests from both succeeding on the same order.
-async function buildStatusHistoryEntry({
-  order,
-  nextStatus,
-  actorUser,
-  note = "",
-  reason = "",
-  emailDealer = true,
-}) {
-  let dealerEmailSentAt = null;
-  if (emailDealer && order.status !== nextStatus) {
-    try {
-      dealerEmailSentAt = await sendDealerStatusEmail({
-        order,
-        status: nextStatus,
-        reason,
-      });
-    } catch (error) {
-      console.warn("[factory-email] dealer status email failed:", error.message);
-    }
-  }
-
+// Builds the statusHistory entry to persist for a transition. Deliberately does
+// NOT mutate or save the order itself - the caller applies the transition via
+// an atomic, status-guarded findOneAndUpdate, which is what actually prevents
+// two concurrent requests from both succeeding on the same order - and does
+// NOT send any email: see queueDealerStatusEmail.
+function buildStatusHistoryEntry({ order, nextStatus, actorUser, note = "", reason = "" }) {
   return {
     fromStatus: order.status || "",
     toStatus: nextStatus,
@@ -154,8 +149,32 @@ async function buildStatusHistoryEntry({
     changedByUserId: actorId(actorUser),
     changedByRole: normalize(actorUser?.role),
     changedAt: new Date(),
-    dealerEmailSentAt,
+    dealerEmailSentAt: null,
   };
+}
+
+// Best-effort dealer email for a transition that has ALREADY committed, never
+// awaited by the request. It used to be sent before the transaction and
+// awaited: every Dispatch / Mark delivered sat behind a 5+ second SMTP round
+// trip (the factory user stared at a spinner), and the dealer could be told an
+// order was dispatched even when the transaction then failed and rolled back.
+// Now the response goes out as soon as the change is saved, the email follows,
+// and its send time is stamped onto that history entry afterwards.
+function queueDealerStatusEmail({ order, entry, reason = "" }) {
+  if (!order || !entry || entry.fromStatus === entry.toStatus) return;
+
+  sendDealerStatusEmail({ order, status: entry.toStatus, reason })
+    .then((sentAt) => {
+      if (!sentAt) return null;
+      return Order.updateOne(
+        { _id: order._id },
+        { $set: { "statusHistory.$[entry].dealerEmailSentAt": sentAt } },
+        { arrayFilters: [{ "entry.toStatus": entry.toStatus, "entry.changedAt": entry.changedAt }] },
+      );
+    })
+    .catch((error) => {
+      console.warn("[factory-email] dealer status email failed:", error.message);
+    });
 }
 
 // Defaults to FACTORY-only, matching every existing caller (the operational
@@ -255,6 +274,7 @@ export async function listFactoryOrders({
   stage = "ALL",
   status = "",
   origin = "",
+  excludeOrigins = "",
   dealerId = "",
   q = "",
   page = 1,
@@ -267,9 +287,21 @@ export async function listFactoryOrders({
   const normalizedStatus = normalize(status);
   if (normalizedStatus) query.status = normalizedStatus;
 
+  // Mirrors listOrdersForActor's origin handling (order.service.js) - see the
+  // comment there for why exclusion uses $nin rather than a positive match on
+  // orderOrigin. Schemes matter here specifically because they snapshot
+  // fulfillmentMode FACTORY, so they land in this page's default scope.
   const normalizedOrigin = normalize(origin);
-  if (["DEALER", "DISPATCHER_REPLENISHMENT"].includes(normalizedOrigin)) {
+  if (Object.values(ORDER_ORIGIN).includes(normalizedOrigin)) {
     query.orderOrigin = normalizedOrigin;
+  } else {
+    const excluded = String(excludeOrigins || "")
+      .split(",")
+      .map((value) => normalize(value))
+      .filter((value) => Object.values(ORDER_ORIGIN).includes(value));
+    if (excluded.length) {
+      query.orderOrigin = { $nin: excluded };
+    }
   }
 
   if (dealerId) query.dealerId = dealerId;
@@ -354,7 +386,7 @@ export async function markOutForDelivery({
     });
   }
 
-  const historyEntry = await buildStatusHistoryEntry({
+  const historyEntry = buildStatusHistoryEntry({
     order,
     nextStatus: ORDER_STATUS.DISPATCHED,
     actorUser: factoryUser,
@@ -423,6 +455,8 @@ export async function markOutForDelivery({
     session.endSession();
   }
 
+  queueDealerStatusEmail({ order: updatedOrder, entry: historyEntry });
+
   return updatedOrder;
 }
 
@@ -436,7 +470,7 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
     });
   }
 
-  const historyEntry = await buildStatusHistoryEntry({
+  const historyEntry = buildStatusHistoryEntry({
     order,
     nextStatus: ORDER_STATUS.COMPLETED,
     actorUser: factoryUser,
@@ -473,6 +507,11 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
       // dealerId) credit the dealer's own inventory ledger the moment
       // goods are physically handed over - this is the "Dealer receives
       // order from Meitu -> Inventory automatically increases" step.
+      const isScheme = updated.orderOrigin === ORDER_ORIGIN.SCHEME;
+      const schemeReason = `Scheme order received${
+        updated.scheme?.label ? `: ${updated.scheme.label}` : ""
+      }`;
+
       if (updated.dealerId) {
         await recordPurchaseMovement({
           dealerId: updated.dealerId,
@@ -480,6 +519,25 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
           orderId: updated._id,
           actorUser: factoryUser,
           actorRole: "FACTORY",
+          session,
+          // Labels the dealer's stock history with where these units came
+          // from, and keeps gifted stock out of PURCHASE-volume metrics.
+          movementType: isScheme ? "SCHEME" : undefined,
+          reason: isScheme ? schemeReason : undefined,
+        });
+      } else if (isScheme && updated.dispatcherCustomerId) {
+        // A scheme addressed to a dispatcher used to fall through both
+        // branches and record nothing at all: this one needs dealerId, and
+        // the creditDispatcherStock call in markOutForDelivery only fires
+        // for DISPATCHER_REPLENISHMENT. The goods left central stock with no
+        // trace on the receiving side. Ledger-only, same as the dealer rule.
+        await creditDispatcherStock({
+          dispatcherId: updated.dispatcherCustomerId,
+          items: updated.items,
+          orderId: updated._id,
+          actorUser: factoryUser,
+          movementType: DISPATCHER_STOCK_MOVEMENT_TYPE.SCHEME,
+          reason: schemeReason,
           session,
         });
       }
@@ -489,6 +547,8 @@ export async function markDelivered({ orderId, factoryUser, note = "" }) {
   } finally {
     session.endSession();
   }
+
+  queueDealerStatusEmail({ order: updatedOrder, entry: historyEntry });
 
   return updatedOrder;
 }
@@ -506,7 +566,7 @@ export async function rejectFactoryOrder({ orderId, factoryUser, reason, note = 
     });
   }
 
-  const historyEntry = await buildStatusHistoryEntry({
+  const historyEntry = buildStatusHistoryEntry({
     order,
     nextStatus: ORDER_STATUS.REJECTED,
     actorUser: factoryUser,
@@ -554,6 +614,8 @@ export async function rejectFactoryOrder({ orderId, factoryUser, reason, note = 
   } finally {
     session.endSession();
   }
+
+  queueDealerStatusEmail({ order: updatedOrder, entry: historyEntry, reason: clean(reason) });
 
   return updatedOrder;
 }
@@ -653,6 +715,11 @@ export async function getProformaInvoice({ orderId }) {
     orderNumber: order.orderNumber,
     serialNumber: order.serialNumber,
     generatedAt: order.proformaIssuedAt || null,
+    // Lets the PDF mark a scheme grant clearly on the document itself,
+    // rather than a free-of-cost order producing a proforma that reads
+    // exactly like a real commercial one.
+    orderOrigin: order.orderOrigin,
+    scheme: order.scheme || null,
     dealer: order.dealerSnapshot || {},
     payment: order.payment || {},
     driver: {

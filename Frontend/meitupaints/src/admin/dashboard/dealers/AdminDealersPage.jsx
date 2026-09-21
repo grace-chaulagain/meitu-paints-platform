@@ -1256,7 +1256,7 @@ export default function AdminDealersPage() {
           outline-offset:2px;
         }
         .admin-route-menu{
-          z-index:1401;
+          /* z-index is set inline by PopoverListMenu - see ApplePickers.jsx. */
           padding:10px;
           border-radius:20px;
           background:#fff;

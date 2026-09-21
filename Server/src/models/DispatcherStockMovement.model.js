@@ -4,10 +4,16 @@ import mongoose from "mongoose";
 // stock - mirrors InventoryMovement.model.js's role for dealer stock.
 // Append-only. DispatcherProductStock is a fast-read denormalized cache
 // derived from this ledger.
+// SCHEME is deliberately LEDGER-ONLY: it records that free-of-cost goods
+// arrived, but leaves currentQuantity untouched, so scheme units never
+// become sellable/dispatchable regional stock. Mirrors
+// INVENTORY_MOVEMENT_TYPE.SCHEME on the dealer side - see the isLedgerOnly
+// branch in dealerInventory.service.js's applyMovement.
 export const DISPATCHER_STOCK_MOVEMENT_TYPE = Object.freeze({
   REPLENISHMENT_IN: "REPLENISHMENT_IN",
   DISPATCH_OUT: "DISPATCH_OUT",
   ADJUSTMENT: "ADJUSTMENT",
+  SCHEME: "SCHEME",
 });
 
 const DispatcherStockMovementSchema = new mongoose.Schema(
