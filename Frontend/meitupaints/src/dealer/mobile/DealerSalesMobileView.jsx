@@ -11,6 +11,7 @@ import { useCountUp } from "./useCountUp.js";
 import { useScrollInset } from "./useScrollInset.js";
 import { NewSaleMobileSheet } from "./NewSaleMobileSheet.jsx";
 import { SkeletonSwap } from "./SkeletonSwap.jsx";
+import { canDealerVoid, voidTimeLeftLabel } from "../sales/voidWindow.js";
 
 function formatMoney(value) {
   return `NPR ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -85,7 +86,9 @@ function SaleDetailSheet({ sale, onClose }) {
   }
 
   if (!renderedSale) return null;
-  const canVoid = renderedSale.status === "COMPLETED";
+  // Same one-day rule the server enforces.
+  const canVoid = canDealerVoid(renderedSale);
+  const voidExpired = renderedSale.status === "COMPLETED" && !canVoid;
 
   function cancelVoid() {
     setVoiding(false);
@@ -135,11 +138,14 @@ function SaleDetailSheet({ sale, onClose }) {
 
       {renderedSale.status === "VOIDED" ? (
         <div className="dealer-m-sale-detail-voided">Voided: {renderedSale.voidReason}</div>
+      ) : voidExpired ? (
+        <div className="dealer-m-sale-detail-notes">This sale can no longer be voided - the one-day window closed.</div>
       ) : canVoid ? (
         <div className="dealer-m-sale-detail-manage">
           <div className="dealer-m-sale-detail-divider" />
           {voiding ? (
             <div className="dealer-m-sale-detail-void">
+              <div className="dealer-m-sale-detail-notes">{voidTimeLeftLabel(renderedSale)}</div>
               <input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}

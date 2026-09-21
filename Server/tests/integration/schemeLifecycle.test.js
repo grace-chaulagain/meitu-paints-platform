@@ -275,6 +275,43 @@ test("dispatch and delivery move the goods from the factory to the dealer", { sk
   assert.ok(history.includes("DISPATCHED") && history.includes("COMPLETED"), "both transitions are on the record");
 });
 
+test("voiding a sale undoes it, rather than looking like a fresh purchase", { skip: !ENABLED }, async () => {
+  const { default: Sale } = await import("../../src/models/Sale.model.js");
+  const { default: DealerProductStock } = await import("../../src/models/DealerProductStock.model.js");
+  const saleService = await import("../../src/services/sale.service.js");
+
+  const read = async () => {
+    const row = await DealerProductStock.findOne({ dealerId: dealer._id, productId: product._id }).lean();
+    return { current: row?.currentQuantity ?? 0, received: row?.totalReceivedQuantity ?? 0, sold: row?.totalSoldQuantity ?? 0 };
+  };
+  // Give the dealer something to sell, via a delivered scheme.
+  const { orderId } = await raise(4);
+  await factoryService.markOutForDelivery({ orderId, factoryUser, driverName: "T", driverPhone: "9800000000", vehicleNumber: "BA 1" });
+  await factoryService.markDelivered({ orderId, factoryUser, note: "" });
+  const before = await read();
+
+  const sale = await saleService.createSale({
+    dealerId: dealer._id,
+    billId: `ITEST-${Date.now()}`,
+    items: [{ productId: String(product._id), sku: product.sku, name: product.name, quantity: 2 }],
+    actorUser: admin,
+    actorRole: "ADMIN",
+  });
+  const afterSale = await read();
+  assert.equal(afterSale.current, before.current - 2, "a sale takes the units out of stock");
+  assert.equal(afterSale.sold, before.sold + 2, "and counts them as sold");
+
+  await saleService.voidSale({ dealerId: dealer._id, saleId: sale._id, reason: "integration test", actorUser: admin, actorRole: "ADMIN" });
+  const afterVoid = await read();
+  assert.equal(afterVoid.current, before.current, "voiding puts the stock back");
+  assert.equal(afterVoid.sold, before.sold, "and un-counts the sale");
+  assert.equal(afterVoid.received, before.received, "without inventing a purchase the dealer never made");
+
+  await Sale.deleteOne({ _id: sale._id });
+  const { default: InventoryMovement } = await import("../../src/models/InventoryMovement.model.js");
+  await InventoryMovement.deleteMany({ saleId: sale._id });
+});
+
 test("a dispatched scheme can no longer be edited or withdrawn", { skip: !ENABLED }, async () => {
   const { orderId } = await raise(1);
   await factoryService.markOutForDelivery({
