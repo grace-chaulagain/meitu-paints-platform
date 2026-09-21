@@ -203,18 +203,24 @@ function looseMatch(query, fields) {
 // it fall back to those matching some, so a typo in one word still leaves the
 // user looking at the right shortlist. A blank query returns `items` unchanged.
 //
-// `fallbackToPartial: false` drops that last courtesy. Use it where the same
-// box accepts something other than a name - the coupon history searches codes
-// too, and "GRN-002106" should return no people rather than the two whose
-// names happen to share a few letters with it.
-export function rankByLooseSearch(items, query, getFields, { fallbackToPartial = true } = {}) {
+// Two options narrow that bias for boxes that accept something other than a
+// name - the coupon history searches codes too, so "GRN-002106" must return no
+// people rather than the two whose names happen to share a few letters with it:
+//
+//   fallbackToPartial: false  drops the near-miss courtesy entirely.
+//   minScore: n               ignores matches weaker than n. The ladder in
+//                             looseTokenScore sets the useful floors: 30 keeps
+//                             real typos (42 one edit out, 34 two) while cutting
+//                             the letters-in-order last resort (25), which is
+//                             what pairs "raip" with "Grace Dispatcher Dealer".
+export function rankByLooseSearch(items, query, getFields, { fallbackToPartial = true, minScore = 0 } = {}) {
   if (!normalize(query)) return items;
 
   const full = [];
   const partial = [];
   for (const item of items) {
     const { matched, total, score } = looseMatch(query, getFields(item));
-    if (matched === 0) continue;
+    if (matched === 0 || score < minScore) continue;
     (matched === total ? full : partial).push({ item, matched, score });
   }
 

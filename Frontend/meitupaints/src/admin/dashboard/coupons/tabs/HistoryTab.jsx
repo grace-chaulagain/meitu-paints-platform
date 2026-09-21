@@ -19,6 +19,7 @@ import {
   formatTimeOnly,
   groupRedemptionsByDay,
   HISTORY_TYPE_OPTIONS,
+  looksLikeCouponCode,
   PAGE_SIZE,
   redeemedByName,
   redeemedPainterName,
@@ -72,8 +73,8 @@ export default function HistoryTab() {
   }, [actor, customFrom, customTo, datePreset, page, q, type]);
 
   // Loaded only while the admin is actually typing a name, so the tab costs
-  // nothing extra to open.
-  const wantsSuggestions = draftQ.trim().length >= 2 && !actor;
+  // nothing extra to open - and nothing at all while they are typing a code.
+  const wantsSuggestions = draftQ.trim().length >= 2 && !actor && !looksLikeCouponCode(draftQ);
   const dealersQuery = useGetAdminDealersQuery({ limit: 200 }, { skip: !wantsSuggestions });
   const dispatchersQuery = useGetVerifiedDispatchersQuery(undefined, { skip: !wantsSuggestions });
 
@@ -96,11 +97,17 @@ export default function HistoryTab() {
   }, [dealersQuery.data, dispatchersQuery.data]);
 
   // Same forgiving matcher the scheme-order recipient picker uses, so a typo
-  // or a set of initials still finds the right name.
+  // or a set of initials still finds the right name - held to a stricter
+  // standard here, because this box also takes coupon codes and a name offered
+  // against one is always wrong. See rankByLooseSearch for what the two
+  // options rule out.
   const suggestions = useMemo(
     () =>
       wantsSuggestions
-        ? rankByLooseSearch(people, draftQ, (p) => [p.name, p.contactName, p.label], { fallbackToPartial: false }).slice(0, 6)
+        ? rankByLooseSearch(people, draftQ, (p) => [p.name, p.contactName, p.label], {
+            fallbackToPartial: false,
+            minScore: 30,
+          }).slice(0, 6)
         : [],
     [people, draftQ, wantsSuggestions],
   );

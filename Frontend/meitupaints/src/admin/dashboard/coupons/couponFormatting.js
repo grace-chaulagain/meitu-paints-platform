@@ -260,6 +260,21 @@ export function pdfExportProgressLabel(progress) {
   return "Preparing…";
 }
 
+// Codes are minted as `<prefix>-<6 digits>` (COUPON_CODE_PREFIX and
+// buildCouponCode in Server/src/{constants,services}/coupon.js), so "GRN-0021"
+// half-typed is already unmistakably a code and not a name. The history box
+// takes both, and once the text looks like a code it stops offering people -
+// otherwise the admin gets dealer names thrown at them mid-code.
+//
+// Only a complete prefix counts. "gr" stays a name search, because that is
+// equally the start of Grace and Grosis, and suppressing it would break
+// looking up either by typing.
+const COUPON_CODE_SHAPE = /^(gld|grn)[\s-]*\d*$/i;
+
+export function looksLikeCouponCode(text) {
+  return COUPON_CODE_SHAPE.test(String(text ?? "").trim());
+}
+
 // The scope a "See redeem history" click applies, as URL params on the coupons
 // page. Lives here so Payouts and Redeemed build the identical link.
 export function redeemHistorySearch(actor) {
