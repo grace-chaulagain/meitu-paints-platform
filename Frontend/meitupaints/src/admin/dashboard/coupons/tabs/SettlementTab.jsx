@@ -1,11 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useGetSettlementReportQuery } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { DataTable } from "../../../../components/dashboard/DashboardUI.jsx";
-import { formatMoney, settlementActorName } from "../couponFormatting.js";
+import { formatMoney, redeemHistorySearch, settlementActorName } from "../couponFormatting.js";
+import { SeeRedeemHistoryDialog } from "../SeeRedeemHistoryDialog.jsx";
 
 export default function SettlementTab() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [rowMenu, setRowMenu] = useState(null);
   const settlementQuery = useGetSettlementReportQuery({});
   const items = useMemo(() => settlementQuery.data?.items || [], [settlementQuery.data]);
   const loadError = settlementQuery.error ? getQueryErrorMessage(settlementQuery.error, "Failed to load settlement report.") : "";
@@ -39,6 +44,16 @@ export default function SettlementTab() {
     [],
   );
 
+  // A payout row IS one dealer or dispatcher, so clicking it can only mean
+  // "tell me more about this person".
+  function actorOf(row) {
+    if (!row) return null;
+    const isDispatcher = row.actorType === "DISPATCHER";
+    const id = isDispatcher ? row.dispatcherId : row.dealerId;
+    if (!id) return null;
+    return { kind: isDispatcher ? "DISPATCHER" : "DEALER", id: String(id), name: settlementActorName(row) };
+  }
+
   const footerCells = items.length
     ? [
         { key: "dealer", content: "Total", align: "left" },
@@ -56,6 +71,7 @@ export default function SettlementTab() {
         <DataTable
           columns={columns}
           rows={items}
+          onRowClick={(row) => setRowMenu((current) => (current === row ? null : row))}
           getRowKey={(row) => row.dealerId || row.dispatcherId}
           loading={settlementQuery.isLoading && !settlementQuery.data}
           footerCells={footerCells}
@@ -63,6 +79,17 @@ export default function SettlementTab() {
           minWidth={640}
         />
       )}
+
+      <SeeRedeemHistoryDialog
+        actor={actorOf(rowMenu)}
+        subtitle={rowMenu ? `${Number(rowMenu.redemptionCount || 0).toLocaleString()} redemptions · ${formatMoney(rowMenu.totalCashPaid)} paid out` : ""}
+        onClose={() => setRowMenu(null)}
+        onConfirm={() => {
+          const actor = actorOf(rowMenu);
+          setRowMenu(null);
+          if (actor) navigate({ pathname: location.pathname, search: redeemHistorySearch(actor) });
+        }}
+      />
     </div>
   );
 }

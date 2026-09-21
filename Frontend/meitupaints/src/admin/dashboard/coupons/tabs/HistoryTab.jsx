@@ -7,6 +7,7 @@ import {
   useGetVerifiedDispatchersQuery,
 } from "../../../../redux/api/meituApi.js";
 import { rankByLooseSearch } from "../../../../utils/searchMatch.js";
+import { SeeRedeemHistoryDialog } from "../SeeRedeemHistoryDialog.jsx";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
 import { DashboardIcon } from "../../../../components/dashboard/DashboardIcons.jsx";
 import { DataTable, Pagination, Pill, SearchField, Surface } from "../../../../components/dashboard/DashboardUI.jsx";
@@ -312,34 +313,26 @@ export default function HistoryTab() {
             emptyState={{ icon: "invoice", title: "No redemptions found", subtitle: "Nothing matches these filters yet." }}
             minWidth={860}
           />
-          {rowMenu ? (
-            <div className="coupon-history-rowmenu-backdrop" onClick={() => setRowMenu(null)}>
-              <div className="coupon-history-rowmenu" onClick={(e) => e.stopPropagation()}>
-                <div className="coupon-history-rowmenu-head">
-                  <strong>{redeemedByName(rowMenu)}</strong>
-                  <span>{rowMenu.couponCode}</span>
-                </div>
-                <button
-                  type="button"
-                  className="coupon-history-rowmenu-action"
-                  disabled={!rowMenu.dealerId && !rowMenu.dispatcherId}
-                  onClick={() => {
-                    const person = rowMenu.dealerId
-                      ? { kind: "DEALER", id: String(rowMenu.dealerId._id || rowMenu.dealerId), name: redeemedByName(rowMenu) }
-                      : { kind: "DISPATCHER", id: String(rowMenu.dispatcherId._id || rowMenu.dispatcherId), name: redeemedByName(rowMenu) };
-                    setRowMenu(null);
-                    pickPerson(person);
-                  }}
-                >
-                  <DashboardIcon name="history" size={14} strokeWidth={2} />
-                  See redeem history
-                </button>
-                <button type="button" className="coupon-history-rowmenu-cancel" onClick={() => setRowMenu(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <SeeRedeemHistoryDialog
+            actor={
+              rowMenu
+                ? rowMenu.dealerId
+                  ? { kind: "DEALER", id: String(rowMenu.dealerId._id || rowMenu.dealerId), name: redeemedByName(rowMenu) }
+                  : rowMenu.dispatcherId
+                    ? { kind: "DISPATCHER", id: String(rowMenu.dispatcherId._id || rowMenu.dispatcherId), name: redeemedByName(rowMenu) }
+                    : null
+                : null
+            }
+            subtitle={rowMenu?.couponCode || ""}
+            onClose={() => setRowMenu(null)}
+            onConfirm={() => {
+              const person = rowMenu.dealerId
+                ? { kind: "DEALER", id: String(rowMenu.dealerId._id || rowMenu.dealerId), name: redeemedByName(rowMenu) }
+                : { kind: "DISPATCHER", id: String(rowMenu.dispatcherId._id || rowMenu.dispatcherId), name: redeemedByName(rowMenu) };
+              setRowMenu(null);
+              pickPerson(person);
+            }}
+          />
 
           <Pagination page={pagination.page} totalPages={pagination.pages} totalCount={pagination.total} itemLabel="redemptions" onChange={setPage} />
         </>

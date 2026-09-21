@@ -259,3 +259,13 @@ export function pdfExportProgressLabel(progress) {
   if (progress.phase === "render") return `Rendering ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} coupons`;
   return "Preparing…";
 }
+
+// The scope a "See redeem history" click applies, as URL params on the coupons
+// page. Lives here so Payouts and Redeemed build the identical link.
+export function redeemHistorySearch(actor) {
+  const search = new URLSearchParams();
+  search.set("tab", "history");
+  search.set(actor.kind === "DISPATCHER" ? "dispatcherId" : "dealerId", actor.id);
+  search.set("actorName", actor.name);
+  return `?${search}`;
+}
