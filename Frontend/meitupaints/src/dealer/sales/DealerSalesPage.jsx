@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { canDealerVoid, voidTimeLeftLabel } from "./voidWindow.js";
 
 import {
   useGetDealerSalesQuery,
@@ -514,7 +515,9 @@ function SaleDetailModal({ sale, onClose }) {
 
   if (!sale) return null;
 
-  const canVoid = sale.status === "COMPLETED";
+  // A sale can only be undone by the dealer on the day it was recorded.
+  const canVoid = canDealerVoid(sale);
+  const voidExpired = sale.status === "COMPLETED" && !canVoid;
 
   async function handleVoid() {
     setError("");
@@ -588,8 +591,15 @@ function SaleDetailModal({ sale, onClose }) {
 
         {sale.status === "VOIDED" ? (
           <div style={{ marginTop: 14, fontSize: 12.5, color: "#b42318" }}>Voided: {sale.voidReason}</div>
+        ) : voidExpired ? (
+          <div style={{ marginTop: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
+            This sale can no longer be voided - the one-day window closed.
+          </div>
         ) : canVoid ? (
           <div style={{ marginTop: 18, display: "grid", gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-caution, #b64400)" }}>
+              {voidTimeLeftLabel(sale)}
+            </div>
             <input
               value={reason}
               onChange={(event) => setReason(event.target.value)}

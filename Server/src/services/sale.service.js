@@ -217,12 +217,23 @@ export async function voidSale({ dealerId, saleId, reason, actorUser, actorRole 
         throw new ApiError(400, "Only a completed sale can be voided");
       }
 
-      // Admins can void any time (mirrors the codebase's "Admin can
-      // override everything" posture); dealers only within the window.
+      // A dealer may undo their own sale for one day after recording it, then
+      // the record is final - the goods are long gone and the stock movement
+      // has been part of their reported figures for a day. saleDate is stamped
+      // by the server at record time (never client-supplied), so this really
+      // is measured from when the sale was recorded.
+      //
+      // Admins are exempt here for the same "Admin can override everything"
+      // posture used elsewhere, but note no admin-facing void route exists
+      // today - so in practice the window is final for everyone. The message
+      // below deliberately does not promise help that cannot be given.
       if (actorRole !== "ADMIN") {
         const ageMs = Date.now() - new Date(sale.saleDate).getTime();
         if (ageMs > VOID_WINDOW_MS) {
-          throw new ApiError(400, "This sale is too old to void yourself. Ask an admin for help.");
+          throw new ApiError(
+            400,
+            "This sale can no longer be voided - a sale can only be voided within one day of being recorded.",
+          );
         }
       }
 
