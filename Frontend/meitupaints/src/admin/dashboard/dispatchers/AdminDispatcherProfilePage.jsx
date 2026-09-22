@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   useGetAdminDispatcherAnalyticsQuery,
   useGetAdminDispatcherQuery,
-  useGetAdminDispatcherStockQuery,
   useResendDispatcherSetupEmailMutation,
   useSetAdminDispatcherActiveMutation,
   useUpdateAdminDispatcherMutation,
@@ -43,14 +42,11 @@ import {
 const TAB_OPTIONS = [
   { key: "overview", label: "Overview" },
   { key: "dealers", label: "Dealers" },
-  { key: "stock", label: "Stock" },
   { key: "sales", label: "Sales" },
   { key: "orders", label: "Orders" },
 ];
 
 const DETAIL_ICONS = { name: "user", companyName: "store", phone: "headset", email: "inbox", address: "pin" };
-
-const STOCK_PREVIEW_LIMIT = 20;
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString()}`;
@@ -249,7 +245,6 @@ export default function AdminDispatcherProfilePage() {
   // The endpoint answers { ok, item } - every sibling page unwraps `.item`.
   const dispatcher = dispatcherQuery.data?.item || null;
   const analyticsQuery = useGetAdminDispatcherAnalyticsQuery(dispatcherId, { skip: !dispatcherId });
-  const stockQuery = useGetAdminDispatcherStockQuery(dispatcherId, { skip: !dispatcherId });
   const [resendSetupEmail] = useResendDispatcherSetupEmailMutation();
   const [setDispatcherActive] = useSetAdminDispatcherActiveMutation();
   const [updateDispatcher] = useUpdateAdminDispatcherMutation();
@@ -257,7 +252,6 @@ export default function AdminDispatcherProfilePage() {
   const loading = dispatcherQuery.isLoading && !dispatcher;
   const pageError = error || (dispatcherQuery.error ? getQueryErrorMessage(dispatcherQuery.error, "Failed to load dispatcher.") : "");
   const analytics = analyticsQuery.data || null;
-  const stockItems = stockQuery.data?.items || [];
   const missingDetails = useMemo(() => missingDispatcherDetails(dispatcher), [dispatcher]);
 
   if (isMobile) {
@@ -308,7 +302,6 @@ export default function AdminDispatcherProfilePage() {
   const accessState = dispatcher.accessState || {};
   const replenishment = analytics?.replenishment || {};
   const network = analytics?.network || {};
-  const stock = analytics?.stock || {};
   const commercial = analytics?.commercial || {};
   const state = dispatcherStateLabel(dispatcher);
   const displayName = dispatcher.name || dispatcher.companyName || "Dispatcher";
@@ -408,7 +401,6 @@ export default function AdminDispatcherProfilePage() {
             setMoreOpen(false);
             dispatcherQuery.refetch();
             analyticsQuery.refetch();
-            stockQuery.refetch();
           }}
         />
       </div>
@@ -442,7 +434,7 @@ export default function AdminDispatcherProfilePage() {
       <TabBar
         options={TAB_OPTIONS}
         value={activeTab}
-        counts={{ dealers: assignedDealers.length, stock: stockItems.length }}
+        counts={{ dealers: assignedDealers.length }}
         onChange={openTab}
       />
 
@@ -579,60 +571,6 @@ export default function AdminDispatcherProfilePage() {
             })
           ) : (
             <div className="dsp-profile-empty">No dealers are assigned to this dispatcher yet.</div>
-          )}
-        </Surface>
-      ) : null}
-
-      {activeTab === "stock" ? (
-        <Surface padding={0} className="dash-fade-up">
-          <div className="dsp-profile-panel-head">
-            <SectionHeader
-              icon="stock"
-              title="Stock on Hand"
-              subtitle={
-                stockItems.length > STOCK_PREVIEW_LIMIT
-                  ? `The ${STOCK_PREVIEW_LIMIT} products listed first - the full stock page has all ${stockItems.length}.`
-                  : "What this dispatcher currently holds."
-              }
-              action={
-                <GhostButton icon="stock" onClick={() => navigate(`/admin/dashboard/dispatchers/${dispatcherId}/stock`)}>
-                  Full Stock Page
-                </GhostButton>
-              }
-            />
-            <div className="dsp-profile-stats is-three">
-              <StatTile
-                label="Products Held"
-                value={(stock.totalSkusHeld || 0).toLocaleString()}
-                helper={`${(stock.totalUnitsOnHand || 0).toLocaleString()} units on hand`}
-              />
-              <StatTile label="Low Stock" value={(stock.lowStockSkuCount || 0).toLocaleString()} helper="At or below threshold" />
-              <StatTile label="Out of Stock" value={(stock.zeroStockSkuCount || 0).toLocaleString()} helper="Zero units on hand" />
-            </div>
-          </div>
-          {stockItems.length ? (
-            stockItems.slice(0, STOCK_PREVIEW_LIMIT).map((item) => {
-              const isZero = item.currentQuantity <= 0;
-              const isLow = !isZero && item.lowStockThreshold > 0 && item.currentQuantity <= item.lowStockThreshold;
-              return (
-                <ListRow key={item.productId}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--color-ink,#1d1d1f)" }}>{item.name || item.sku}</div>
-                    <div style={{ marginTop: 2, fontSize: 11.5, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
-                      {item.sku} · {item.category || "Uncategorized"}
-                    </div>
-                  </div>
-                  {isZero ? (
-                    <Pill tone="critical" size="small">Out of stock</Pill>
-                  ) : isLow ? (
-                    <Pill tone="caution" size="small">Low stock</Pill>
-                  ) : null}
-                  <span className="dsp-profile-qty">{item.currentQuantity}</span>
-                </ListRow>
-              );
-            })
-          ) : (
-            <div className="dsp-profile-empty">This dispatcher does not hold any stock right now.</div>
           )}
         </Surface>
       ) : null}
@@ -1019,9 +957,6 @@ export default function AdminDispatcherProfilePage() {
           grid-template-columns:repeat(2, minmax(0,1fr));
           gap:10px;
         }
-        .dsp-profile-stats.is-three{
-          grid-template-columns:repeat(3, minmax(0,1fr));
-        }
         .dsp-profile-stat{
           padding:14px 16px;
           border-radius:14px;
@@ -1154,15 +1089,6 @@ export default function AdminDispatcherProfilePage() {
           font-weight:500;
           color:var(--color-graphite,#707070);
         }
-        .dsp-profile-qty{
-          flex:0 0 auto;
-          min-width:40px;
-          text-align:right;
-          font-size:14px;
-          font-weight:700;
-          font-variant-numeric:tabular-nums;
-          color:var(--color-ink,#1d1d1f);
-        }
 
         @media (max-width:1100px){
           .dsp-profile-overview{
@@ -1175,8 +1101,7 @@ export default function AdminDispatcherProfilePage() {
           }
         }
         @media (max-width:640px){
-          .dsp-profile-stats,
-          .dsp-profile-stats.is-three{
+          .dsp-profile-stats{
             grid-template-columns:minmax(0,1fr);
           }
           .dsp-profile-row-label{
