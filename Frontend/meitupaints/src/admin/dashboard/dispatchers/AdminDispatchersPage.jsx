@@ -19,7 +19,6 @@ import {
   GhostButton,
   ListRow,
   Pill,
-  PrimaryButton,
   RowCheckbox,
   SearchField,
   SectionHeader,
@@ -30,6 +29,7 @@ import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx"
 import { exportToCsv } from "../../../utils/exportToCsv.js";
 import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
 import { AdminDispatchersMobileView } from "../../mobile/AdminDispatchersMobileView.jsx";
+import EditDispatcherModal from "./EditDispatcherModal.jsx";
 
 const STATUS_FILTERS = [
   { key: "ALL", label: "All Status" },
@@ -68,17 +68,6 @@ function getInitialView() {
   }
 }
 
-function getDispatcherForm(dispatcher) {
-  return {
-    name: dispatcher?.name || "",
-    companyName: dispatcher?.companyName || "",
-    phone: dispatcher?.phone || "",
-    email: dispatcher?.email || "",
-    address: dispatcher?.address || "",
-    notes: dispatcher?.notes || "",
-  };
-}
-
 // Unlike dealers (only Active/Suspended), dispatchers carry four operationally
 // distinct states admins scan for at a glance - so instead of the hash-based
 // decorative palette dealers use, the avatar/dot color here is state-driven.
@@ -109,68 +98,6 @@ function dispatcherLocation(dispatcher) {
 
 function accessTone(dispatcher) {
   return dispatcher.accessState?.passwordSet ? "positive" : "caution";
-}
-
-function InlineLabel({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: ".02em",
-        textTransform: "uppercase",
-        color: "var(--color-graphite,#707070)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormField({ label, value, onChange, placeholder, textarea = false }) {
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <InlineLabel>{label}</InlineLabel>
-      {textarea ? (
-        <textarea
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          rows={4}
-          style={{
-            width: "100%",
-            borderRadius: 10,
-            border: "none",
-            background: "var(--color-fog,#f5f5f7)",
-            padding: 12,
-            fontSize: 13.5,
-            fontWeight: 500,
-            color: "var(--color-ink,#1d1d1f)",
-            outline: "none",
-            resize: "vertical",
-          }}
-        />
-      ) : (
-        <input
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          style={{
-            width: "100%",
-            height: 40,
-            borderRadius: 10,
-            border: "none",
-            background: "var(--color-fog,#f5f5f7)",
-            padding: "0 12px",
-            fontSize: 13.5,
-            fontWeight: 500,
-            color: "var(--color-ink,#1d1d1f)",
-            outline: "none",
-          }}
-        />
-      )}
-    </div>
-  );
 }
 
 function DispatcherListRow({ dispatcher, selectionMode, selected, onSelectChange, onOpen }) {
@@ -354,147 +281,6 @@ function DispatchersGridCard({
         </div>
       ) : null}
     </article>
-  );
-}
-
-function EditDispatcherModal({ open, dispatcher, saving, onClose, onSave }) {
-  const [form, setForm] = useState(() => getDispatcherForm(dispatcher));
-
-  if (!open || !dispatcher) return null;
-
-  const canSave =
-    form.name.trim() && form.phone.trim() && form.email.trim() && !saving;
-
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1400,
-        background: "rgba(0,0,0,.4)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 28,
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <Surface
-        className="dash-modal-surface-in"
-        style={{
-          width: "min(760px, 100%)",
-          maxHeight: "90vh",
-          overflow: "auto",
-        }}
-        padding={22}
-      >
-        <SectionHeader
-          title="Edit Dispatcher"
-          subtitle="Update operational and contact details for this dispatcher."
-          action={
-            <GhostButton onClick={onClose} icon="reject">
-              Close
-            </GhostButton>
-          }
-        />
-
-        <div
-          style={{
-            marginTop: 20,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-          }}
-        >
-          <FormField
-            label="Name"
-            value={form.name}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, name: e.target.value }))
-            }
-            placeholder="Dispatcher name"
-          />
-          <FormField
-            label="Company Name"
-            value={form.companyName}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, companyName: e.target.value }))
-            }
-            placeholder="Company name"
-          />
-          <FormField
-            label="Phone"
-            value={form.phone}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, phone: e.target.value }))
-            }
-            placeholder="Phone"
-          />
-          <FormField
-            label="Email"
-            value={form.email}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, email: e.target.value }))
-            }
-            placeholder="Email"
-          />
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FormField
-              label="Address"
-              value={form.address}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, address: e.target.value }))
-              }
-              placeholder="Address"
-            />
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FormField
-              label="Notes"
-              textarea
-              value={form.notes}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, notes: e.target.value }))
-              }
-              placeholder="Operational notes"
-            />
-          </div>
-        </div>
-
-        <div
-          style={{
-            marginTop: 22,
-            display: "flex",
-            gap: 10,
-            justifyContent: "flex-end",
-            flexWrap: "wrap",
-          }}
-        >
-          <GhostButton onClick={onClose} disabled={saving}>
-            Cancel
-          </GhostButton>
-          <PrimaryButton
-            onClick={() =>
-              onSave({
-                name: form.name.trim(),
-                companyName: form.companyName.trim(),
-                phone: form.phone.trim(),
-                email: form.email.trim().toLowerCase(),
-                address: form.address.trim(),
-                notes: form.notes.trim(),
-              })
-            }
-            disabled={!canSave}
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </PrimaryButton>
-        </div>
-      </Surface>
-    </div>
   );
 }
 
