@@ -1,20 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   useDeleteAdminDealerMutation,
   useGetAdminDealerAnalyticsQuery,
   useGetAdminDealerQuery,
-  useGetAdminSalesQuery,
   useGetAdminScopedOrdersQuery,
   useGetVerifiedDispatchersQuery,
-  useLazyGetAdminScopedOrderQuery,
   useResendDealerSetupEmailMutation,
   useUpdateAdminDealerMutation,
   useUpdateAdminDealerRoutingMutation,
   useUpdateAdminDealerStatusMutation,
 } from "../../../redux/api/meituApi.js";
-import { formatTime, normalizeStatus, orderStatusMeta } from "../../../dealer/orderDetailLogic.js";
 import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
 import { AdminDealerProfileMobileView } from "../../mobile/AdminDealerProfileMobileView.jsx";
 import AdminDecisionModal from "../components/AdminDecisionModal.jsx";
@@ -24,14 +20,13 @@ import {
   DashboardUIStyles,
   EmptyState,
   GhostButton,
-  Pill,
   PrimaryButton,
   SectionHeader,
   SegmentedControl,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
-import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
-import { AppleDateField, AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
+import { AppleDropdown } from "../../../components/dashboard/ApplePickers.jsx";
+import { isDetailMissing, joinDetailLabels, missingDealerDetails } from "./dealerMissingDetails.js";
 
 // Credit limits/terms were removed entirely (2026) - dealer payments are
 // reconciled manually outside this system, so there is no "credit status"
@@ -45,111 +40,12 @@ const ROUTING_MODES = [
 
 const TAB_OPTIONS = [
   { key: "overview", label: "Overview" },
-  { key: "orders", label: "Orders" },
-  { key: "history", label: "History" },
   { key: "sales", label: "Sales" },
   { key: "notes", label: "Notes" },
 ];
 
-const HISTORY_DAYS_PAGE_SIZE = 6;
-
-function money(value, currency = "NPR") {
-  return `${currency} ${Number(value || 0).toLocaleString()}`;
-}
-
-function formatDateTime(value) {
-  return value ? new Date(value).toLocaleString() : "—";
-}
-
 function formatDate(value) {
   return value ? new Date(value).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
-}
-
-function formatDayLabel(date) {
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
-function formatWeekday(date) {
-  return date.toLocaleDateString("en-US", { weekday: "long" });
-}
-
-function formatFilterDate(value) {
-  if (!value) return "";
-  // Interpreted as a plain calendar date (no time zone shift) since it's
-  // always a "YYYY-MM-DD" key.
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return "";
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function dateRangeLabel(from, to) {
-  if (!from && !to) return "All time";
-  if (from && to) return `${formatFilterDate(from)} – ${formatFilterDate(to)}`;
-  if (from) return `From ${formatFilterDate(from)}`;
-  return `Through ${formatFilterDate(to)}`;
-}
-
-function startOfDayFromInput(value) {
-  if (!value) return null;
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day, 0, 0, 0, 0);
-}
-
-function endOfDayFromInput(value) {
-  if (!value) return null;
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day, 23, 59, 59, 999);
-}
-
-function buildPageList(current, total) {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
-  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
-  const result = [];
-  let prev = 0;
-  sorted.forEach((p) => {
-    if (prev && p - prev > 1) result.push("ellipsis-" + p);
-    result.push(p);
-    prev = p;
-  });
-  return result;
-}
-
-// Orders and sales are two different collections with two different date
-// fields (createdAt vs saleDate) - normalized here into one common "event"
-// shape so both can be sorted and grouped by calendar day together.
-function buildHistoryEvents(orders, sales) {
-  const orderEvents = orders.map((order) => ({
-    type: "order",
-    key: `order-${order._id}`,
-    date: new Date(order.createdAt),
-    order,
-  }));
-  const saleEvents = sales.map((sale) => ({
-    type: "sale",
-    key: `sale-${sale._id}`,
-    date: new Date(sale.saleDate),
-    sale,
-  }));
-  return [...orderEvents, ...saleEvents]
-    .filter((event) => !Number.isNaN(event.date.getTime()))
-    .sort((a, b) => b.date - a.date);
-}
-
-function groupEventsByDay(events) {
-  const map = new Map();
-  for (const event of events) {
-    const key = event.date.toDateString();
-    let group = map.get(key);
-    if (!group) {
-      group = { key, date: event.date, events: [] };
-      map.set(key, group);
-    }
-    group.events.push(event);
-  }
-  return Array.from(map.values());
 }
 
 // No dealer-number sequence exists in the data model - this is a stable,
@@ -217,6 +113,14 @@ function fieldInputStyle(disabled = false) {
   };
 }
 
+// A company detail that's still empty carries the same red as the profile's
+// "Not entered yet" rows, and loses it the moment something is typed.
+function detailInputStyle(value) {
+  const style = fieldInputStyle();
+  if (!isDetailMissing(value)) return style;
+  return { ...style, background: "rgba(193,18,31,.05)", boxShadow: "inset 0 0 0 1.5px rgba(193,18,31,.45)" };
+}
+
 function fieldTextareaStyle() {
   return {
     ...fieldInputStyle(),
@@ -264,13 +168,39 @@ function InfoTile({ label, value }) {
 }
 
 function CompanyInfoRow({ icon, label, value }) {
+  const missing = isDetailMissing(value);
   return (
-    <div className="dealer-profile-row">
+    <div className={`dealer-profile-row ${missing ? "is-missing-detail" : ""}`}>
       <span className="dealer-profile-row-icon">
         <DashboardIcon name={icon} size={14} strokeWidth={1.8} />
       </span>
       <span className="dealer-profile-row-label">{label}</span>
-      <span className="dealer-profile-row-value">{value || "—"}</span>
+      <span className={`dealer-profile-row-value ${missing ? "missing-detail-value" : ""}`}>
+        {missing ? "Not entered yet" : value}
+      </span>
+    </div>
+  );
+}
+
+function MissingDetailsNotice({ fields, onFillIn }) {
+  if (!fields.length) return null;
+  const count = fields.length;
+  return (
+    <div className="dealer-profile-missing" role="status">
+      <span className="dealer-profile-missing-icon">
+        <DashboardIcon name="warning" size={15} strokeWidth={2} />
+      </span>
+      <div className="dealer-profile-missing-copy">
+        <strong>
+          {count} detail{count === 1 ? "" : "s"} not entered yet
+        </strong>
+        <span>{joinDetailLabels(fields)} {count === 1 ? "is" : "are"} missing from this dealer's record.</span>
+      </div>
+      {onFillIn ? (
+        <button type="button" className="dealer-profile-missing-btn" onClick={onFillIn}>
+          Fill in
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -467,22 +397,22 @@ function EditDealerModal({ open, dealer, saving, onClose, onSave }) {
 
         <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 14 }}>
           <Field label="Company Name">
-            <input value={form.companyName} onChange={(e) => updateField("companyName", e.target.value)} style={fieldInputStyle()} />
+            <input value={form.companyName} onChange={(e) => updateField("companyName", e.target.value)} style={detailInputStyle(form.companyName)} />
           </Field>
           <Field label="Contact Person">
-            <input value={form.contactName} onChange={(e) => updateField("contactName", e.target.value)} style={fieldInputStyle()} />
+            <input value={form.contactName} onChange={(e) => updateField("contactName", e.target.value)} style={detailInputStyle(form.contactName)} />
           </Field>
           <Field label="Email">
-            <input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} style={fieldInputStyle()} />
+            <input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} style={detailInputStyle(form.email)} />
           </Field>
           <Field label="Phone">
-            <input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} style={fieldInputStyle()} />
+            <input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} style={detailInputStyle(form.phone)} />
           </Field>
           <Field label="Address">
-            <input value={form.address} onChange={(e) => updateField("address", e.target.value)} style={fieldInputStyle()} />
+            <input value={form.address} onChange={(e) => updateField("address", e.target.value)} style={detailInputStyle(form.address)} />
           </Field>
           <Field label="PAN / VAT Number">
-            <input value={form.panVat} onChange={(e) => updateField("panVat", e.target.value)} style={fieldInputStyle()} />
+            <input value={form.panVat} onChange={(e) => updateField("panVat", e.target.value)} style={detailInputStyle(form.panVat)} />
           </Field>
         </div>
 
@@ -494,414 +424,6 @@ function EditDealerModal({ open, dealer, saving, onClose, onSave }) {
             {saving ? "Saving…" : "Save Changes"}
           </PrimaryButton>
         </div>
-      </Surface>
-    </div>
-  );
-}
-
-function orderActivitySizesLabel(order) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  const sizes = [];
-  const seen = new Set();
-  for (const item of items) {
-    const label = (item.packLabel || "").trim();
-    if (label && !seen.has(label)) {
-      seen.add(label);
-      sizes.push(label);
-    }
-  }
-  if (!sizes.length) return "";
-  return sizes.length > 3 ? `${sizes.slice(0, 3).join(", ")} +${sizes.length - 3}` : sizes.join(", ");
-}
-
-function OrderActivityRow({ order, onOpen }) {
-  const status = normalizeStatus(order.status);
-  const meta = orderStatusMeta(status);
-  const dotColor = { positive: "#15803d", accent: "var(--color-azure,#0071e3)", critical: "#b42318", caution: "var(--color-caution,#b64400)", neutral: "var(--color-graphite,#707070)" }[meta.tone] || "var(--color-graphite,#707070)";
-  const sizesLabel = orderActivitySizesLabel(order);
-
-  return (
-    <button type="button" className="dealer-profile-activity-row" onClick={() => onOpen(order)}>
-      <span className="dealer-profile-activity-dot" style={{ background: dotColor }} aria-hidden="true" />
-      <span className="dealer-profile-activity-copy">
-        <span className="dealer-profile-activity-title">
-          Order {order.orderNumber || "—"} {meta.label.toLowerCase()}
-        </span>
-        <span className="dealer-profile-activity-time">
-          {sizesLabel ? `${sizesLabel} · ` : ""}
-          {formatDateTime(order.updatedAt || order.createdAt)}
-        </span>
-      </span>
-      <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite,#707070)", flexShrink: 0 }} />
-    </button>
-  );
-}
-
-// Same portal-popover pattern as the Sales & Purchases date filter - this
-// tab's cards sit inside a "dash-fade-up" surface, which permanently gains a
-// stacking context once its entrance animation finishes, so a plain
-// absolutely-positioned popover would paint underneath later DOM siblings
-// regardless of z-index. Escaping to document.body sidesteps that entirely.
-function HistoryDateFilter({ from, to, onApply, onClear }) {
-  const [open, setOpen] = useState(false);
-  const [draftFrom, setDraftFrom] = useState(from);
-  const [draftTo, setDraftTo] = useState(to);
-  const [position, setPosition] = useState(null);
-  const active = Boolean(from || to);
-  const triggerRef = useRef(null);
-
-  const updatePosition = useCallback(() => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const width = 240;
-    const viewportPadding = 12;
-    const left = Math.min(
-      Math.max(viewportPadding, rect.right - width),
-      window.innerWidth - width - viewportPadding,
-    );
-    const top = rect.bottom + 8;
-
-    setPosition({ left, top, width });
-  }, []);
-
-  function closePopover() {
-    setOpen(false);
-    window.requestAnimationFrame(() => triggerRef.current?.focus());
-  }
-
-  function openPopover() {
-    setDraftFrom(from);
-    setDraftTo(to);
-    updatePosition();
-    setOpen(true);
-  }
-
-  function apply() {
-    onApply({ from: draftFrom, to: draftTo });
-    closePopover();
-  }
-
-  function clear() {
-    setDraftFrom("");
-    setDraftTo("");
-    onClear();
-    closePopover();
-  }
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        closePopover();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open, updatePosition]);
-
-  return (
-    <div style={{ position: "relative" }}>
-      <button
-        type="button"
-        ref={triggerRef}
-        onClick={() => (open ? closePopover() : openPopover())}
-        aria-label="Filter by date range"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        className={`dealer-profile-history-filter-btn ${active ? "is-active" : ""}`}
-      >
-        <DashboardIcon name="filter" size={15} strokeWidth={1.9} />
-        {active ? <span className="dealer-profile-history-filter-dot" aria-hidden="true" /> : null}
-      </button>
-
-      {open && position && typeof document !== "undefined"
-        ? createPortal(
-            <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 1400 }} onClick={closePopover} />
-              <div
-                className="dealer-profile-history-filter-pop"
-                role="dialog"
-                aria-label="Filter by date range"
-                style={{ position: "fixed", top: position.top, left: position.left, width: position.width }}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="dealer-profile-history-filter-pop-title">
-                  <DashboardIcon name="calendar" size={13} strokeWidth={1.9} />
-                  Filter by date range
-                </div>
-
-                <label className="dealer-profile-history-filter-field">
-                  <span>From</span>
-                  <AppleDateField value={draftFrom || ""} onChange={setDraftFrom} />
-                </label>
-
-                <label className="dealer-profile-history-filter-field">
-                  <span>To</span>
-                  <AppleDateField value={draftTo || ""} onChange={setDraftTo} />
-                </label>
-
-                <div className="dealer-profile-history-filter-pop-actions">
-                  <GhostButton onClick={clear}>Clear</GhostButton>
-                  <PrimaryButton
-                    onClick={apply}
-                    disabled={!draftFrom && !draftTo}
-                    style={{ height: 34, padding: "0 14px", fontSize: 12.5 }}
-                  >
-                    Apply
-                  </PrimaryButton>
-                </div>
-              </div>
-            </>,
-            document.body,
-          )
-        : null}
-    </div>
-  );
-}
-
-function HistoryPagination({ page, totalPages, totalCount, pageSize, onChange }) {
-  if (totalCount === 0) return null;
-
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, totalCount);
-  const pages = buildPageList(page, totalPages);
-
-  return (
-    <div style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "6px 4px" }}>
-      <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
-        Showing {start} to {end} of {totalCount} days
-      </span>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <button type="button" onClick={() => onChange(Math.max(1, page - 1))} disabled={page <= 1} aria-label="Previous page" className="dealer-profile-history-page-btn">
-          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} style={{ transform: "rotate(180deg)" }} />
-        </button>
-        {pages.map((p) =>
-          typeof p === "number" ? (
-            <button key={p} type="button" onClick={() => onChange(p)} className={`dealer-profile-history-page-btn ${p === page ? "is-active" : ""}`}>
-              {p}
-            </button>
-          ) : (
-            <span key={p} style={{ padding: "0 4px", color: "var(--color-graphite, #707070)", fontSize: 12.5 }}>
-              &hellip;
-            </span>
-          ),
-        )}
-        <button type="button" onClick={() => onChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} aria-label="Next page" className="dealer-profile-history-page-btn">
-          <DashboardIcon name="chevron" size={13} strokeWidth={2.4} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function HistoryOrderCard({ order, onOpen }) {
-  const status = normalizeStatus(order.status);
-  const meta = orderStatusMeta(status);
-
-  return (
-    <button
-      type="button"
-      className="dealer-profile-history-card dealer-profile-history-card--order"
-      onClick={() => onOpen(order)}
-    >
-      <span className="dealer-profile-history-card-icon">
-        <DashboardIcon name="orders" size={16} strokeWidth={1.8} />
-      </span>
-      <div className="dealer-profile-history-card-main">
-        <div className="dealer-profile-history-card-title">
-          <span className="dealer-profile-history-card-kind">Order</span>
-          {order.orderNumber || "Unnamed Order"}
-        </div>
-        <div className="dealer-profile-history-card-sub">
-          {formatTime(order.createdAt)} · {Array.isArray(order.items) ? `${order.items.length} items` : meta.label}
-        </div>
-      </div>
-      <Pill tone={meta.tone} size="small">{meta.label}</Pill>
-      <span className="dealer-profile-history-card-amount">{money(order?.totals?.total, order?.totals?.currency)}</span>
-      <DashboardIcon name="chevron" size={13} strokeWidth={2.2} style={{ color: "var(--color-graphite,#707070)", flexShrink: 0 }} />
-    </button>
-  );
-}
-
-function HistorySaleCard({ sale, onOpen }) {
-  const voided = sale.status === "VOIDED";
-
-  return (
-    <button
-      type="button"
-      className={`dealer-profile-history-card dealer-profile-history-card--sale ${voided ? "is-voided" : ""}`}
-      onClick={() => onOpen(sale)}
-    >
-      <span className="dealer-profile-history-card-icon">
-        <DashboardIcon name={voided ? "reject" : "checkSquare"} size={16} strokeWidth={1.8} />
-      </span>
-      <div className="dealer-profile-history-card-main">
-        <div className="dealer-profile-history-card-title">
-          <span className="dealer-profile-history-card-kind">Sale</span>
-          {sale.saleNumber || "Sale"}
-        </div>
-        <div className="dealer-profile-history-card-sub">
-          {formatTime(sale.saleDate)}{sale.billId ? ` · Bill ${sale.billId}` : ""}
-        </div>
-      </div>
-      <Pill tone={voided ? "critical" : "positive"} size="small">{voided ? "Voided" : "Completed"}</Pill>
-      <span className="dealer-profile-history-card-amount">{money(sale?.totals?.total)}</span>
-      <DashboardIcon name="chevron" size={13} strokeWidth={2.2} style={{ color: "var(--color-graphite,#707070)", flexShrink: 0 }} />
-    </button>
-  );
-}
-
-function HistoryDayGroup({ group, onOpenOrder, onOpenSale }) {
-  return (
-    <div className="dealer-profile-history-day">
-      <div className="dealer-profile-history-day-header">
-        <span className="dealer-profile-history-day-marker" aria-hidden="true" />
-        <div>
-          <div className="dealer-profile-history-day-date">{formatDayLabel(group.date)}</div>
-          <div className="dealer-profile-history-day-weekday">{formatWeekday(group.date)}</div>
-        </div>
-      </div>
-      <div className="dealer-profile-history-day-body">
-        {group.events.map((event) =>
-          event.type === "order" ? (
-            <HistoryOrderCard key={event.key} order={event.order} onOpen={onOpenOrder} />
-          ) : (
-            <HistorySaleCard key={event.key} sale={event.sale} onOpen={onOpenSale} />
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function OrderPreviewModal({ order, dealer, loading, onClose, onViewFull }) {
-  if (!order) return null;
-
-  const status = normalizeStatus(order.status);
-  const meta = orderStatusMeta(status);
-  const resolvedItems = Array.isArray(order?.items)
-    ? order.items
-    : Array.isArray(order?.snapshot?.items)
-      ? order.snapshot.items
-      : [];
-
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 24 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Surface className="dash-modal-surface-in" style={{ width: "min(560px, 100%)", maxHeight: "88vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <SectionHeader eyebrow="Order" icon="orders" title={order.orderNumber || "Order"} subtitle={dealer?.companyName || ""} />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}
-          >
-            <DashboardIcon name="close" size={14} strokeWidth={2} />
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Pill tone={meta.tone} size="small">{meta.label}</Pill>
-          <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDateTime(order.createdAt)}</span>
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          {loading && resolvedItems.length === 0 ? (
-            <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>Loading order items…</div>
-          ) : resolvedItems.length === 0 ? (
-            <div style={{ padding: 14, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>No items found.</div>
-          ) : (
-            <div style={{ display: "grid", gap: 6 }}>
-              {resolvedItems.map((item, index) => (
-                <div key={`${item.sku || item.name}-${index}`} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: "var(--color-fog, #f5f5f7)", fontSize: 12.5 }}>
-                  <span>{item.name} × {item.quantity}</span>
-                  <span style={{ fontWeight: 700 }}>{money(item.lineTotal)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: "rgba(0,113,227,.06)" }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Total</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-azure, #0071e3)" }}>{money(order?.totals?.total, order?.totals?.currency)}</span>
-        </div>
-
-        <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
-          <GhostButton icon="chevron" onClick={onViewFull}>View Full Order</GhostButton>
-        </div>
-      </Surface>
-    </div>
-  );
-}
-
-function SalePreviewModal({ sale, onClose }) {
-  if (!sale) return null;
-
-  const voided = sale.status === "VOIDED";
-
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 24 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Surface className="dash-modal-surface-in" style={{ width: "min(520px, 100%)", maxHeight: "88vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <SectionHeader eyebrow="Sale" icon="checkSquare" title={sale.saleNumber || "Sale"} subtitle={sale.billId ? `Bill ${sale.billId}` : ""} />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}
-          >
-            <DashboardIcon name="close" size={14} strokeWidth={2} />
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Pill tone={voided ? "critical" : "positive"} size="small">{voided ? "Voided" : "Completed"}</Pill>
-          <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDateTime(sale.saleDate)}</span>
-        </div>
-
-        <div style={{ marginTop: 16, display: "grid", gap: 6 }}>
-          {(sale.items || []).map((item, index) => (
-            <div key={`${item.productId || item.name}-${index}`} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, background: "var(--color-fog, #f5f5f7)", fontSize: 12.5 }}>
-              <span>{item.name} × {item.quantity}</span>
-              <span style={{ fontWeight: 700 }}>{money(item.lineTotal)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: "rgba(0,113,227,.06)" }}>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Total</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-azure, #0071e3)" }}>{money(sale?.totals?.total)}</span>
-        </div>
-
-        {voided && sale.voidReason ? (
-          <div style={{ marginTop: 12, fontSize: 12.5, color: "#b42318" }}>Voided: {sale.voidReason}</div>
-        ) : null}
-        {sale.notes ? (
-          <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{sale.notes}</div>
-        ) : null}
       </Surface>
     </div>
   );
@@ -943,25 +465,13 @@ export default function AdminDealerProfilePage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [notes, setNotes] = useState("");
   const [notesDealerId, setNotesDealerId] = useState("");
-  const [previewOrder, setPreviewOrder] = useState(null);
-  const [previewOrderLoading, setPreviewOrderLoading] = useState(false);
-  const [previewSale, setPreviewSale] = useState(null);
-  const [historyFrom, setHistoryFrom] = useState("");
-  const [historyTo, setHistoryTo] = useState("");
-  const [historyPage, setHistoryPage] = useState(1);
 
   const dealerQuery = useGetAdminDealerQuery(dealerId, { skip: !dealerId });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
   const analyticsQuery = useGetAdminDealerAnalyticsQuery(dealerId, { skip: !dealerId });
-  const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId, limit: 5 }, { skip: !dealerId });
-  const isHistoryTab = activeTab === "history";
-  // Keep the full per-dealer history defensively scoped and deduped
-  // client-side too. Some older order records only have dealer identity in
-  // dealerSnapshot, while newer populated records expose dealerId directly.
-  const historySubmittedOrdersQuery = useGetAdminScopedOrdersQuery({ dealerId, limit: 100 }, { skip: !dealerId || !isHistoryTab });
-  const historyArchivedOrdersQuery = useGetAdminScopedOrdersQuery({ dealerId, archive: true, limit: 100 }, { skip: !dealerId || !isHistoryTab });
-  const historySalesQuery = useGetAdminSalesQuery({ dealerId, limit: 200 }, { skip: !dealerId || !isHistoryTab });
-  const [fetchOrderDetail] = useLazyGetAdminScopedOrderQuery();
+  // Only the phone layout lists recent orders; the desktop profile has no
+  // orders view, so it doesn't fetch them.
+  const ordersQuery = useGetAdminScopedOrdersQuery({ dealerId, limit: 5 }, { skip: !dealerId || !isMobile });
   const [updateDealer] = useUpdateAdminDealerMutation();
   const [deleteAdminDealer] = useDeleteAdminDealerMutation();
   const [updateDealerStatus] = useUpdateAdminDealerStatusMutation();
@@ -969,6 +479,7 @@ export default function AdminDealerProfilePage() {
   const [resendDealerSetupEmail] = useResendDealerSetupEmailMutation();
 
   const dealer = dealerQuery.data?.item || null;
+  const missingDetails = useMemo(() => missingDealerDetails(dealer), [dealer]);
   const dispatchers = dispatchersQuery.data?.items || [];
   const analytics = analyticsQuery.data || null;
   const recentOrders = useMemo(() => {
@@ -985,70 +496,11 @@ export default function AdminDealerProfilePage() {
   const loading = !dealer && (dealerQuery.isLoading || dispatchersQuery.isLoading || analyticsQuery.isLoading);
   const loadError = dealerQuery.error?.message || dispatchersQuery.error?.message || analyticsQuery.error?.message || "";
 
-  const historyOrders = useMemo(() => {
-    const combined = [...(historySubmittedOrdersQuery.data?.items || []), ...(historyArchivedOrdersQuery.data?.items || [])];
-    const seen = new Set();
-    const scoped = [];
-    for (const order of combined) {
-      const id = String(order._id);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const directDealerId = String(order?.dealerId?._id || order?.dealerId || "");
-      const snapshotDealerId = String(order?.dealerSnapshot?._id || "");
-      if (directDealerId === dealerId || snapshotDealerId === dealerId) scoped.push(order);
-    }
-    return scoped;
-  }, [historySubmittedOrdersQuery.data, historyArchivedOrdersQuery.data, dealerId]);
-  const historySales = useMemo(() => historySalesQuery.data?.items || [], [historySalesQuery.data]);
-  const historyEvents = useMemo(() => buildHistoryEvents(historyOrders, historySales), [historyOrders, historySales]);
-  const hasHistoryDateFilter = Boolean(historyFrom || historyTo);
-  const historyDateLabel = dateRangeLabel(historyFrom, historyTo);
-  const historyFilteredEvents = useMemo(() => {
-    if (!historyFrom && !historyTo) return historyEvents;
-    const startBound = startOfDayFromInput(historyFrom);
-    const endBound = endOfDayFromInput(historyTo);
-    return historyEvents.filter((event) => {
-      if (startBound && event.date < startBound) return false;
-      if (endBound && event.date > endBound) return false;
-      return true;
-    });
-  }, [historyEvents, historyFrom, historyTo]);
-  const historyDayGroups = useMemo(() => groupEventsByDay(historyFilteredEvents), [historyFilteredEvents]);
-  const historyLoading =
-    isHistoryTab &&
-    historyEvents.length === 0 &&
-    (historySubmittedOrdersQuery.isLoading || historyArchivedOrdersQuery.isLoading || historySalesQuery.isLoading);
-  const historyTotalPages = Math.max(1, Math.ceil(historyDayGroups.length / HISTORY_DAYS_PAGE_SIZE));
-  const historyCurrentPage = Math.min(historyPage, historyTotalPages);
-  const visibleHistoryGroups = historyDayGroups.slice(
-    (historyCurrentPage - 1) * HISTORY_DAYS_PAGE_SIZE,
-    historyCurrentPage * HISTORY_DAYS_PAGE_SIZE,
-  );
-
   useEffect(() => {
     if (!dealer?._id || notesDealerId === dealer._id) return;
     setNotes(dealer.notes || "");
     setNotesDealerId(dealer._id);
   }, [dealer, notesDealerId]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [dealerId, historyFrom, historyTo]);
-
-  function openHistoryOrderPreview(order) {
-    setPreviewOrder(order);
-    setPreviewOrderLoading(true);
-    fetchOrderDetail(order._id, true)
-      .unwrap()
-      .then((full) => setPreviewOrder(full || order))
-      .catch(() => {})
-      .finally(() => setPreviewOrderLoading(false));
-  }
-
-  function closeHistoryOrderPreview() {
-    setPreviewOrder(null);
-    setPreviewOrderLoading(false);
-  }
 
   const performanceSummary = analytics?.performanceSummary || {};
   const productIntelligence = analytics?.productIntelligence || {};
@@ -1272,7 +724,7 @@ export default function AdminDealerProfilePage() {
         value={activeTab}
         onChange={(key) => {
           if (key === "sales") {
-            navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`);
+            navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`, { state: { fromDealerProfile: true } });
             return;
           }
           setActiveTab(key);
@@ -1283,6 +735,7 @@ export default function AdminDealerProfilePage() {
         <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
           <Surface padding={22} className="dash-fade-up">
             <SectionHeader icon="user" title="Company Information" />
+            <MissingDetailsNotice fields={missingDetails} onFillIn={() => setEditOpen(true)} />
             <div style={{ marginTop: 12 }}>
               <CompanyInfoRow icon="store" label="Company Name" value={dealer.companyName} />
               <CompanyInfoRow icon="user" label="Contact Person" value={dealer.contactName} />
@@ -1324,95 +777,6 @@ export default function AdminDealerProfilePage() {
         </div>
       ) : null}
 
-      {activeTab === "orders" ? (
-        <Surface padding={22} className="dash-fade-up">
-          <SectionHeader
-            icon="orders"
-            title="Orders"
-            subtitle="Most recent orders from this dealer."
-          />
-          <div style={{ marginTop: 12 }}>
-            {ordersQuery.isLoading ? (
-              <div style={{ height: 160, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
-            ) : recentOrders.length === 0 ? (
-              <EmptyState icon="orders" title="No orders yet" subtitle="Orders placed by this dealer will show up here." />
-            ) : (
-              <>
-                {recentOrders.map((order) => <OrderActivityRow key={order._id} order={order} onOpen={openOrder} />)}
-                <button
-                  type="button"
-                  className="dealer-profile-history-link"
-                  onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}/orders`)}
-                >
-                  <span>Full Order History</span>
-                  <DashboardIcon name="chevron" size={13} strokeWidth={2.1} aria-hidden="true" />
-                </button>
-              </>
-            )}
-          </div>
-        </Surface>
-      ) : null}
-
-      {activeTab === "history" ? (
-        <Surface padding={22} className="dash-fade-up">
-          <SectionHeader
-            icon="history"
-            title="History"
-            subtitle={hasHistoryDateFilter ? "Every order and sale in" : "Every order and sale from this dealer, combined into one timeline."}
-            action={
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {hasHistoryDateFilter ? <Pill tone="accent" size="small">{historyDateLabel}</Pill> : null}
-                <HistoryDateFilter
-                  from={historyFrom}
-                  to={historyTo}
-                  onApply={({ from, to }) => {
-                    setHistoryFrom(from);
-                    setHistoryTo(to);
-                  }}
-                  onClear={() => {
-                    setHistoryFrom("");
-                    setHistoryTo("");
-                  }}
-                />
-              </div>
-            }
-          />
-          <div style={{ marginTop: 14 }}>
-            {historyLoading ? (
-              <div style={{ height: 220, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
-            ) : historyDayGroups.length === 0 ? (
-              <EmptyState
-                icon="history"
-                title={hasHistoryDateFilter ? "No activity in this range" : "No activity yet"}
-                subtitle={
-                  hasHistoryDateFilter
-                    ? `No orders or sales were found for ${historyDateLabel}.`
-                    : "Orders and sales from this dealer will appear here, grouped by day."
-                }
-              />
-            ) : (
-              <>
-                <div className="dealer-profile-history-timeline">
-                  {visibleHistoryGroups.map((group) => (
-                    <HistoryDayGroup key={group.key} group={group} onOpenOrder={openHistoryOrderPreview} onOpenSale={setPreviewSale} />
-                  ))}
-                </div>
-                <HistoryPagination
-                  page={historyCurrentPage}
-                  totalPages={historyTotalPages}
-                  totalCount={historyDayGroups.length}
-                  pageSize={HISTORY_DAYS_PAGE_SIZE}
-                  onChange={(next) => {
-                    setHistoryPage(next);
-                    scrollResultsToTop();
-                  }}
-                />
-              </>
-            )}
-          </div>
-        </Surface>
-      ) : null}
-
       {activeTab === "notes" ? (
         <Surface padding={22} className="dash-fade-up" style={{ maxWidth: 720 }}>
           <SectionHeader icon="edit" title="Notes" subtitle="Internal notes about this dealer - not visible to the dealer." />
@@ -1432,18 +796,6 @@ export default function AdminDealerProfilePage() {
           </div>
         </Surface>
       ) : null}
-
-      <OrderPreviewModal
-        order={previewOrder}
-        dealer={dealer}
-        loading={previewOrderLoading}
-        onClose={closeHistoryOrderPreview}
-        onViewFull={() => {
-          if (previewOrder) openOrder(previewOrder);
-        }}
-      />
-
-      <SalePreviewModal sale={previewSale} onClose={() => setPreviewSale(null)} />
 
       <RoutingModal
         open={routingOpen}
@@ -1557,43 +909,6 @@ export default function AdminDealerProfilePage() {
           font-size:13.5px;
           font-weight:700;
           color:var(--color-ink,#1d1d1f);
-        }
-        .dealer-profile-history-link{
-          margin:14px 0 0 auto;
-          padding:2px 0;
-          border:0;
-          background:transparent;
-          color:var(--color-azure,#0071e3);
-          display:inline-flex;
-          align-items:center;
-          gap:5px;
-          font-size:13.5px;
-          line-height:1.35;
-          font-weight:600;
-          letter-spacing:-.01em;
-          cursor:pointer;
-        }
-        .dealer-profile-history-link span{
-          background-image:linear-gradient(currentColor,currentColor);
-          background-position:0 100%;
-          background-size:0 1px;
-          background-repeat:no-repeat;
-          transition:background-size .18s ease;
-        }
-        .dealer-profile-history-link svg{
-          transform:translateX(0);
-          transition:transform .18s ease;
-        }
-        .dealer-profile-history-link:hover span,
-        .dealer-profile-history-link:focus-visible span{
-          background-size:100% 1px;
-        }
-        .dealer-profile-history-link:hover svg,
-        .dealer-profile-history-link:focus-visible svg{
-          transform:translateX(2px);
-        }
-        .dealer-profile-history-link:active{
-          opacity:.72;
         }
         .dealer-profile-more-wrap{
           position:relative;
@@ -1761,328 +1076,90 @@ export default function AdminDealerProfilePage() {
           color:var(--color-ink,#1d1d1f);
           overflow-wrap:anywhere;
         }
+        .dealer-profile-row-value.missing-detail-value{
+          color:var(--color-meitu-red,#c1121f);
+        }
+        .dealer-profile-row.is-missing-detail .dealer-profile-row-icon{
+          background:rgba(193,18,31,.1);
+          color:var(--color-meitu-red,#c1121f);
+        }
+        .dealer-profile-missing{
+          margin-top:14px;
+          display:flex;
+          align-items:center;
+          gap:12px;
+          padding:12px 14px;
+          border-radius:14px;
+          background:rgba(193,18,31,.06);
+          border:1px solid rgba(193,18,31,.16);
+          animation:dashModalSurfaceIn .32s cubic-bezier(.23,1,.32,1) both;
+        }
+        .dealer-profile-missing-icon{
+          width:30px;
+          height:30px;
+          flex:0 0 auto;
+          border-radius:9px;
+          display:grid;
+          place-items:center;
+          background:rgba(193,18,31,.12);
+          color:var(--color-meitu-red,#c1121f);
+        }
+        .dealer-profile-missing-copy{
+          flex:1 1 auto;
+          min-width:0;
+          display:grid;
+          gap:2px;
+        }
+        .dealer-profile-missing-copy strong{
+          font-size:13.5px;
+          font-weight:700;
+          color:var(--color-meitu-red,#c1121f);
+        }
+        .dealer-profile-missing-copy span{
+          font-size:12.5px;
+          font-weight:500;
+          line-height:1.4;
+          color:var(--color-slate,#474747);
+        }
+        .dealer-profile-missing-btn{
+          flex:0 0 auto;
+          height:32px;
+          padding:0 14px;
+          border:0;
+          border-radius:999px;
+          background:var(--color-meitu-red,#c1121f);
+          color:#fff;
+          font:inherit;
+          font-size:12.5px;
+          font-weight:700;
+          cursor:pointer;
+          transition:transform .16s cubic-bezier(.23,1,.32,1), filter .16s ease;
+        }
+        .dealer-profile-missing-btn:hover{
+          filter:brightness(1.08);
+        }
+        .dealer-profile-missing-btn:active{
+          transform:scale(.97);
+        }
+        @media (max-width:520px){
+          .dealer-profile-missing{
+            flex-wrap:wrap;
+          }
+          .dealer-profile-missing-btn{
+            margin-left:42px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .dealer-profile-missing{
+            animation:none;
+          }
+        }
         .dealer-profile-dispatcher{
           margin-top:14px;
           display:flex;
           align-items:center;
           gap:14px;
           flex-wrap:wrap;
-        }
-        .dealer-profile-activity-row{
-          width:100%;
-          display:flex;
-          align-items:center;
-          gap:10px;
-          padding:10px 4px;
-          border-top:1px solid rgba(0,0,0,.06);
-          border-left:0;
-          border-right:0;
-          border-bottom:0;
-          background:transparent;
-          cursor:pointer;
-          text-align:left;
-          transition:background .14s ease;
-        }
-        .dealer-profile-activity-row:first-child{
-          border-top:none;
-        }
-        .dealer-profile-activity-row:hover{
-          background:rgba(0,113,227,.05);
-          border-radius:10px;
-        }
-        .dealer-profile-activity-dot{
-          width:7px;
-          height:7px;
-          border-radius:999px;
-          flex:0 0 auto;
-        }
-        .dealer-profile-activity-copy{
-          min-width:0;
-          flex:1 1 auto;
-          display:grid;
-          gap:2px;
-        }
-        .dealer-profile-activity-title{
-          font-size:13px;
-          font-weight:650;
-          color:var(--color-ink,#1d1d1f);
-          text-transform:capitalize;
-          overflow:hidden;
-          text-overflow:ellipsis;
-          white-space:nowrap;
-        }
-        .dealer-profile-activity-time{
-          font-size:11.5px;
-          font-weight:500;
-          color:var(--color-graphite,#707070);
-        }
-        .dealer-profile-history-timeline{
-          position:relative;
-          display:grid;
-          gap:22px;
-        }
-        .dealer-profile-history-timeline::before{
-          content:"";
-          position:absolute;
-          left:6px;
-          top:4px;
-          bottom:4px;
-          width:2px;
-          background:linear-gradient(180deg, rgba(0,113,227,.22), rgba(29,29,31,.08));
-        }
-        .dealer-profile-history-day{
-          position:relative;
-          display:grid;
-          gap:10px;
-        }
-        .dealer-profile-history-day-header{
-          position:relative;
-          display:flex;
-          align-items:center;
-          gap:14px;
-        }
-        .dealer-profile-history-day-marker{
-          position:relative;
-          z-index:1;
-          width:13px;
-          height:13px;
-          border-radius:999px;
-          background:#fff;
-          border:2px solid rgba(0,113,227,.8);
-          flex-shrink:0;
-          box-shadow:0 0 0 4px #fff;
-        }
-        .dealer-profile-history-day-date{
-          font-size:13.5px;
-          font-weight:750;
-          color:var(--color-ink,#1d1d1f);
-        }
-        .dealer-profile-history-day-weekday{
-          margin-top:1px;
-          font-size:11.5px;
-          color:var(--color-graphite,#707070);
-        }
-        .dealer-profile-history-day-body{
-          margin-left:27px;
-          display:grid;
-          gap:8px;
-        }
-        .dealer-profile-history-card{
-          display:flex;
-          align-items:center;
-          gap:12px;
-          width:100%;
-          padding:11px 14px;
-          border-radius:14px;
-          border:1px solid rgba(29,29,31,.07);
-          border-left-width:3px;
-          background:#fff;
-          cursor:pointer;
-          text-align:left;
-          transition:box-shadow .16s var(--ease-out, ease), border-color .16s ease, transform .16s var(--ease-out, ease);
-        }
-        .dealer-profile-history-card:hover{
-          box-shadow:0 10px 24px rgba(15,23,42,.06);
-          transform:translateY(-1px);
-        }
-        .dealer-profile-history-card:active{
-          transform:scale(.99);
-        }
-        .dealer-profile-history-card-icon{
-          width:32px;
-          height:32px;
-          border-radius:10px;
-          flex-shrink:0;
-          display:grid;
-          place-items:center;
-        }
-        .dealer-profile-history-card--order{
-          border-left-color:var(--color-azure,#0071e3);
-        }
-        .dealer-profile-history-card--order .dealer-profile-history-card-icon{
-          background:rgba(0,113,227,.1);
-          color:var(--color-azure,#0071e3);
-        }
-        .dealer-profile-history-card--sale{
-          border-left-color:#15803d;
-        }
-        .dealer-profile-history-card--sale .dealer-profile-history-card-icon{
-          background:rgba(22,163,74,.1);
-          color:#15803d;
-        }
-        .dealer-profile-history-card--sale.is-voided{
-          border-left-color:#b42318;
-        }
-        .dealer-profile-history-card--sale.is-voided .dealer-profile-history-card-icon{
-          background:rgba(180,35,24,.1);
-          color:#b42318;
-        }
-        .dealer-profile-history-card-main{
-          min-width:0;
-          flex:1 1 auto;
-        }
-        .dealer-profile-history-card-title{
-          display:flex;
-          align-items:center;
-          gap:7px;
-          font-size:13.5px;
-          font-weight:700;
-          color:var(--color-ink,#1d1d1f);
-          overflow:hidden;
-          text-overflow:ellipsis;
-          white-space:nowrap;
-        }
-        .dealer-profile-history-card-kind{
-          flex-shrink:0;
-          font-size:9.5px;
-          font-weight:800;
-          letter-spacing:.05em;
-          text-transform:uppercase;
-          padding:2px 6px;
-          border-radius:999px;
-        }
-        .dealer-profile-history-card--order .dealer-profile-history-card-kind{
-          background:rgba(0,113,227,.12);
-          color:var(--color-azure,#0071e3);
-        }
-        .dealer-profile-history-card--sale .dealer-profile-history-card-kind{
-          background:rgba(22,163,74,.12);
-          color:#15803d;
-        }
-        .dealer-profile-history-card--sale.is-voided .dealer-profile-history-card-kind{
-          background:rgba(180,35,24,.12);
-          color:#b42318;
-        }
-        .dealer-profile-history-card-sub{
-          margin-top:2px;
-          font-size:11.5px;
-          color:var(--color-graphite,#707070);
-        }
-        .dealer-profile-history-card-amount{
-          flex-shrink:0;
-          min-width:90px;
-          text-align:right;
-          font-size:13px;
-          font-weight:750;
-          color:var(--color-ink,#1d1d1f);
-        }
-        @media (max-width:640px){
-          .dealer-profile-history-card{
-            flex-wrap:wrap;
-          }
-          .dealer-profile-history-card-amount{
-            order:5;
-          }
-        }
-        .dealer-profile-history-filter-btn{
-          position:relative;
-          width:38px;
-          height:38px;
-          border-radius:999px;
-          border:1px solid rgba(29,29,31,.1);
-          background:rgba(255,255,255,.88);
-          color:var(--color-ink, #1d1d1f);
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          cursor:pointer;
-          transition:transform .14s var(--ease-out, ease), background .14s ease, border-color .14s ease;
-        }
-        .dealer-profile-history-filter-btn:hover{
-          background:rgba(29,29,31,.05);
-        }
-        .dealer-profile-history-filter-btn:active{
-          transform:scale(.93);
-        }
-        .dealer-profile-history-filter-btn.is-active{
-          border-color:rgba(0,113,227,.32);
-          background:rgba(0,113,227,.08);
-          color:var(--color-azure, #0071e3);
-        }
-        .dealer-profile-history-filter-dot{
-          position:absolute;
-          top:6px;
-          right:6px;
-          width:7px;
-          height:7px;
-          border-radius:999px;
-          background:var(--color-azure, #0071e3);
-          border:1.5px solid #fff;
-        }
-        .dealer-profile-history-filter-pop{
-          /* position/top/left/width are set inline (computed from the
-             trigger's getBoundingClientRect via a portal) since this
-             renders into document.body. */
-          z-index:1401;
-          padding:14px;
-          border-radius:16px;
-          background:#fff;
-          border:1px solid rgba(0,0,0,.06);
-          box-shadow:0 12px 32px rgba(0,0,0,.16), 0 1px 0 rgba(0,0,0,.04);
-          transform-origin:top right;
-          animation:dealerProfileHistoryFilterPopIn .15s var(--ease-out, cubic-bezier(.23,1,.32,1)) both;
-        }
-        @keyframes dealerProfileHistoryFilterPopIn{
-          from{ opacity:0; transform:scale(.96); }
-          to{ opacity:1; transform:scale(1); }
-        }
-        @media (prefers-reduced-motion: reduce){
-          .dealer-profile-history-filter-pop{ animation:none!important; }
-          .dealer-profile-history-filter-btn{ transition:none!important; }
-        }
-        .dealer-profile-history-filter-pop-title{
-          display:flex;
-          align-items:center;
-          gap:6px;
-          font-size:12px;
-          font-weight:700;
-          color:var(--color-ink, #1d1d1f);
-          margin-bottom:10px;
-        }
-        .dealer-profile-history-filter-field{
-          display:grid;
-          gap:4px;
-          margin-bottom:10px;
-        }
-        .dealer-profile-history-filter-field span{
-          font-size:10.5px;
-          font-weight:700;
-          letter-spacing:.03em;
-          text-transform:uppercase;
-          color:var(--color-graphite, #707070);
-        }
-        .dealer-profile-history-filter-pop-actions{
-          display:flex;
-          align-items:center;
-          justify-content:flex-end;
-          gap:8px;
-          margin-top:2px;
-        }
-        .dealer-profile-history-page-btn{
-          min-width:32px;
-          height:32px;
-          padding:0 8px;
-          border-radius:8px;
-          border:none;
-          background:transparent;
-          font-size:12.5px;
-          font-weight:700;
-          color:var(--color-ink,#1d1d1f);
-          cursor:pointer;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-        }
-        .dealer-profile-history-page-btn:disabled{
-          opacity:.35;
-          cursor:not-allowed;
-        }
-        .dealer-profile-history-page-btn.is-active{
-          background:var(--color-azure, #0071e3);
-          color:#fff;
-        }
-        .dealer-profile-history-page-btn:not(.is-active):not(:disabled):hover{
-          background:rgba(29,29,31,.06);
         }
         @media (max-width:980px){
           .dealer-profile-info-tiles{

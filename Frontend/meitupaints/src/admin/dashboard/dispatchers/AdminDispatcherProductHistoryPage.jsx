@@ -7,113 +7,55 @@ import {
   useGetAdminDispatcherProductMovementsQuery,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
-import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
+import { formatTime, normalizeStatus, orderStatusMeta } from "../../../dealer/orderDetailLogic.js";
 import {
-  Avatar,
   DashboardUIStyles,
   EmptyState,
   Pill,
   SectionHeader,
+  SegmentedControl,
   Surface,
 } from "../../../components/dashboard/DashboardUI.jsx";
+import { scrollResultsToTop } from "../../../utils/scrollResultsToTop.js";
+import { groupEventsByDay } from "../salesPurchases/salesPurchasesFormat.js";
+import { HistoryOrderPreviewModal } from "../salesPurchases/SalesPurchasesKit.jsx";
+import {
+  BackLink,
+  ProductHistoryCard,
+  ProductHistoryDayGroup,
+  ProductHistoryPagination,
+  ProductHistoryStyles,
+} from "../salesPurchases/ProductHistoryKit.jsx";
+import DispatcherHubMark from "./DispatcherHubMark.jsx";
 
-function formatQty(value) {
-  return Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+// One product's purchases (from the Factory) and sales (to this dispatcher's
+// dealers), laid out exactly like the dealer product history page. The
+// movements come from the orders themselves (admin.service.js
+// getDispatcherProductMovements), each carrying its full order for preview.
+
+const HISTORY_DAYS_PAGE_SIZE = 6;
+
+const VIEW_OPTIONS = [
+  { key: "all", label: "Sales and Purchases" },
+  { key: "purchases", label: "Purchases" },
+  { key: "sales", label: "Sales" },
+];
+
+function buildProductHistoryEvents(movements) {
+  return movements
+    .map((movement, index) => ({
+      type: movement.type === "SALE" ? "sale" : "order",
+      key: `${movement.type}-${movement.order?._id || index}`,
+      date: new Date(movement.createdAt),
+      movement,
+    }))
+    .filter((event) => !Number.isNaN(event.date.getTime()))
+    .sort((a, b) => b.date - a.date);
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function orderStatusTone(status) {
-  if (status === "COMPLETED" || status === "DISPATCHED") return "positive";
-  if (status === "REJECTED" || status === "CANCELLED") return "critical";
-  return "accent";
-}
-
-// A plain, minimal top-left back link.
-function BackLink({ onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        border: "none",
-        background: "transparent",
-        padding: 0,
-        cursor: "pointer",
-        color: "var(--color-azure, #0071e3)",
-        fontSize: 14.5,
-        fontWeight: 600,
-      }}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m15 6-6 6 6 6" />
-      </svg>
-      {children}
-    </button>
-  );
-}
-
-function CloseButton({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Close"
-      style={{ width: 32, height: 32, borderRadius: 999, border: "none", background: "var(--color-fog, #f5f5f7)", color: "var(--color-graphite, #707070)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 }}
-    >
-      <DashboardIcon name="close" size={14} strokeWidth={2} />
-    </button>
-  );
-}
-
-function ModalShell({ children, onClose, width = 480 }) {
-  return (
-    <div
-      className="dash-modal-backdrop-in"
-      style={{ position: "fixed", inset: 0, zIndex: 1400, background: "rgba(0,0,0,.4)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 28 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Surface className="dash-modal-surface-in" style={{ width: `min(${width}px, 100%)`, maxHeight: "88vh", overflow: "auto" }} padding={22} onClick={(event) => event.stopPropagation()}>
-        {children}
-      </Surface>
-    </div>
-  );
-}
-
-function MovementPreviewModal({ movement, onClose }) {
-  if (!movement) return null;
-  const isSale = movement.type === "SALE";
-
-  return (
-    <ModalShell onClose={onClose}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <SectionHeader
-          eyebrow={movement.order?.orderNumber}
-          icon={isSale ? "store" : "truck"}
-          title={isSale ? movement.order?.dealerName || "Dealer" : "Replenishment Order"}
-        />
-        <CloseButton onClick={onClose} />
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8 }}>
-        <Pill tone={orderStatusTone(movement.order?.status)} size="small">{movement.order?.status}</Pill>
-        <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDate(movement.createdAt)}</span>
-      </div>
-
-      <div style={{ marginTop: 16, display: "flex", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, background: "var(--color-fog, #f5f5f7)", fontSize: 13 }}>
-        <span>{movement.packLabel || "Quantity"}</span>
-        <span style={{ fontWeight: 700 }}>{formatQty(movement.quantity)}</span>
-      </div>
-    </ModalShell>
-  );
+function statusPill(order) {
+  const meta = orderStatusMeta(normalizeStatus(order?.status));
+  return <Pill tone={meta.tone} size="small">{meta.label}</Pill>;
 }
 
 export default function AdminDispatcherProductHistoryPage() {
@@ -122,55 +64,133 @@ export default function AdminDispatcherProductHistoryPage() {
 
   const { dispatcherId, productId, mode } = useMemo(() => {
     const match = location.pathname.match(
-      /^\/admin\/dashboard\/dispatchers\/([^/]+)\/sales-purchases\/([^/]+)\/(purchases|sales)$/,
+      /^\/admin\/dashboard\/dispatchers\/([^/]+)\/sales-purchases\/([^/]+)\/(purchases|sales|all)$/,
     );
-    return { dispatcherId: match?.[1] || "", productId: match?.[2] || "", mode: match?.[3] || "purchases" };
+    return { dispatcherId: match?.[1] || "", productId: match?.[2] || "", mode: match?.[3] || "all" };
   }, [location.pathname]);
 
-  const isSales = mode === "sales";
+  // "view" follows the URL; changeView() only navigates. Adjusting state
+  // during render (not in an effect) catches every way the URL can change -
+  // a tab click, or back/forward landing on another product or mode while
+  // this page stays mounted.
+  const [syncKey, setSyncKey] = useState(`${productId}:${mode}`);
+  const [view, setView] = useState(mode);
+  const [page, setPage] = useState(1);
+  const [preview, setPreview] = useState(null);
 
-  const [previewMovement, setPreviewMovement] = useState(null);
+  const urlKey = `${productId}:${mode}`;
+  if (syncKey !== urlKey) {
+    setSyncKey(urlKey);
+    setView(mode);
+    setPage(1);
+  }
 
   const dispatcherQuery = useGetAdminDispatcherQuery(dispatcherId, { skip: !dispatcherId });
-  const summaryQuery = useGetAdminDispatcherProductSummaryQuery(dispatcherId, { skip: !dispatcherId });
+  const summaryQuery = useGetAdminDispatcherProductSummaryQuery({ dispatcherId }, { skip: !dispatcherId });
   const movementsQuery = useGetAdminDispatcherProductMovementsQuery(
     { dispatcherId, productId },
     { skip: !dispatcherId || !productId },
   );
 
   const dispatcher = dispatcherQuery.data?.item || null;
+  const displayName = dispatcher?.name || dispatcher?.companyName || "Dispatcher";
   const product = useMemo(
     () => (summaryQuery.data?.items || []).find((item) => String(item.productId) === String(productId)) || null,
     [summaryQuery.data, productId],
   );
 
   const movements = useMemo(() => movementsQuery.data?.items || [], [movementsQuery.data]);
-  const rows = useMemo(
-    () => movements.filter((movement) => movement.type === (isSales ? "SALE" : "PURCHASE")),
-    [movements, isSales],
-  );
+  const filteredMovements = useMemo(() => {
+    if (view === "purchases") return movements.filter((movement) => movement.type === "PURCHASE");
+    if (view === "sales") return movements.filter((movement) => movement.type === "SALE");
+    return movements;
+  }, [movements, view]);
+
+  const dayGroups = useMemo(() => groupEventsByDay(buildProductHistoryEvents(filteredMovements)), [filteredMovements]);
+  const totalPages = Math.max(1, Math.ceil(dayGroups.length / HISTORY_DAYS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleDayGroups = dayGroups.slice((currentPage - 1) * HISTORY_DAYS_PAGE_SIZE, currentPage * HISTORY_DAYS_PAGE_SIZE);
+
+  function changeView(nextView) {
+    // Carry the state across: a replace without it would forget how we got here.
+    navigate(`/admin/dashboard/dispatchers/${dispatcherId}/sales-purchases/${productId}/${nextView}`, {
+      replace: true,
+      state: location.state,
+    });
+  }
+
+  // Stepping back through history returns to the Sales & Purchases entry we
+  // came from, which still remembers it was opened from the profile.
+  function goBack() {
+    if (location.state?.fromSalesPurchases) navigate(-1);
+    else navigate(`/admin/dashboard/dispatchers/${dispatcherId}/sales-purchases`);
+  }
 
   const movementsError = movementsQuery.error ? getQueryErrorMessage(movementsQuery.error, "Failed to load product history.") : "";
-
   const productLabel = product ? `${product.name}${product.pack?.label ? ` · ${product.pack.label}` : ""}` : "";
+
+  const viewCopy = {
+    all: { icon: "overview", title: "Sales and Purchases", empty: "No activity yet", emptySubtitle: "This dispatcher hasn't bought or sold this product yet." },
+    purchases: { icon: "truck", title: "Purchases", empty: "No purchases yet", emptySubtitle: "This product hasn't been received from the Factory yet." },
+    sales: { icon: "handshake", title: "Sales", empty: "No sales yet", emptySubtitle: "This dispatcher hasn't delivered this product to a dealer yet." },
+  }[view];
+
+  function renderEvent(event, style) {
+    const { movement } = event;
+    if (event.type === "order") {
+      return (
+        <ProductHistoryCard
+          key={event.key}
+          variant="order"
+          icon="truck"
+          kind="Purchase"
+          title={movement.order?.orderNumber || "Unnamed Order"}
+          sub={`${formatTime(movement.createdAt)} · From the Factory`}
+          pill={statusPill(movement.order)}
+          quantity={movement.quantity}
+          onClick={() => movement.order && setPreview({ order: movement.order, party: "From the Factory" })}
+          style={style}
+        />
+      );
+    }
+    const dealerName = movement.order?.dealerName || "Dealer";
+    return (
+      <ProductHistoryCard
+        key={event.key}
+        variant="sale"
+        icon="checkSquare"
+        kind="Sale"
+        title={movement.order?.orderNumber || "Order"}
+        sub={`${formatTime(movement.createdAt)} · To ${dealerName}`}
+        pill={statusPill(movement.order)}
+        quantity={movement.quantity}
+        onClick={() => movement.order && setPreview({ order: movement.order, party: `To ${dealerName}` })}
+        style={style}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <DashboardUIStyles />
 
-      <BackLink onClick={() => navigate(`/admin/dashboard/dispatchers/${dispatcherId}/sales-purchases`)}>Back to Sales &amp; Purchases</BackLink>
+      <BackLink onClick={goBack}>Back to Sales &amp; Purchases</BackLink>
 
       <Surface padding={20} className="dash-fade-up">
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Avatar label={dispatcher?.name || dispatcher?.companyName || "D"} size={44} />
-          <div>
-            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--color-ink, #1d1d1f)" }}>
-              {dispatcher?.name || dispatcher?.companyName || "Dispatcher"} · {isSales ? "Sales" : "Purchases"}
-            </div>
-            <div style={{ marginTop: 2, fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
-              {productLabel || "Loading product…"}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <DispatcherHubMark label={displayName} size={44} />
+            <div>
+              <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--color-ink, #1d1d1f)" }}>
+                {displayName} · {viewCopy.title}
+              </div>
+              <div style={{ marginTop: 2, fontSize: 12.5, fontWeight: 500, color: "var(--color-graphite, #707070)" }}>
+                {productLabel || "Loading product…"}
+              </div>
             </div>
           </div>
+
+          <SegmentedControl options={VIEW_OPTIONS} value={view} onChange={changeView} />
         </div>
       </Surface>
 
@@ -180,98 +200,44 @@ export default function AdminDispatcherProductHistoryPage() {
         </div>
       ) : null}
 
-      <Surface padding={26} className="dash-fade-up">
+      <Surface padding={26} className="dash-fade-up" key={view}>
         <SectionHeader
-          icon={isSales ? "store" : "truck"}
-          title={isSales ? "Sales" : "Purchases"}
+          icon={viewCopy.icon}
+          title={viewCopy.title}
           subtitle={productLabel}
           action={movementsQuery.isFetching ? <Pill tone="accent" size="small">Updating…</Pill> : null}
         />
 
         <div style={{ marginTop: 16 }}>
           {movementsQuery.isLoading && !movementsQuery.data ? (
-            <div style={{ height: 160, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon={isSales ? "store" : "truck"}
-              title={isSales ? "No sales yet" : "No purchases yet"}
-              subtitle={
-                isSales
-                  ? "This dispatcher hasn't dispatched this product to a dealer yet."
-                  : "This product hasn't been received from the Factory yet."
-              }
-            />
+            <div style={{ height: 220, borderRadius: 14, background: "linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.02), rgba(0,0,0,.04))" }} />
+          ) : dayGroups.length === 0 ? (
+            <EmptyState icon={viewCopy.icon} title={viewCopy.empty} subtitle={viewCopy.emptySubtitle} />
           ) : (
-            <div className="admin-dph-history" style={{ borderRadius: 16, border: "1px solid rgba(0,0,0,.06)", overflow: "hidden" }}>
-              <div className="admin-dph-row admin-dph-head">
-                <span>Date</span>
-                <span>{isSales ? "Order" : "Order"}</span>
-                <span>{isSales ? "Dealer" : "Size"}</span>
-                <span style={{ textAlign: "right" }}>Quantity</span>
+            <>
+              <div className="admin-sph-timeline">
+                {visibleDayGroups.map((group) => (
+                  <ProductHistoryDayGroup key={group.key} group={group} animate renderEvent={renderEvent} />
+                ))}
               </div>
-              {rows.map((movement, index) => (
-                <div
-                  key={`${movement.order?._id || index}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setPreviewMovement(movement)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setPreviewMovement(movement);
-                    }
-                  }}
-                  className="admin-dph-row admin-dph-clickable-row"
-                >
-                  <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>{formatDate(movement.createdAt)}</span>
-                  <span style={{ fontSize: 13, fontWeight: 650, color: "var(--color-ink, #1d1d1f)" }}>{movement.order?.orderNumber || "—"}</span>
-                  <span style={{ fontSize: 12.5, color: "var(--color-graphite, #707070)" }}>
-                    {isSales ? (movement.order?.dealerName || "—") : (product?.pack?.label || "—")}
-                  </span>
-                  <span style={{ textAlign: "right", fontSize: 13.5, fontWeight: 600 }}>{formatQty(movement.quantity)}</span>
-                </div>
-              ))}
-            </div>
+              <ProductHistoryPagination
+                page={currentPage}
+                totalPages={totalPages}
+                totalCount={dayGroups.length}
+                pageSize={HISTORY_DAYS_PAGE_SIZE}
+                onChange={(next) => {
+                  setPage(next);
+                  scrollResultsToTop();
+                }}
+              />
+            </>
           )}
         </div>
       </Surface>
 
-      <MovementPreviewModal movement={previewMovement} onClose={() => setPreviewMovement(null)} />
+      <HistoryOrderPreviewModal order={preview?.order || null} party={preview?.party || ""} onClose={() => setPreview(null)} />
 
-      <style>{`
-        .admin-dph-row{
-          display:grid;
-          grid-template-columns:110px minmax(0,1fr) minmax(0,1fr) 100px;
-          gap:14px;
-          align-items:center;
-          padding:12px 18px;
-        }
-        .admin-dph-row + .admin-dph-row{
-          border-top:1px solid rgba(0,0,0,.06);
-        }
-        .admin-dph-head{
-          background:var(--color-fog, #f5f5f7);
-          font-size:10.5px;
-          font-weight:700;
-          letter-spacing:.06em;
-          text-transform:uppercase;
-          color:var(--color-graphite, #707070);
-        }
-        .admin-dph-clickable-row{
-          cursor:pointer;
-          transition:background-color .12s ease;
-        }
-        .admin-dph-clickable-row:hover{
-          background:rgba(0,113,227,.05);
-        }
-        @media (max-width:720px){
-          .admin-dph-row{
-            grid-template-columns:80px minmax(0,1fr) minmax(0,1fr) 70px;
-            gap:8px;
-            padding:10px 12px;
-          }
-        }
-      `}</style>
+      <ProductHistoryStyles />
     </div>
   );
 }

@@ -364,7 +364,7 @@ export default function AdminSalesPage() {
   function openDealerSalesPurchases(summaryRow) {
     const id = summaryRow?.dealerId || summaryRow?.dealer?._id;
     if (!id) return;
-    navigate(`/admin/dashboard/dealers/${id}/sales-purchases`);
+    navigate(`/admin/dashboard/dealers/${id}/sales-purchases`, { state: { fromSalesList: true } });
   }
 
   function handleDealerChange(value) {

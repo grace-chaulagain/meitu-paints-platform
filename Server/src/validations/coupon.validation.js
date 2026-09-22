@@ -102,7 +102,12 @@ export const couponListQuerySchema = z
 export const couponRedemptionHistoryQuerySchema = z
   .object({
     type: z.enum(["ALL", ...Object.values(COUPON_TYPE)]).optional(),
+    // Either actor can redeem a coupon, so the history can be scoped to
+    // either. listRedemptionHistory and the controller already handled
+    // dispatcherId; leaving it out of this strict schema meant the request
+    // was rejected outright rather than filtered.
     dealerId: optionalTrimmedString(24),
+    dispatcherId: optionalTrimmedString(24),
     q: optionalTrimmedString(120),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),

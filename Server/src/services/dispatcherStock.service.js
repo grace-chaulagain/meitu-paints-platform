@@ -577,10 +577,13 @@ export async function listDispatcherStockHistory({
   };
 }
 
-export async function listDispatcherStock({ dispatcherId, page = 1, limit = 100 } = {}) {
+// `maxLimit` lets a caller that genuinely needs every row (the admin Sales &
+// Purchases stock view) ask for more than the usual page; the dispatcher's own
+// portal doesn't pass it and keeps the 200 ceiling.
+export async function listDispatcherStock({ dispatcherId, page = 1, limit = 100, maxLimit = 200 } = {}) {
   if (!dispatcherId) throw new ApiError(400, "dispatcherId is required");
   const pageNumber = Math.max(1, Number(page || 1));
-  const limitNumber = Math.min(200, Math.max(1, Number(limit || 100)));
+  const limitNumber = Math.min(maxLimit, Math.max(1, Number(limit || 100)));
 
   const [rows, total] = await Promise.all([
     DispatcherProductStock.find({ dispatcherId })

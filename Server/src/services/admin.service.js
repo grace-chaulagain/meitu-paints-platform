@@ -1763,7 +1763,9 @@ export async function getDispatcherStock({ dispatcherId, page, limit } = {}) {
   const dispatcher = await Dispatcher.findById(dispatcherId).select("_id").lean();
   if (!dispatcher) throw new ApiError(404, "Dispatcher not found");
 
-  return listDispatcherStock({ dispatcherId, page, limit });
+  // One dispatcher's stock is bounded by the catalog (200 products on
+  // production today), so the admin view may take it all in one page.
+  return listDispatcherStock({ dispatcherId, page, limit, maxLimit: 1000 });
 }
 
 export async function getDispatcherAnalytics({ dispatcherId } = {}) {
@@ -1775,7 +1777,7 @@ export async function getDispatcherAnalytics({ dispatcherId } = {}) {
 // list; unlike a dealer, there's no separate InventoryMovement ledger for
 // dispatcher stock, so the Order documents themselves are the source of
 // truth here.
-export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 200 } = {}) {
+export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 200, from, to } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
 
   const pageNumber = Math.max(1, Number(page || 1));
@@ -1785,6 +1787,7 @@ export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 
     dispatcherCustomerId: dispatcherId,
     orderOrigin: "DISPATCHER_REPLENISHMENT",
     isDeleted: { $ne: true },
+    ...createdAtWindow(from, to),
   };
 
   const [items, total] = await Promise.all([
@@ -1818,10 +1821,23 @@ export async function listDispatcherOwnOrders({ dispatcherId, page = 1, limit = 
 // reports the moment it's actually finished.
 const DISPATCHER_RECEIVED_STATUSES = ["DISPATCHED", "COMPLETED"];
 
+// Optional createdAt window for the dispatcher Sales & Purchases views, the
+// same `from`/`to` pair the dealer side takes (dealerInventory.service.js):
+// the admin page sends a date for `from` and an end-of-day timestamp for `to`.
+// An unparseable bound is ignored rather than turned into an empty result.
+function createdAtWindow(from, to) {
+  const range = {};
+  const start = from ? new Date(from) : null;
+  const end = to ? new Date(to) : null;
+  if (start && !Number.isNaN(start.getTime())) range.$gte = start;
+  if (end && !Number.isNaN(end.getTime())) range.$lte = end;
+  return Object.keys(range).length ? { createdAt: range } : {};
+}
+
 // Every dealer order this dispatcher has fulfilled - the dispatcher's
 // "sales" side, where the customer is the dealer rather than an end
 // consumer.
-export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, limit = 200 } = {}) {
+export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, limit = 200, from, to } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
 
   const pageNumber = Math.max(1, Number(page || 1));
@@ -1832,6 +1848,7 @@ export async function listDispatcherFulfilledOrders({ dispatcherId, page = 1, li
     "dealerSnapshot.fulfillmentMode": "DISPATCHER",
     status: { $in: DISPATCHER_RECEIVED_STATUSES },
     isDeleted: { $ne: true },
+    ...createdAtWindow(from, to),
   };
 
   const [items, total] = await Promise.all([
@@ -1914,9 +1931,12 @@ export async function getDispatcherDealerStats({ dispatcherId } = {}) {
 // totals for this dispatcher - the dispatcher-side equivalent of a
 // dealer's Product Summary. Derived entirely from Order line items since
 // there's no InventoryMovement-style ledger for dispatcher stock.
-export async function getDispatcherProductSummary({ dispatcherId } = {}) {
+// `from`/`to` narrow Purchase, Scheme and Sales to orders placed in that
+// window; `balance` is always the live stock on hand, window or not.
+export async function getDispatcherProductSummary({ dispatcherId, from, to } = {}) {
   if (!dispatcherId) throw new ApiError(400, "Missing dispatcherId");
   const dispatcherObjectId = new mongoose.Types.ObjectId(String(dispatcherId));
+  const orderWindow = createdAtWindow(from, to);
 
   const [purchaseAgg, schemeAgg, salesAgg, stockRows] = await Promise.all([
     Order.aggregate([
@@ -1926,11 +1946,20 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
           orderOrigin: "DISPATCHER_REPLENISHMENT",
           status: { $in: DISPATCHER_RECEIVED_STATUSES },
           isDeleted: { $ne: true },
+          ...orderWindow,
         },
       },
       { $unwind: "$items" },
       { $match: { "items.productId": { $ne: null } } },
-      { $group: { _id: "$items.productId", quantity: { $sum: "$items.quantity" } } },
+      // What was actually paid, from the order's own line totals - so the
+      // page can show purchase value without estimating a unit cost.
+      {
+        $group: {
+          _id: "$items.productId",
+          quantity: { $sum: "$items.quantity" },
+          value: { $sum: { $ifNull: ["$items.lineTotal", 0] } },
+        },
+      },
     ]),
     // Scheme grants addressed to this dispatcher - a separate order origin
     // from DISPATCHER_REPLENISHMENT, so it needs its own aggregation rather
@@ -1944,6 +1973,7 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
           orderOrigin: "SCHEME",
           status: { $in: DISPATCHER_RECEIVED_STATUSES },
           isDeleted: { $ne: true },
+          ...orderWindow,
         },
       },
       { $unwind: "$items" },
@@ -1957,6 +1987,7 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
           "dealerSnapshot.fulfillmentMode": "DISPATCHER",
           status: { $in: DISPATCHER_RECEIVED_STATUSES },
           isDeleted: { $ne: true },
+          ...orderWindow,
         },
       },
       { $unwind: "$items" },
@@ -1967,6 +1998,7 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
   ]);
 
   const purchaseMap = new Map(purchaseAgg.map((row) => [String(row._id), row.quantity]));
+  const purchaseValueMap = new Map(purchaseAgg.map((row) => [String(row._id), row.value]));
   const schemeMap = new Map(schemeAgg.map((row) => [String(row._id), row.quantity]));
   const salesMap = new Map(salesAgg.map((row) => [String(row._id), row.quantity]));
   const stockMap = new Map(stockRows.map((row) => [String(row.productId), row.currentQuantity]));
@@ -1989,6 +2021,7 @@ export async function getDispatcherProductSummary({ dispatcherId } = {}) {
         category: product.category || "",
         pack: product.pack || {},
         purchase: purchaseMap.get(id) || 0,
+        purchaseValue: purchaseValueMap.get(id) || 0,
         scheme: schemeMap.get(id) || 0,
         sales: salesMap.get(id) || 0,
         // Straight from the live stock cache, not derived - already
@@ -2020,7 +2053,7 @@ export async function getDispatcherProductMovements({ dispatcherId, productId } 
       isDeleted: { $ne: true },
       items: { $elemMatch: { productId: productObjectId } },
     })
-      .select("orderNumber status createdAt items")
+      .select("orderNumber status createdAt items totals")
       .lean(),
     Order.find({
       dispatcherId,
@@ -2029,7 +2062,7 @@ export async function getDispatcherProductMovements({ dispatcherId, productId } 
       isDeleted: { $ne: true },
       items: { $elemMatch: { productId: productObjectId } },
     })
-      .select("orderNumber status createdAt items dealerId dealerSnapshot")
+      .select("orderNumber status createdAt items totals dealerNote dealerId dealerSnapshot")
       .populate({ path: "dealerId", select: "companyName contactName" })
       .lean(),
   ]);
@@ -2038,11 +2071,15 @@ export async function getDispatcherProductMovements({ dispatcherId, productId } 
     const item = (order.items || []).find((entry) => String(entry.productId) === String(productId));
     return {
       type: "PURCHASE",
+      // The whole order rides along (its lines and total) so the admin page
+      // can preview it in place, the way the dealer product history does.
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
         status: order.status,
         createdAt: order.createdAt,
+        items: order.items || [],
+        totals: order.totals || null,
       },
       quantity: item?.quantity || 0,
       packLabel: item?.packLabel || "",
@@ -2060,6 +2097,9 @@ export async function getDispatcherProductMovements({ dispatcherId, productId } 
         status: order.status,
         createdAt: order.createdAt,
         dealerName: order.dealerId?.companyName || order.dealerSnapshot?.companyName || "",
+        items: order.items || [],
+        totals: order.totals || null,
+        dealerNote: order.dealerNote || "",
       },
       quantity: item?.quantity || 0,
       packLabel: item?.packLabel || "",

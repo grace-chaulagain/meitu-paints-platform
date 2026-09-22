@@ -5,6 +5,16 @@ import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 import { MobileSheet } from "../../dealer/mobile/MobileSheet.jsx";
 import { PrimaryButton } from "../../dealer/mobile/PrimaryButton.jsx";
 import { StatusChip } from "../../dealer/mobile/StatusChip.jsx";
+import { isDetailMissing, joinDetailLabels, missingDealerDetails } from "../dashboard/dealers/dealerMissingDetails.js";
+
+// The company name is already the page title, so the card lists the rest.
+const MOBILE_COMPANY_ROWS = [
+  { key: "contactName", label: "Contact" },
+  { key: "phone", label: "Phone" },
+  { key: "email", label: "Email" },
+  { key: "panVat", label: "PAN/VAT" },
+  { key: "address", label: "Address" },
+];
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -51,6 +61,7 @@ export function AdminDealerProfileMobileView({
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
   const [routingSheetOpen, setRoutingSheetOpen] = useState(false);
   const [routingChoice, setRoutingChoice] = useState("");
+  const missingDetails = missingDealerDetails(dealer);
 
   if (!loading && (loadError || !dealer)) {
     return (
@@ -154,26 +165,50 @@ export function AdminDealerProfileMobileView({
 
             <div className="admin-m-card">
               <div className="admin-m-section-title">Company</div>
-              <div className="admin-m-kv-row" style={{ paddingTop: 10 }}>
-                <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>Contact</span>
-                <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right" }}>{dealer.contactName || "—"}</span>
-              </div>
-              <div className="admin-m-kv-row">
-                <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>Phone</span>
-                <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right" }}>{dealer.phone || "—"}</span>
-              </div>
-              <div className="admin-m-kv-row">
-                <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>Email</span>
-                <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right", wordBreak: "break-word" }}>{dealer.email || "—"}</span>
-              </div>
-              <div className="admin-m-kv-row">
-                <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>PAN/VAT</span>
-                <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right" }}>{dealer.panVat || "—"}</span>
-              </div>
-              <div className="admin-m-kv-row">
-                <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>Address</span>
-                <span style={{ fontSize: 13, fontWeight: 700, textAlign: "right", wordBreak: "break-word" }}>{dealer.address || "—"}</span>
-              </div>
+              {missingDetails.length ? (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: 8,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(193,18,31,.06)",
+                    border: "1px solid rgba(193,18,31,.16)",
+                    fontSize: 12.5,
+                    lineHeight: 1.4,
+                    color: "var(--color-slate, #474747)",
+                  }}
+                >
+                  <span className="missing-detail-value" style={{ flex: "0 0 auto", marginTop: 1 }}>
+                    <DashboardIcon name="warning" size={14} strokeWidth={2} />
+                  </span>
+                  <span>
+                    <strong className="missing-detail-value">Not entered yet: </strong>
+                    {joinDetailLabels(missingDetails)}.
+                  </span>
+                </div>
+              ) : null}
+              {MOBILE_COMPANY_ROWS.map((row, index) => {
+                const missing = isDetailMissing(dealer[row.key]);
+                return (
+                  <div
+                    key={row.key}
+                    className={`admin-m-kv-row ${missing ? "is-missing-detail" : ""}`}
+                    style={index === 0 ? { paddingTop: 10 } : undefined}
+                  >
+                    <span style={{ fontSize: 12, color: "var(--color-graphite, #707070)" }}>{row.label}</span>
+                    <span
+                      className={missing ? "missing-detail-value" : ""}
+                      style={{ fontSize: 13, fontWeight: 700, textAlign: "right", wordBreak: "break-word" }}
+                    >
+                      {missing ? "Not entered yet" : dealer[row.key]}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="admin-m-card">

@@ -705,9 +705,13 @@ export async function listOrdersForActor({
       query.createdAt.$gte = fromDate;
     }
     if (toDate && !Number.isNaN(toDate.getTime())) {
-      // Treat "to" as inclusive of the whole calendar day.
+      // A bare "YYYY-MM-DD" means the whole of that calendar day. A full
+      // timestamp is already an exact bound - the Sales & Purchases pages send
+      // the end of the admin's own day - so it is used as sent; stretching it
+      // to the server's 23:59 would reach hours into the next day.
+      const isBareDate = /^\d{4}-\d{2}-\d{2}$/.test(String(to).trim());
       const endOfDay = new Date(toDate);
-      endOfDay.setHours(23, 59, 59, 999);
+      if (isBareDate) endOfDay.setHours(23, 59, 59, 999);
       query.createdAt.$lte = endOfDay;
     }
   }

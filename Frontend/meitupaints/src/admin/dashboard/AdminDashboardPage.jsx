@@ -869,7 +869,7 @@ export default function AdminDashboard() {
 
     if (
       path.startsWith("/admin/dashboard/dispatchers/") &&
-      /\/sales-purchases\/[^/]+\/(purchases|sales)$/.test(path)
+      /\/sales-purchases\/[^/]+\/(purchases|sales|all)$/.test(path)
     ) {
       return <AdminDispatcherProductHistoryPage />;
     }
