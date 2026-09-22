@@ -1272,7 +1272,7 @@ export default function AdminDealerProfilePage() {
         value={activeTab}
         onChange={(key) => {
           if (key === "sales") {
-            navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`);
+            navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`, { state: { fromDealerProfile: true } });
             return;
           }
           setActiveTab(key);

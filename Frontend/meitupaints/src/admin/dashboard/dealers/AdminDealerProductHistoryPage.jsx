@@ -446,7 +446,19 @@ export default function AdminDealerProductHistoryPage() {
   const visibleDayGroups = dayGroups.slice((currentPage - 1) * HISTORY_DAYS_PAGE_SIZE, currentPage * HISTORY_DAYS_PAGE_SIZE);
 
   function changeView(nextView) {
-    navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases/${productId}/${nextView}`, { replace: true });
+    // Carry the state across: a replace without it would forget how we got here.
+    navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases/${productId}/${nextView}`, {
+      replace: true,
+      state: location.state,
+    });
+  }
+
+  // Stepping back through history (rather than pushing a fresh Sales &
+  // Purchases page) returns to the entry we came from, which still remembers
+  // whether it was opened from the Sales list or the dealer's profile.
+  function goBack() {
+    if (location.state?.fromSalesPurchases) navigate(-1);
+    else navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`);
   }
 
   const movementsError = movementsQuery.error ? getQueryErrorMessage(movementsQuery.error, "Failed to load product history.") : "";
@@ -463,7 +475,7 @@ export default function AdminDealerProductHistoryPage() {
     <div style={{ display: "grid", gap: 16 }}>
       <DashboardUIStyles />
 
-      <BackLink onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases`)}>Back to Sales &amp; Purchases</BackLink>
+      <BackLink onClick={goBack}>Back to Sales &amp; Purchases</BackLink>
 
       <Surface padding={20} className="dash-fade-up">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>

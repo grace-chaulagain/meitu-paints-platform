@@ -44,7 +44,7 @@ export function AdminSalesMobileView() {
 
   function openDealer(row) {
     const id = row?.dealerId || row?.dealer?._id;
-    if (id) navigate(`/admin/dashboard/dealers/${id}/sales-purchases`);
+    if (id) navigate(`/admin/dashboard/dealers/${id}/sales-purchases`, { state: { fromSalesList: true } });
   }
 
   if (loadError) {

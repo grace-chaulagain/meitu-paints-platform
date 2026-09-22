@@ -900,7 +900,22 @@ export default function AdminDealerSalesPurchasesPage() {
   );
 
   function goToProductHistory(productId) {
-    navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases/${productId}/all`);
+    navigate(`/admin/dashboard/dealers/${dealerId}/sales-purchases/${productId}/all`, {
+      state: { fromSalesPurchases: true },
+    });
+  }
+
+  // This page is reached from the dealer's profile and from the Sales list.
+  // When we know which, go back through browser history so that page returns
+  // exactly as it was left (filters, scroll, and the profile's own way back to
+  // the dealers list). Opened any other way - a pasted link, a refresh - there
+  // is no history to trust, so the dealer's profile is the sensible parent.
+  const cameFromSales = Boolean(location.state?.fromSalesList);
+  const cameFromProfile = Boolean(location.state?.fromDealerProfile);
+
+  function goBack() {
+    if (cameFromSales || cameFromProfile) navigate(-1);
+    else navigate(`/admin/dashboard/dealers/${dealerId}`);
   }
 
   function openHistoryEvent(event) {
@@ -914,13 +929,13 @@ export default function AdminDealerSalesPurchasesPage() {
 
       <button
         type="button"
-        onClick={() => navigate(`/admin/dashboard/dealers/${dealerId}`)}
+        onClick={goBack}
         className="admin-sp-back"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="m15 6-6 6 6 6" />
         </svg>
-        Back to Dealer Profile
+        {cameFromSales ? "Back to Sales" : "Back to Dealer Profile"}
       </button>
 
       <Surface padding={20} className="dash-fade-up">
