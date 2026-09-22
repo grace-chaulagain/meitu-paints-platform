@@ -52,6 +52,7 @@ export const listOrdersController = asyncHandler(async (req, res) => {
     excludeOrigins,
     from,
     to,
+    snScope,
     page,
     limit,
   } = req.query || {};
@@ -68,6 +69,7 @@ export const listOrdersController = asyncHandler(async (req, res) => {
     excludeOrigins,
     from,
     to,
+    snScope,
     page,
     limit,
   });

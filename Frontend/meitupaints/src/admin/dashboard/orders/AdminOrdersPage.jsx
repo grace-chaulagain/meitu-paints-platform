@@ -9,6 +9,7 @@ import {
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
+import { orderSerialNumber, parseSerialSearch } from "../../../utils/orderSerial.js";
 import CreateSchemeOrderModal from "./CreateSchemeOrderModal.jsx";
 import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
 import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
@@ -29,7 +30,6 @@ import {
 import { AppleDateField, AppleDropdown, PopoverListMenu } from "../../../components/dashboard/ApplePickers.jsx";
 import OpsRefetchHairline from "../../../components/dashboard/OpsRefetchHairline.jsx";
 import { getTransitions, isWaitingOn } from "../../../shared/orderStateMachine.js";
-import { OwnerChip, OwnerChipStyles } from "../../../components/orderflow/OwnerChip.jsx";
 import { OrderStatusRail, OrderFlowRailStyles } from "../../../components/orderflow/OrderStatusRail.jsx";
 import { useQueueArrivals } from "../../../components/orderflow/arrivals.js";
 import { ArrivalStyles, SoundMuteToggle } from "../../../components/orderflow/ArrivalIndicators.jsx";
@@ -72,13 +72,12 @@ const ARCHIVE_STATUS_FILTERS = ORDER_STATUS_FILTERS.filter(
 // restock order vs. a dealer's order fulfilled through a dispatcher) with
 // near-identical names. Spelled out so the label alone disambiguates them.
 //
-// Scheme orders are deliberately NOT their own segment here - they snapshot
-// `fulfillmentMode: "FACTORY"` (schemes always ship from the factory, even
-// for a dispatcher-served dealer) and show up mixed in with real dealer
-// sales under "Factory", same as any other order. They're still instantly
-// identifiable by their SCHEME badge and NPR 0 total (see OriginBadge) - a
-// separate isolate-to-schemes-only filter was more ceremony than a small,
-// self-identifying order type needs.
+// Scheme orders are deliberately NOT their own routing segment - they
+// snapshot `fulfillmentMode: "FACTORY"` (schemes always ship from the
+// factory, even for a dispatcher-served dealer) and show up mixed in with real
+// dealer sales under "Factory". Narrowing to one kind or the other is the
+// Filters panel's "Order type" (ORDER_TYPE_OPTIONS below), which works across
+// every tab and routing scope.
 const ROUTE_MODES = [
   { key: "ALL", label: "All" },
   { key: "FACTORY", label: "Factory" },
@@ -185,9 +184,25 @@ function resolveDateRange(preset, customFrom, customTo) {
   return { from: "", to: "" };
 }
 
+// "Normal" is everything that isn't a free-of-cost scheme grant - dealer
+// orders and dispatchers' own restocking alike. It is sent as
+// excludeOrigins=SCHEME rather than a positive origin match so the oldest
+// orders, written before orderOrigin existed, still count as normal (see
+// listOrdersForActor in order.service.js).
+const ORDER_TYPE_OPTIONS = [
+  { key: "NORMAL", label: "Normal Orders" },
+  { key: "SCHEME", label: "Scheme Orders" },
+];
+
+function normalizeOrderType(value) {
+  const type = String(value || "").toUpperCase();
+  return ORDER_TYPE_OPTIONS.some((option) => option.key === type) ? type : "ALL";
+}
+
 const ORDER_LIST_DEFAULTS = {
   filterMode: "PENDING",
   routeMode: "FACTORY",
+  orderType: "ALL",
   datePreset: "ALL",
   customFrom: "",
   customTo: "",
@@ -248,6 +263,7 @@ function parseOrderListState(search) {
     customTo: params.get("to") || "",
     committedSearch: params.get("q") || "",
     orderStatus: normalizeOrderStatus(params.get("orderStatus") || legacyStatus, filterMode),
+    orderType: normalizeOrderType(params.get("type")),
     page: Math.max(1, Number(params.get("page")) || 1),
     pageSize: Number(params.get("pageSize")) || ORDER_LIST_DEFAULTS.pageSize,
   };
@@ -269,6 +285,9 @@ function buildOrderListSearch(state) {
   if (state.committedSearch) params.set("q", state.committedSearch);
   if (state.orderStatus && state.orderStatus !== ORDER_LIST_DEFAULTS.orderStatus) {
     params.set("orderStatus", state.orderStatus);
+  }
+  if (state.orderType && state.orderType !== ORDER_LIST_DEFAULTS.orderType) {
+    params.set("type", state.orderType);
   }
   if (state.page && state.page !== ORDER_LIST_DEFAULTS.page) {
     params.set("page", String(state.page));
@@ -362,7 +381,11 @@ function RouteScopeBanner({ scope, resetLabel, onReset }) {
 // outside click or Escape, mirroring PopoverListMenu's mechanics in
 // ApplePickers.jsx, but hosts arbitrary filter controls as children instead
 // of a single-select option list.
-function FiltersPopover({ activeCount = 0, children }) {
+// While any filter inside is applied the trigger stays lit (azure tint and
+// hairline, the same "this is narrowing your view" treatment as the Sales &
+// Purchases date filter) and carries an x that clears them in one tap. The x
+// is a sibling button, not nested in the trigger, so it never opens the panel.
+function FiltersPopover({ activeCount = 0, onClear, children }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
   const [closing, setClosing] = useState(false);
@@ -428,12 +451,27 @@ function FiltersPopover({ activeCount = 0, children }) {
         onClick={toggle}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={`admin-filters-trigger ${open && !closing ? "is-open" : ""}`}
+        className={`admin-filters-trigger ${open && !closing ? "is-open" : ""} ${activeCount > 0 && onClear ? "is-active" : ""}`}
       >
         <DashboardIcon name="filter" size={14} strokeWidth={2} />
         <span>Filters</span>
         {activeCount > 0 ? <span className="admin-filters-badge">{activeCount}</span> : null}
       </button>
+      {activeCount > 0 && onClear ? (
+        <button
+          type="button"
+          className="admin-filters-clear"
+          aria-label="Clear filters"
+          title="Clear filters"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (open) startClose();
+            onClear();
+          }}
+        >
+          <DashboardIcon name="close" size={11} strokeWidth={2.6} />
+        </button>
+      ) : null}
 
       {open && position && typeof document !== "undefined"
         ? createPortal(
@@ -725,6 +763,69 @@ export function OrderThumbnails({ items, productsMap, familyMap }) {
 // `onEditScheme` is optional - pages that don't own the scheme modal (the
 // per-dealer order list, for one) simply don't pass it and get no edit
 // affordance, rather than a button wired to nothing.
+// Every order is one of four supply flows, and the card says which as a
+// picture of who sends goods to whom - supplier icon, arrow, buyer icon - with
+// the words beside it and a colour of its own. The four colours are the
+// dataviz reference palette's blue, violet, green and a deep yellow, checked
+// with its validator (every pair distinct, colour-blind safe). Colour sits on
+// the icons and tint only; the words keep the ink colour so they always read.
+function orderFlow(item, dealer, dispatcherName) {
+  if (item?.orderOrigin === "SCHEME") {
+    return {
+      key: "scheme",
+      icons: ["gift"],
+      label: "Free scheme",
+      detail: item?.scheme?.label || "",
+      title: item?.scheme?.label ? `Free scheme · ${item.scheme.label}` : "Free-of-cost scheme grant",
+    };
+  }
+  if (item?.orderOrigin === "DISPATCHER_REPLENISHMENT") {
+    return {
+      key: "factory-dispatcher",
+      icons: ["factory", "truck"],
+      label: "Factory to dispatcher",
+      detail: "",
+      title: "A dispatcher buying stock from the Factory",
+    };
+  }
+  if ((dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER") {
+    return {
+      key: "dispatcher-dealer",
+      icons: ["truck", "store"],
+      label: "Dispatcher to dealer",
+      detail: dispatcherName,
+      title: dispatcherName
+        ? `A dealer buying from their dispatcher, ${dispatcherName}`
+        : "A dealer buying from their dispatcher",
+    };
+  }
+  return {
+    key: "factory-dealer",
+    icons: ["factory", "store"],
+    label: "Factory to dealer",
+    detail: "",
+    title: "A dealer buying straight from the Factory",
+  };
+}
+
+function FlowBadge({ flow }) {
+  const [from, to] = flow.icons;
+  return (
+    <span className={`admin-order-flow is-${flow.key}`} title={flow.title}>
+      <span className="admin-order-flow-icons" aria-hidden="true">
+        <DashboardIcon name={from} size={14} strokeWidth={2} />
+        {to ? (
+          <>
+            <DashboardIcon name="arrowRight" size={10} strokeWidth={2.4} className="admin-order-flow-arrow" />
+            <DashboardIcon name={to} size={14} strokeWidth={2} />
+          </>
+        ) : null}
+      </span>
+      <span className="admin-order-flow-label">{flow.label}</span>
+    </span>
+  );
+}
+
 export function AdminOrderTimelineRow({
   item,
   onOpen,
@@ -733,9 +834,9 @@ export function AdminOrderTimelineRow({
   isArrived,
   productsMap,
   familyMap,
+  highlightSerial = null,
 }) {
   const status = normalizeStatus(item.status);
-  const meta = adminOrderStatusMeta(status);
   const items = Array.isArray(item.items) ? item.items : [];
   const dealer = item?.dealerSnapshot || item?.dealerId || {};
   const dealerName = dealer?.companyName || dealer?.contactName || "Unassigned dealer";
@@ -750,19 +851,16 @@ export function AdminOrderTimelineRow({
   // produce an error.
   const canEditScheme =
     typeof onEditScheme === "function" && item?.orderOrigin === "SCHEME" && status === "VERIFIED";
-  // The one binary distinction that actually matters at a glance: is this
-  // Factory's normal work, or is it routed through a dispatcher in some way
-  // (a dealer order fulfilled via dispatcher, or a dispatcher's own restock
-  // order)? A colored left edge in the app's one accent color (DESIGN.md:
-  // azure is the sole accent, so this reuses it rather than adding a new
-  // hue) reads before any text does - the exact signal that was missing.
-  const isDispatcherRelated =
-    (dealer?.fulfillmentMode || "FACTORY") === "DISPATCHER" || item?.orderOrigin === "DISPATCHER_REPLENISHMENT";
+  // The card says its facts visually and keeps words for what only words can
+  // carry: the flow badge says who supplies whom, a blue dot beside the dealer
+  // says "waiting on you", and the rail names the step the order is at. A free
+  // scheme reads "Free", not NPR 0, on a sand card. The grey line keeps the
+  // references: order number and SN.
+  const flow = orderFlow(item, dealer, dispatcher?.companyName || dispatcher?.name || "");
+  const waitingOnAdmin = isWaitingOn(item, "ADMIN");
+  const serial = orderSerialNumber(item);
+  const serialIsMatch = highlightSerial != null && serial === highlightSerial;
 
-  // Status used to be repeated four ways on one card (a colored marker icon,
-  // this Pill, the rail, and a bottom "state copy" row with its own spinner)
-  // - the Pill + rail together already say everything those extra two said,
-  // so this card keeps exactly those two and drops the rest.
   return (
     <div
       role="button"
@@ -774,21 +872,31 @@ export function AdminOrderTimelineRow({
           onOpen(item);
         }
       }}
-      className={`dash-selectable-row admin-order-card ${isDispatcherRelated ? "is-dispatcher-related" : ""} ${isArrived ? "orderflow-arrival-highlight" : ""}`}
+      className={`dash-selectable-row admin-order-card ${flow.key === "scheme" ? "is-scheme" : ""} ${isArrived ? "orderflow-arrival-highlight" : ""}`}
     >
       <div className="admin-order-card-top">
-        <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
-          <span className="admin-order-dealer">{dealerName}</span>
-          <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span className="admin-order-number">{item.orderNumber || "Unnamed Order"}</span>
-            <Pill tone={meta.tone} size="small">{meta.label}</Pill>
-            <RoutingBadge
-              mode={dealer?.fulfillmentMode || "FACTORY"}
-              dispatcherName={dispatcher?.companyName || dispatcher?.name || ""}
-            />
-            <OriginBadge origin={item?.orderOrigin} scheme={item?.scheme} />
-            <OwnerChip order={item} role="ADMIN" />
+        <div className="admin-order-card-lead">
+          <span className="admin-order-dealer">
+            {waitingOnAdmin ? (
+              <span className="admin-order-waiting" role="img" aria-label="Waiting on you" title="Waiting on you" />
+            ) : null}
+            {dealerName}
+          </span>
+          <div className="admin-order-flow-row">
+            <FlowBadge flow={flow} />
+            {flow.detail ? <span className="admin-order-flow-detail">{flow.detail}</span> : null}
           </div>
+          <span className="admin-order-number">
+            {item.orderNumber || "Unnamed Order"}
+            {serial ? (
+              <>
+                {" · "}
+                <span className={`admin-order-sn ${serialIsMatch ? "is-match" : ""}`} title="Proforma Invoice serial number">
+                  SN{serial}
+                </span>
+              </>
+            ) : null}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {canEditScheme ? (
@@ -809,7 +917,11 @@ export function AdminOrderTimelineRow({
               Verify
             </ActionButton>
           ) : null}
-          <span className="admin-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
+          {flow.key === "scheme" ? (
+            <span className="admin-order-amount is-free" title="Free-of-cost scheme grant">Free</span>
+          ) : (
+            <span className="admin-order-amount">{money(item?.totals?.total, item?.totals?.currency)}</span>
+          )}
           <DashboardIcon name="chevron" size={14} strokeWidth={2} style={{ color: "var(--color-graphite, #707070)" }} />
         </div>
       </div>
@@ -821,7 +933,7 @@ export function AdminOrderTimelineRow({
         </span>
       </div>
 
-      <OrderStatusRail order={item} size="sm" />
+      <OrderStatusRail order={item} size="sm" labelCurrent />
     </div>
   );
 }
@@ -846,7 +958,6 @@ export function AdminOrderCardStyles() {
       .admin-order-card{
         border-radius:14px;
         border:1px solid rgba(29,29,31,.08);
-        border-left-width:3px;
         background:#fff;
         padding:14px 16px 14px 14px;
         cursor:pointer;
@@ -854,12 +965,59 @@ export function AdminOrderCardStyles() {
         transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
       }
       .admin-order-card:hover{ border-color:rgba(0,113,227,.22); box-shadow:0 2px 8px rgba(29,29,31,.05); }
-      .admin-order-card.is-dispatcher-related:hover{ border-left-color:var(--color-azure, #0071e3); }
       .admin-order-card:active{ background:rgba(0,113,227,.025); }
       .admin-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:2px; }
-      .admin-order-card.is-dispatcher-related{ border-left-color:var(--color-azure, #0071e3); }
       .admin-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
       .admin-order-dealer{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+      .admin-order-sn{
+        font-variant-numeric:tabular-nums;
+        white-space:nowrap;
+      }
+      .admin-order-sn.is-match{
+        padding:1px 6px;
+        border-radius:6px;
+        background:rgba(0,113,227,.12);
+        color:var(--color-azure,#0071e3);
+        font-weight:700;
+      }
+      .admin-order-card-lead{ display:grid; gap:5px; min-width:0; flex:1 1 240px; }
+      .admin-order-waiting{
+        display:inline-block;
+        width:8px;
+        height:8px;
+        margin-right:7px;
+        border-radius:999px;
+        vertical-align:2px;
+        background:var(--color-azure, #0071e3);
+        box-shadow:0 0 0 3px rgba(0,113,227,.16);
+      }
+      .admin-order-flow-row{ display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap; }
+      .admin-order-flow{
+        --flow:#2a78d6;
+        display:inline-flex;
+        align-items:center;
+        gap:7px;
+        height:24px;
+        padding:0 10px 0 8px;
+        border-radius:999px;
+        background:rgba(42,120,214,.09);
+        box-shadow:inset 0 0 0 1px rgba(42,120,214,.22);
+        white-space:nowrap;
+      }
+      .admin-order-flow.is-dispatcher-dealer{ --flow:#4a3aa7; background:rgba(74,58,167,.09); box-shadow:inset 0 0 0 1px rgba(74,58,167,.22); }
+      .admin-order-flow.is-factory-dispatcher{ --flow:#008300; background:rgba(0,131,0,.08); box-shadow:inset 0 0 0 1px rgba(0,131,0,.2); }
+      .admin-order-flow.is-scheme{ --flow:#c98500; background:rgba(201,133,0,.12); box-shadow:inset 0 0 0 1px rgba(201,133,0,.28); }
+      .admin-order-flow-icons{ display:inline-flex; align-items:center; gap:2px; color:var(--flow); }
+      .admin-order-flow-arrow{ opacity:.75; }
+      .admin-order-flow-label{ font-size:11.5px; font-weight:650; color:var(--color-ink, #1d1d1f); }
+      .admin-order-flow-detail{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+      .admin-order-amount.is-free{ color:#8b6b3e; }
+      /* Scheme orders: a warm sand card, so a free grant reads apart from a
+         sale at a glance without borrowing the caution orange that means
+         something went wrong. Bronze text is 4.9:1 on white, 4.6:1 on sand. */
+      .admin-order-card.is-scheme{ background:#fbf8f3; border-color:#ecdfcc; }
+      .admin-order-card.is-scheme:hover{ border-color:#dcc8a8; }
+      .admin-order-card.is-scheme:active{ background:#f8f2e8; }
       .admin-order-number{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); }
       .admin-order-amount{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
       .admin-order-card-meta-row{ margin-top:10px; display:flex; align-items:center; gap:10px; }
@@ -1630,6 +1788,7 @@ export default function AdminOrdersPage() {
     customTo,
     committedSearch,
     orderStatus,
+    orderType,
     page,
     pageSize,
   } = listState;
@@ -1640,6 +1799,10 @@ export default function AdminOrdersPage() {
   const [schemeModalOpen, setSchemeModalOpen] = useState(false);
   // null = raising a new scheme; an order = amending that one.
   const [editScheme, setEditScheme] = useState(null);
+
+  // An SN names one order, so it is looked up across every order (snScope
+  // "all" below) rather than inside the tab, routing and filters on screen.
+  const serialSearch = useMemo(() => parseSerialSearch(committedSearch), [committedSearch]);
 
   const updateListState = useCallback(
     (patch) => {
@@ -1720,8 +1883,18 @@ export default function AdminOrdersPage() {
       params.fulfillmentMode = routeMode;
     }
 
+    // A routing scope that already pins one origin (dispatchers' own orders)
+    // wins; those are never schemes, so "Normal" changes nothing there and
+    // "Scheme" can match nothing (see typeConflict below).
+    if (orderType === "SCHEME" && !params.orderOrigin) {
+      params.orderOrigin = "SCHEME";
+    } else if (orderType === "NORMAL" && !params.orderOrigin) {
+      params.excludeOrigins = "SCHEME";
+    }
+
     if (committedSearch.trim()) {
       params.q = committedSearch.trim();
+      params.snScope = "all";
     }
 
     const { from, to } = resolveDateRange(datePreset, customFrom, customTo);
@@ -1740,17 +1913,22 @@ export default function AdminOrdersPage() {
     customFrom,
     customTo,
     orderStatus,
+    orderType,
     page,
     pageSize,
   ]);
 
-  const ordersQuery = useGetAdminOrdersQuery(orderParams, { pollingInterval: 20000 });
+  // Dispatchers' own restock orders are never scheme grants, so this pairing
+  // has no answer - asked for anyway, the server would honour the scope and
+  // return restock orders under a "Scheme" label. Nothing is fetched instead.
+  const typeConflict = orderType === "SCHEME" && routeMode === "DISPATCHER_REPLENISHMENT" && !serialSearch?.prefixed;
+  const ordersQuery = useGetAdminOrdersQuery(orderParams, { pollingInterval: 20000, skip: typeConflict });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
   const productsQuery = useGetProductsQuery();
   const familiesQuery = useGetProductFamiliesQuery();
 
-  const orders = useMemo(() => ordersQuery.data?.items || [], [ordersQuery.data]);
-  const totalOrders = ordersQuery.data?.total ?? orders.length;
+  const orders = useMemo(() => (typeConflict ? [] : ordersQuery.data?.items || []), [ordersQuery.data, typeConflict]);
+  const totalOrders = typeConflict ? 0 : ordersQuery.data?.total ?? orders.length;
   const totalPages = Math.max(1, Math.ceil(totalOrders / pageSize));
   const rangeStart = totalOrders === 0 ? 0 : (page - 1) * pageSize + 1;
   const rangeEnd = Math.min(totalOrders, page * pageSize);
@@ -1836,6 +2014,7 @@ export default function AdminOrdersPage() {
   const orderStatusOptions = filterMode === "ARCHIVE" ? ARCHIVE_STATUS_FILTERS : ORDER_STATUS_FILTERS;
   const showStatusFilter = filterMode !== "PENDING";
   const activeFilterCount =
+    (orderType !== ORDER_LIST_DEFAULTS.orderType ? 1 : 0) +
     (datePreset !== ORDER_LIST_DEFAULTS.datePreset ? 1 : 0) +
     (showStatusFilter && orderStatus !== ORDER_LIST_DEFAULTS.orderStatus ? 1 : 0) +
     (pageSize !== ORDER_LIST_DEFAULTS.pageSize ? 1 : 0);
@@ -1860,21 +2039,25 @@ export default function AdminOrdersPage() {
       customTo: "",
       committedSearch: "",
       orderStatus: "ALL",
+      orderType: "ALL",
       page: 1,
     });
   };
 
-  // Narrower than resetFilters() - only clears the secondary filters that
-  // live inside the Filters popover (date/status/page size), leaving the
-  // status tab, route scope, and search untouched. This is what the
-  // popover's own "Clear filters" footer link does; the empty-state's
+  // Narrower than resetFilters() - clears everything the Filters popover
+  // counts as applied (order type, date, status, page size), leaving the
+  // status tab, route scope, and search untouched. It backs both the
+  // popover's "Clear filters" link and the x on the Filters button, so the
+  // button can never stay lit after being cleared; the empty-state's
   // "Clear filters" button still uses the full resetFilters() above.
   const resetSecondaryFilters = () =>
     updateListState({
+      orderType: "ALL",
       datePreset: "ALL",
       customFrom: "",
       customTo: "",
       orderStatus: "ALL",
+      pageSize: ORDER_LIST_DEFAULTS.pageSize,
       page: 1,
     });
 
@@ -1933,6 +2116,8 @@ export default function AdminOrdersPage() {
   // search/date/status filters untouched. This is the banner's "wrong
   // dealers on screen" fix, not a full "start over."
   const resetRouteScope = () => updateListState({ routeMode: "FACTORY", page: 1 });
+  // Picking the type that's already on turns it off again.
+  const changeOrderType = (next) => updateListState({ orderType: orderType === next ? "ALL" : next, page: 1 });
   const changeDatePreset = (next) => updateListState({ datePreset: next, page: 1 });
   const changeCustomFrom = (next) => updateListState({ customFrom: next, page: 1 });
   const changeCustomTo = (next) => updateListState({ customTo: next, page: 1 });
@@ -1975,12 +2160,12 @@ export default function AdminOrdersPage() {
             }
           />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, flexWrap: "wrap" }}>
-            <div style={{ width: 240 }}>
+            <div style={{ width: 260 }}>
               <SearchField
                 value={search}
                 onChange={setSearch}
                 onSubmit={() => applySearch(search)}
-                placeholder="Search order number or dealer…"
+                placeholder="Search order, dealer or PI SN…"
               />
             </div>
             <PrimaryButton icon="plus" onClick={openNewScheme}>
@@ -2009,7 +2194,22 @@ export default function AdminOrdersPage() {
           ) : null}
         </div>
 
-        {!isDefaultRouteScope(routeMode) ? (
+        {serialSearch ? (
+          <RouteScopeBanner
+            scope={{
+              tone: "info",
+              text: serialSearch.prefixed
+                ? `Showing PI SN${serialSearch.number} from all orders - tabs, routing and filters don't apply to an SN search.`
+                : `Also showing any order with PI SN${serialSearch.number}, from all orders.`,
+            }}
+            resetLabel="Clear search"
+            onReset={() => {
+              setSearch("");
+              applySearch("");
+            }}
+          />
+        ) : null}
+        {!isDefaultRouteScope(routeMode) && !serialSearch?.prefixed ? (
           <RouteScopeBanner
             scope={describeRouteScope(routeMode, dispatchers)}
             resetLabel="Back to my Factory queue"
@@ -2031,7 +2231,27 @@ export default function AdminOrdersPage() {
             ) : null}
           </div>
 
-          <FiltersPopover activeCount={activeFilterCount}>
+          <FiltersPopover activeCount={activeFilterCount} onClear={resetSecondaryFilters}>
+            <div className="admin-filters-panel-row">
+              <span className="admin-filters-panel-label">Order type</span>
+              <div className="admin-filters-type" role="group" aria-label="Order type">
+                {ORDER_TYPE_OPTIONS.map((option) => {
+                  const selected = orderType === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      aria-pressed={selected}
+                      className={`admin-filters-type-btn ${selected ? "is-selected" : ""}`}
+                      onClick={() => changeOrderType(option.key)}
+                    >
+                      {selected ? <DashboardIcon name="checkmark" size={12} strokeWidth={2.6} /> : null}
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="admin-filters-panel-row">
               <span className="admin-filters-panel-label">Date range</span>
               <AppleDropdown icon="calendar" value={datePreset} options={DATE_PRESETS} onChange={changeDatePreset} />
@@ -2083,13 +2303,23 @@ export default function AdminOrdersPage() {
             <DashboardEmptyState
               icon="orders"
               title={
-                filterMode === "ARCHIVE"
-                  ? "No archived orders found"
-                  : filterMode === "ALL"
-                    ? "No orders found"
-                    : "No pending orders found"
+                serialSearch?.prefixed
+                  ? `No order has PI SN${serialSearch.number}`
+                  : typeConflict
+                  ? "No scheme orders here"
+                  : filterMode === "ARCHIVE"
+                    ? "No archived orders found"
+                    : filterMode === "ALL"
+                      ? "No orders found"
+                      : "No pending orders found"
               }
-              subtitle="Try adjusting the search or filters."
+              subtitle={
+                serialSearch?.prefixed
+                  ? "An order gets its SN when its first Proforma Invoice is generated."
+                  : typeConflict
+                  ? "Dispatchers' own restock orders are never scheme orders. Switch the routing scope to see scheme orders."
+                  : "Try adjusting the search or filters."
+              }
             />
             <div style={{ marginTop: 4 }}>
               <GhostButton onClick={resetFilters}>Clear filters</GhostButton>
@@ -2127,6 +2357,7 @@ export default function AdminOrdersPage() {
                         isArrived={arrivedIds.has(item._id)}
                         productsMap={productsMap}
                         familyMap={familyMap}
+                        highlightSerial={serialSearch?.number ?? null}
                       />
                     ))}
                   </div>
@@ -2195,7 +2426,6 @@ export default function AdminOrdersPage() {
         error={listActionError}
       />
       <TransitionConfirmSheetStyles />
-      <OwnerChipStyles />
       <OrderFlowRailStyles />
       <ArrivalStyles />
 
@@ -2450,6 +2680,41 @@ export default function AdminOrdersPage() {
           background:rgba(0,113,227,.1);
           color:var(--color-azure, #0071e3);
         }
+        .admin-filters-trigger.is-active{
+          padding-right:38px;
+          background:rgba(0,113,227,.08);
+          color:var(--color-azure, #0071e3);
+          box-shadow:inset 0 0 0 1px rgba(0,113,227,.32), 0 0 0 3px rgba(0,113,227,.08);
+        }
+        .admin-filters-trigger.is-active:hover{
+          background:rgba(0,113,227,.12);
+        }
+        .admin-filters-clear{
+          position:absolute;
+          right:8px;
+          top:50%;
+          transform:translateY(-50%);
+          width:22px;
+          height:22px;
+          border:none;
+          border-radius:999px;
+          display:grid;
+          place-items:center;
+          background:rgba(0,113,227,.14);
+          color:var(--color-azure, #0071e3);
+          cursor:pointer;
+          transition:background .12s ease, transform .12s var(--ease-out, cubic-bezier(.23,1,.32,1));
+        }
+        .admin-filters-clear:hover{
+          background:rgba(0,113,227,.24);
+        }
+        .admin-filters-clear:active{
+          transform:translateY(-50%) scale(.88);
+        }
+        .admin-filters-clear:focus-visible{
+          outline:2px solid rgba(0,113,227,.36);
+          outline-offset:2px;
+        }
         .admin-filters-badge{
           display:inline-flex;
           align-items:center;
@@ -2488,6 +2753,44 @@ export default function AdminOrdersPage() {
           to{ opacity:0; transform:scale(.97) translateY(-2px); }
         }
         .admin-filters-panel-row{ display:grid; gap:6px; }
+        .admin-filters-type{
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:8px;
+        }
+        .admin-filters-type-btn{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          gap:6px;
+          height:36px;
+          padding:0 10px;
+          border-radius:999px;
+          border:1px solid rgba(29,29,31,.1);
+          background:var(--color-fog, #f5f5f7);
+          color:var(--color-ink, #1d1d1f);
+          font:inherit;
+          font-size:12.5px;
+          font-weight:650;
+          white-space:nowrap;
+          cursor:pointer;
+          transition:background .15s ease, color .15s ease, border-color .15s ease, transform .12s var(--ease-out, cubic-bezier(.23,1,.32,1));
+        }
+        .admin-filters-type-btn:hover{
+          background:rgba(29,29,31,.07);
+        }
+        .admin-filters-type-btn:active{
+          transform:scale(.97);
+        }
+        .admin-filters-type-btn.is-selected{
+          border-color:rgba(0,113,227,.32);
+          background:rgba(0,113,227,.08);
+          color:var(--color-azure, #0071e3);
+        }
+        .admin-filters-type-btn:focus-visible{
+          outline:2px solid rgba(0,113,227,.36);
+          outline-offset:2px;
+        }
         .admin-filters-panel-label{
           font-size:11px;
           font-weight:700;
@@ -2503,7 +2806,9 @@ export default function AdminOrdersPage() {
         }
         @media (prefers-reduced-motion: reduce){
           .admin-filters-panel{ animation:none!important; }
-          .admin-filters-trigger{ transition:none!important; }
+          .admin-filters-trigger,
+          .admin-filters-clear,
+          .admin-filters-type-btn{ transition:none!important; }
         }
 
         .admin-dispatcher-picker{ display:inline-flex; }
@@ -2525,7 +2830,6 @@ export default function AdminOrdersPage() {
         .admin-order-card{
           border-radius:14px;
           border:1px solid rgba(29,29,31,.08);
-          border-left-width:3px;
           background:#fff;
           padding:14px 16px 14px 14px;
           cursor:pointer;
@@ -2533,15 +2837,62 @@ export default function AdminOrdersPage() {
           transition:border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
         }
         .admin-order-card:hover{ border-color:rgba(0,113,227,.22); box-shadow:0 2px 8px rgba(29,29,31,.05); }
-        .admin-order-card.is-dispatcher-related:hover{ border-left-color:var(--color-azure, #0071e3); }
         .admin-order-card:active{ background:rgba(0,113,227,.025); }
         .admin-order-card:focus-visible{ outline:2px solid rgba(0,113,227,.38); outline-offset:2px; }
         /* The one binary "is this mine or a dispatcher's" signal, readable
            before any text is - reuses the app's sole accent color rather
            than introducing a new hue per routing type. */
-        .admin-order-card.is-dispatcher-related{ border-left-color:var(--color-azure, #0071e3); }
         .admin-order-card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .admin-order-dealer{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); letter-spacing:-.01em; }
+        .admin-order-sn{
+          font-variant-numeric:tabular-nums;
+          white-space:nowrap;
+        }
+        .admin-order-sn.is-match{
+          padding:1px 6px;
+          border-radius:6px;
+          background:rgba(0,113,227,.12);
+          color:var(--color-azure,#0071e3);
+          font-weight:700;
+        }
+        .admin-order-card-lead{ display:grid; gap:5px; min-width:0; flex:1 1 240px; }
+        .admin-order-waiting{
+          display:inline-block;
+          width:8px;
+          height:8px;
+          margin-right:7px;
+          border-radius:999px;
+          vertical-align:2px;
+          background:var(--color-azure, #0071e3);
+          box-shadow:0 0 0 3px rgba(0,113,227,.16);
+        }
+        .admin-order-flow-row{ display:flex; align-items:center; gap:8px; min-width:0; flex-wrap:wrap; }
+        .admin-order-flow{
+          --flow:#2a78d6;
+          display:inline-flex;
+          align-items:center;
+          gap:7px;
+          height:24px;
+          padding:0 10px 0 8px;
+          border-radius:999px;
+          background:rgba(42,120,214,.09);
+          box-shadow:inset 0 0 0 1px rgba(42,120,214,.22);
+          white-space:nowrap;
+        }
+        .admin-order-flow.is-dispatcher-dealer{ --flow:#4a3aa7; background:rgba(74,58,167,.09); box-shadow:inset 0 0 0 1px rgba(74,58,167,.22); }
+        .admin-order-flow.is-factory-dispatcher{ --flow:#008300; background:rgba(0,131,0,.08); box-shadow:inset 0 0 0 1px rgba(0,131,0,.2); }
+        .admin-order-flow.is-scheme{ --flow:#c98500; background:rgba(201,133,0,.12); box-shadow:inset 0 0 0 1px rgba(201,133,0,.28); }
+        .admin-order-flow-icons{ display:inline-flex; align-items:center; gap:2px; color:var(--flow); }
+        .admin-order-flow-arrow{ opacity:.75; }
+        .admin-order-flow-label{ font-size:11.5px; font-weight:650; color:var(--color-ink, #1d1d1f); }
+        .admin-order-flow-detail{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+        .admin-order-amount.is-free{ color:#8b6b3e; }
+      /* Scheme orders: a warm sand card, so a free grant reads apart from a
+         sale at a glance without borrowing the caution orange that means
+         something went wrong. Bronze text is 4.9:1 on white, 4.6:1 on sand. */
+      .admin-order-card.is-scheme{ background:#fbf8f3; border-color:#ecdfcc; }
+      .admin-order-card.is-scheme:hover{ border-color:#dcc8a8; }
+      .admin-order-card.is-scheme:active{ background:#f8f2e8; }
         .admin-order-number{ font-size:11.5px; font-weight:600; color:var(--color-graphite, #707070); }
         .admin-order-amount{ font-size:14.5px; font-weight:700; color:var(--color-ink, #1d1d1f); white-space:nowrap; }
         .admin-order-card-meta-row{ margin-top:10px; display:flex; align-items:center; gap:10px; }

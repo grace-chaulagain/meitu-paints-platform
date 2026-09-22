@@ -162,6 +162,7 @@ export const adminOrderListQuerySchema = z
     excludeOrigins: excludeOriginsQuerySchema.optional(),
     from: optionalTrimmedString(40),
     to: optionalTrimmedString(40),
+    snScope: z.enum(["all"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
   })

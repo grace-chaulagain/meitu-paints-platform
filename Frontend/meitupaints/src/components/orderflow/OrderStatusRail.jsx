@@ -52,7 +52,21 @@ function NodeIcon({ node }) {
   );
 }
 
-export function OrderStatusRail({ order, size = "sm", interactive = false, onClick }) {
+// `labelCurrent` (small rails only) names the step the order is at, under its
+// dot - the admin order cards use it in place of a separate status chip, so
+// the one infographic says both how far along the order is and what it's at.
+// It names the live step (or the rejection); a finished order names the last
+// step it reached, green once that is the final one.
+function focusNodeOf(nodes) {
+  const live = nodes.find((node) => node.state === "current" || node.state === "terminated");
+  if (live) return { key: live.key, tone: live.state };
+  const reached = nodes.filter((node) => node.state === "done");
+  const last = reached[reached.length - 1];
+  if (!last) return null;
+  return { key: last.key, tone: last.key === nodes[nodes.length - 1].key ? "complete" : "done" };
+}
+
+export function OrderStatusRail({ order, size = "sm", interactive = false, onClick, labelCurrent = false }) {
   const nodes = getRailNodes(order);
   const [revealed, setRevealed] = useState(false);
   const mountedOnce = useRef(false);
@@ -113,9 +127,11 @@ export function OrderStatusRail({ order, size = "sm", interactive = false, onCli
   // violates the rules of hooks.
   if (!order) return null;
 
+  const focus = labelCurrent && !isLg ? focusNodeOf(nodes) : null;
+
   return (
     <Wrapper
-      className={`orderflow-rail orderflow-rail-${size}`}
+      className={`orderflow-rail orderflow-rail-${size}${focus ? " orderflow-rail-labelled" : ""}`}
       title={!isLg ? railTitle(nodes) : undefined}
       {...wrapperProps}
     >
@@ -147,6 +163,9 @@ export function OrderStatusRail({ order, size = "sm", interactive = false, onCli
                 aria-hidden="true"
               />
             </div>
+            {focus && node.key === focus.key ? (
+              <div className={`orderflow-rail-now orderflow-rail-now-${focus.tone}`}>{node.label}</div>
+            ) : null}
             {isLg ? (
               <div className="orderflow-rail-label-col">
                 <div className={`orderflow-rail-label orderflow-rail-label-${node.state}`}>{node.label}</div>
@@ -181,6 +200,21 @@ export function OrderFlowRailStyles() {
       }
       .orderflow-rail-interactive{ cursor:pointer; }
       .orderflow-rail-sm{ align-items:center; }
+      /* A labelled rail keeps every dot on one line - the label only hangs
+         below its own dot, so columns align to the top, not the centre. */
+      .orderflow-rail-labelled{ align-items:flex-start; }
+      .orderflow-rail-now{
+        margin-top:5px;
+        max-width:100%;
+        font-size:11px;
+        font-weight:700;
+        letter-spacing:.01em;
+        white-space:nowrap;
+        color:var(--color-azure, #0071e3);
+      }
+      .orderflow-rail-now-done{ color:var(--color-graphite, #707070); }
+      .orderflow-rail-now-complete{ color:#15803d; }
+      .orderflow-rail-now-terminated{ color:var(--color-caution, #b64400); }
 
       .orderflow-rail-node{
         display:flex;
