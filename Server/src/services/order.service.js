@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 
 import ApiError from "../utils/apiError.js";
 import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
-import { getNextOrderSerialNumber } from "../utils/orderSerialNumber.js";
+import { displaySerialNumber, getNextOrderSerialNumber, serialFieldFor } from "../utils/orderSerialNumber.js";
 import Order, {
   ORDER_ORIGIN,
   ORDER_REVIEWED_BY,
@@ -590,6 +590,17 @@ export async function createOrder({
 // Scoped order listing
 // ----------------------------
 
+// A search that names a PI serial: "SN12", "sn 12", "SN-12", "S.N.12" (only
+// ever a serial), or a bare "12" (a serial, but also possibly part of an order
+// number or phone, so those are still searched too).
+function parseSerialSearch(raw) {
+  const text = String(raw || "").trim();
+  const prefixed = /^s\.?\s*n\.?\s*[-#:.]?\s*(\d{1,9})$/i.exec(text);
+  if (prefixed) return { number: Number(prefixed[1]), prefixed: true };
+  if (/^\d{1,9}$/.test(text)) return { number: Number(text), prefixed: false };
+  return null;
+}
+
 export async function listOrdersForActor({
   actorUser,
   status,
@@ -602,6 +613,7 @@ export async function listOrdersForActor({
   excludeOrigins,
   from,
   to,
+  snScope,
   page = 1,
   limit = 20,
 }) {
@@ -686,7 +698,10 @@ export async function listOrdersForActor({
   }
 
   const raw = normalizeText(q);
-  if (raw) {
+  // PI serial search is an admin tool - dealers and dispatchers never see
+  // SNs in their lists, so their searches are unchanged.
+  const serialSearch = raw && isAdminReadScope(actorUser) ? parseSerialSearch(raw) : null;
+  if (raw && !serialSearch?.prefixed) {
     const rx = new RegExp(escapeRegExp(raw), "i");
     query.$or = [
       { orderNumber: rx },
@@ -716,12 +731,25 @@ export async function listOrdersForActor({
     }
   }
 
+  // A serial matches either run - a commercial SN12 and a scheme SN12 both
+  // come back, told apart by their origin badge. With snScope "all" (the
+  // admin Orders page) an SN is looked up across every order, whatever tab,
+  // routing or filter the page is showing, since it names one order; without
+  // it the SN is just one more field searched inside the current view.
+  let finalQuery = query;
+  if (serialSearch) {
+    const serialMatch = { $or: [{ serialNumber: serialSearch.number }, { schemeSerialNumber: serialSearch.number }] };
+    const { $or: _textMatch, ...viewOnly } = query;
+    const serialBranch = snScope === "all" ? { isDeleted: { $ne: true }, ...serialMatch } : { ...viewOnly, ...serialMatch };
+    finalQuery = serialSearch.prefixed ? serialBranch : { $or: [query, serialBranch] };
+  }
+
   const safePage = Math.max(1, Number(page || 1));
   const perPage = Math.min(200, Math.max(1, Number(limit || 20)));
   const skip = (safePage - 1) * perPage;
 
   const [items, total] = await Promise.all([
-    Order.find(query)
+    Order.find(finalQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(perPage)
@@ -735,7 +763,7 @@ export async function listOrdersForActor({
         select: "name companyName email phone status isActive",
       })
       .lean(),
-    Order.countDocuments(query),
+    Order.countDocuments(finalQuery),
   ]);
 
   return {
@@ -1127,30 +1155,32 @@ export async function ensureProformaInvoiceMetadata({ orderId, actorUser }) {
   }
 
   const existing = await Order.findById(orderId)
-    .select("serialNumber proformaIssuedAt status orderOrigin")
+    .select("serialNumber schemeSerialNumber proformaIssuedAt status orderOrigin")
     .lean();
   if (!existing) {
     throw new ApiError(404, "Order not found");
   }
 
-  let serialNumber = existing.serialNumber;
+  let serialNumber = displaySerialNumber(existing);
   if (!serialNumber) {
-    // Scheme PIs draw from their own sequence - see orderSerialNumber.js.
+    // Scheme PIs draw from their own sequence into their own field - see
+    // orderSerialNumber.js.
+    const field = serialFieldFor(existing.orderOrigin);
     const nextSerial = await getNextOrderSerialNumber({ orderOrigin: existing.orderOrigin });
     const updated = await Order.findOneAndUpdate(
-      { _id: orderId, serialNumber: null },
-      { $set: { serialNumber: nextSerial } },
+      { _id: orderId, [field]: null },
+      { $set: { [field]: nextSerial } },
       { new: true },
     )
-      .select("serialNumber")
+      .select(field)
       .lean();
 
     // Lost a concurrent race to assign the first number for this order -
     // the winner's number is what every PI for this order should show, so
     // return that instead of the number we drew (never used again).
     serialNumber = updated
-      ? updated.serialNumber
-      : (await Order.findById(orderId).select("serialNumber").lean())?.serialNumber;
+      ? updated[field]
+      : (await Order.findById(orderId).select(field).lean())?.[field];
   }
 
   let generatedAt = existing.proformaIssuedAt;

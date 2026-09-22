@@ -145,6 +145,26 @@ const paths = {
       <path d="M9.5 20v-6h5v6" />
     </>
   ),
+  factory: (
+    <>
+      <path d="M3 20V10l5 3v-3l5 3v-3l3 2V4h3v16H3Z" />
+      <path d="M7 16.5h2M12 16.5h2" />
+    </>
+  ),
+  gift: (
+    <>
+      <rect x="3.5" y="8" width="17" height="4" rx="1" />
+      <path d="M5 12v8h14v-8" />
+      <path d="M12 8v12" />
+      <path d="M12 8c-1.5-3-5-3.5-5-1s3.5 1 5 1Zm0 0c1.5-3 5-3.5 5-1s-3.5 1-5 1Z" />
+    </>
+  ),
+  arrowRight: (
+    <>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </>
+  ),
   handshake: (
     <>
       <path d="M3 11l4-4 4 3 3-3 4 4" />

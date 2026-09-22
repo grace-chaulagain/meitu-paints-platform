@@ -2620,6 +2620,7 @@ export async function listOrders({
       [
         "orderNumber",
         "serialNumber",
+        "schemeSerialNumber",
         "orderOrigin",
         "dealerId",
         "dealerSnapshot",

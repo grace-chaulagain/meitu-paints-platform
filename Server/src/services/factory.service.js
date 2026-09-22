@@ -7,6 +7,7 @@ import Order, {
 import DealerProfile from "../models/DealerProfile.model.js";
 import { DEALER_STATUS } from "../constants/statuses.js";
 import ApiError from "../utils/apiError.js";
+import { displaySerialNumber } from "../utils/orderSerialNumber.js";
 import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
 import {
   createFactoryNotification,
@@ -713,7 +714,7 @@ export async function getProformaInvoice({ orderId }) {
   return {
     orderId: order._id,
     orderNumber: order.orderNumber,
-    serialNumber: order.serialNumber,
+    serialNumber: displaySerialNumber(order),
     generatedAt: order.proformaIssuedAt || null,
     // Lets the PDF mark a scheme grant clearly on the document itself,
     // rather than a free-of-cost order producing a proforma that reads
