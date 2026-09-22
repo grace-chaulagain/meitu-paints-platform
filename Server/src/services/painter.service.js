@@ -16,6 +16,11 @@ function sortSpec(sort) {
   if (sort === "name-desc") return { name: -1 };
   if (sort === "recent") return { createdAt: -1 };
   if (sort === "oldest") return { createdAt: 1 };
+  // totalPoints is the ledger-backed running total redeemCoupon keeps in step
+  // with PointLedger. Most painters share a score (0 until their first coupon),
+  // so ties fall back to name - otherwise that block reshuffles on every fetch.
+  if (sort === "points-desc") return { totalPoints: -1, name: 1 };
+  if (sort === "points-asc") return { totalPoints: 1, name: 1 };
   return { name: 1 };
 }
 

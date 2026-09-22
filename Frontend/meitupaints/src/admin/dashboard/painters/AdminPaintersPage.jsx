@@ -58,8 +58,26 @@ const SORT_OPTIONS = [
   { key: "name-desc", label: "Name Z–A" },
   { key: "recent", label: "Newest Added" },
   { key: "oldest", label: "Oldest Added" },
+  { key: "points-desc", label: "Most Points" },
+  { key: "points-asc", label: "Fewest Points" },
 ];
 const DEFAULT_SORT = "name-asc";
+
+// The list doesn't carry points otherwise (they live on the profile), so a
+// points sort shows each painter's total - without it the order looks random.
+function isPointsSort(sort) {
+  return sort === "points-desc" || sort === "points-asc";
+}
+
+function PainterPoints({ painter, className = "" }) {
+  const points = Number(painter.totalPoints || 0);
+  return (
+    <div className={`painter-points ${points === 0 ? "is-zero" : ""} ${className}`.trim()}>
+      <strong>{points.toLocaleString()}</strong>
+      <span>{points === 1 ? "point" : "points"}</span>
+    </div>
+  );
+}
 
 function painterIdStatusKey(painter) {
   if (painter.type !== "TTP") return "NO_ID";
@@ -185,7 +203,7 @@ function IdCardStatusPill({ painter, style }) {
   );
 }
 
-function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
+function PainterListRow({ painter, showPoints, onOpen, onEdit, onDelete }) {
   return (
     <ListRow onClick={() => onOpen(painter)}>
       <Avatar label={painterInitials(painter)} size={34} />
@@ -210,6 +228,8 @@ function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
         {painter.address || "No address on file"}
       </div>
 
+      {showPoints ? <PainterPoints painter={painter} className="painter-row-points" /> : null}
+
       <div style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 6 }} onClick={(event) => event.stopPropagation()}>
         <button type="button" className="painter-row-action-btn" onClick={() => onEdit(painter)} aria-label="Edit painter" title="Edit">
           <DashboardIcon name="edit" size={14} strokeWidth={1.8} />
@@ -222,7 +242,7 @@ function PainterListRow({ painter, onOpen, onEdit, onDelete }) {
   );
 }
 
-function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
+function PaintersGridCard({ painter, showPoints, onOpen, onEdit, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const palette = painterPalette(painter);
 
@@ -300,6 +320,7 @@ function PaintersGridCard({ painter, onOpen, onEdit, onDelete }) {
         <button type="button" className="painter-grid-action-btn" onClick={() => onDelete(painter)} aria-label="Delete painter" title="Delete">
           <DashboardIcon name="trash" size={15} strokeWidth={1.8} />
         </button>
+        {showPoints ? <PainterPoints painter={painter} className="painter-grid-points" /> : null}
       </div>
     </article>
   );
@@ -354,6 +375,7 @@ export default function AdminPaintersPage() {
     if (idStatus === "ALL") return painters;
     return painters.filter((p) => painterIdStatusKey(p) === idStatus);
   }, [painters, idStatus]);
+  const showPoints = isPointsSort(sort);
   const loading = paintersQuery.isLoading && painters.length === 0;
   const isRefreshing = !loading && paintersQuery.isFetching;
   const error = actionError || (paintersQuery.error ? getQueryErrorMessage(paintersQuery.error, "Failed to load painters.") : "");
@@ -501,7 +523,14 @@ export default function AdminPaintersPage() {
       ) : view === "list" ? (
         <Surface padding={0} className="dash-fade-up">
           {visiblePainters.map((painter) => (
-            <PainterListRow key={painter._id} painter={painter} onOpen={openProfile} onEdit={openEditForm} onDelete={setDeleteTarget} />
+            <PainterListRow
+              key={painter._id}
+              painter={painter}
+              showPoints={showPoints}
+              onOpen={openProfile}
+              onEdit={openEditForm}
+              onDelete={setDeleteTarget}
+            />
           ))}
         </Surface>
       ) : (
@@ -515,7 +544,14 @@ export default function AdminPaintersPage() {
           className="dash-fade-up"
         >
           {visiblePainters.map((painter) => (
-            <PaintersGridCard key={painter._id} painter={painter} onOpen={openProfile} onEdit={openEditForm} onDelete={setDeleteTarget} />
+            <PaintersGridCard
+              key={painter._id}
+              painter={painter}
+              showPoints={showPoints}
+              onOpen={openProfile}
+              onEdit={openEditForm}
+              onDelete={setDeleteTarget}
+            />
           ))}
         </div>
       )}
@@ -836,6 +872,32 @@ export default function AdminPaintersPage() {
         }
         .painter-grid-action-btn:active{
           transform:scale(.92);
+        }
+        .painter-points{
+          flex:0 0 auto;
+          min-width:56px;
+          display:grid;
+          justify-items:end;
+          line-height:1.15;
+          font-variant-numeric:tabular-nums;
+        }
+        .painter-points strong{
+          font-size:14px;
+          font-weight:700;
+          letter-spacing:-.01em;
+          color:var(--color-ink,#1d1d1f);
+        }
+        .painter-points span{
+          font-size:11px;
+          font-weight:500;
+          color:var(--color-graphite,#707070);
+        }
+        .painter-points.is-zero strong{
+          color:var(--color-graphite,#707070);
+          font-weight:600;
+        }
+        .painter-grid-points{
+          margin-left:auto;
         }
         @media (prefers-reduced-motion: reduce){
           .painter-grid-menu-btn,

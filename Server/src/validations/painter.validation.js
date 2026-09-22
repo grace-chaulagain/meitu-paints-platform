@@ -42,7 +42,7 @@ export const updatePainterBodySchema = z
 export const painterListQuerySchema = z
   .object({
     q: optionalTrimmedString(120),
-    sort: z.enum(["name-asc", "name-desc", "recent", "oldest"]).optional(),
+    sort: z.enum(["name-asc", "name-desc", "recent", "oldest", "points-desc", "points-asc"]).optional(),
     type: z.enum(["ALL", "TTP", "RTP"]).optional(),
     page: z.coerce.number().int().min(1).max(10000).optional(),
     limit: z.coerce.number().int().min(1).max(1000).optional(),
