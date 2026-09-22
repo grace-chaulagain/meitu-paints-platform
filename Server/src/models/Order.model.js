@@ -374,6 +374,16 @@ const OrderSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // A scheme grant's PI number - schemes have their own run (SN1, SN2, ...)
+    // that reuses the commercial numbers, so it can't share serialNumber's
+    // unique index. See utils/orderSerialNumber.js.
+    schemeSerialNumber: {
+      type: Number,
+      index: true,
+      unique: true,
+      sparse: true,
+    },
+
     // The single canonical "what date does the PI show" instant - separate
     // from dispatchPrep.proformaGeneratedAt (factory checklist-step
     // tracking, goes inert post-dispatch). Refreshed on every PI

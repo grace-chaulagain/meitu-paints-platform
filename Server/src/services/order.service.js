@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 
 import ApiError from "../utils/apiError.js";
 import { buildOrderConflictError, buildOrderConflictErrorFresh } from "../utils/orderConflictError.js";
-import { getNextOrderSerialNumber } from "../utils/orderSerialNumber.js";
+import { displaySerialNumber, getNextOrderSerialNumber, serialFieldFor } from "../utils/orderSerialNumber.js";
 import Order, {
   ORDER_ORIGIN,
   ORDER_REVIEWED_BY,
@@ -1127,30 +1127,32 @@ export async function ensureProformaInvoiceMetadata({ orderId, actorUser }) {
   }
 
   const existing = await Order.findById(orderId)
-    .select("serialNumber proformaIssuedAt status orderOrigin")
+    .select("serialNumber schemeSerialNumber proformaIssuedAt status orderOrigin")
     .lean();
   if (!existing) {
     throw new ApiError(404, "Order not found");
   }
 
-  let serialNumber = existing.serialNumber;
+  let serialNumber = displaySerialNumber(existing);
   if (!serialNumber) {
-    // Scheme PIs draw from their own sequence - see orderSerialNumber.js.
+    // Scheme PIs draw from their own sequence into their own field - see
+    // orderSerialNumber.js.
+    const field = serialFieldFor(existing.orderOrigin);
     const nextSerial = await getNextOrderSerialNumber({ orderOrigin: existing.orderOrigin });
     const updated = await Order.findOneAndUpdate(
-      { _id: orderId, serialNumber: null },
-      { $set: { serialNumber: nextSerial } },
+      { _id: orderId, [field]: null },
+      { $set: { [field]: nextSerial } },
       { new: true },
     )
-      .select("serialNumber")
+      .select(field)
       .lean();
 
     // Lost a concurrent race to assign the first number for this order -
     // the winner's number is what every PI for this order should show, so
     // return that instead of the number we drew (never used again).
     serialNumber = updated
-      ? updated.serialNumber
-      : (await Order.findById(orderId).select("serialNumber").lean())?.serialNumber;
+      ? updated[field]
+      : (await Order.findById(orderId).select(field).lean())?.[field];
   }
 
   let generatedAt = existing.proformaIssuedAt;
