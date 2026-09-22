@@ -1189,12 +1189,16 @@ export const meituApi = createApi({
       ],
     }),
 
+    // Takes a dispatcher id, or { dispatcherId, ...params } (page/limit).
     getAdminDispatcherStock: builder.query({
-      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/stock` }),
+      query: (arg) => {
+        const { dispatcherId, ...params } = typeof arg === "object" && arg ? arg : { dispatcherId: arg };
+        return { url: `/api/admin/dispatchers/${dispatcherId}/stock`, params };
+      },
       keepUnusedDataFor: PROFILE_CACHE_SECONDS,
-      providesTags: (_response, _error, dispatcherId) => [
+      providesTags: (_response, _error, arg) => [
         listTag("DispatcherStock"),
-        { type: "DispatcherStock", id: dispatcherId },
+        { type: "DispatcherStock", id: typeof arg === "object" && arg ? arg.dispatcherId : arg },
       ],
     }),
 
@@ -1235,10 +1239,15 @@ export const meituApi = createApi({
       ],
     }),
 
+    // Takes a dispatcher id, or { dispatcherId, from, to } to narrow the
+    // purchase/scheme/sales totals to a date range.
     getAdminDispatcherProductSummary: builder.query({
-      query: (dispatcherId) => ({ url: `/api/admin/dispatchers/${dispatcherId}/product-summary` }),
-      providesTags: (_response, _error, dispatcherId) => [
-        { type: "DispatcherProductSummary", id: dispatcherId },
+      query: (arg) => {
+        const { dispatcherId, ...params } = typeof arg === "object" && arg ? arg : { dispatcherId: arg };
+        return { url: `/api/admin/dispatchers/${dispatcherId}/product-summary`, params };
+      },
+      providesTags: (_response, _error, arg) => [
+        { type: "DispatcherProductSummary", id: typeof arg === "object" && arg ? arg.dispatcherId : arg },
       ],
     }),
 
