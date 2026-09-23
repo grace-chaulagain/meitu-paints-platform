@@ -122,7 +122,7 @@ export default function PainterPortalPage() {
   const t = COPY[lang];
 
   useEffect(() => {
-    document.title = lang === "ne" ? "मेइतु पेन्टर अंक" : "Meitu Painter Points";
+    document.title = lang === "ne" ? "मेइतु पेन्टर पोइन्ट" : "Meitu Painter Points";
   }, [lang]);
 
   async function submit(event) {
