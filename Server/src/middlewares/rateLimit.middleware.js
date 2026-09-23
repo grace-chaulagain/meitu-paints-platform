@@ -30,6 +30,21 @@ export const refreshRateLimit = rateLimit({
   ),
 });
 
+// The painter portal's public lookup. A painter types one ID and reads their
+// own points; nobody legitimately does that dozens of times an hour, so this
+// is what blunts someone walking through TTP000001, TTP000002, ... to read
+// other painters' balances. The window is per IP, and deliberately generous
+// enough for a shared shop connection where several painters check in turn.
+export const painterPortalLookupRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitResponse(
+    "Too many lookups from this connection. Please wait a few minutes and try again.",
+  ),
+});
+
 export const passwordResetRateLimit = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 8,

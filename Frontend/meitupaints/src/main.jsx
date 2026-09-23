@@ -56,6 +56,7 @@ import {
   ConfirmDealerEmailPage,
 } from "./pages/AuthRecoveryPages.jsx";
 import AdminDashboard from "./admin/dashboard/AdminDashboardPage.jsx";
+import PainterPortalPage from "./painterPortal/PainterPortalPage.jsx";
 import AdminInsightsWorkspace, {
   LegacyInsightsRedirect,
 } from "./admin/dashboard/insights/AdminInsightsWorkspace.jsx";
@@ -328,6 +329,10 @@ function LoginRedirect() {
 }
 
 const router = createBrowserRouter([
+  // The painter portal stands on its own, outside <Layout />: a painter
+  // arrives here by scanning a QR and should meet one field and one button,
+  // not the marketing site's nav and footer.
+  { path: "/painter", element: <PainterPortalPage /> },
   {
     element: <Layout />,
     children: [

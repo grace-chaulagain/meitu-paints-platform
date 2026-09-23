@@ -17,6 +17,7 @@ export const COUPON_TABS = [
   { key: "history", label: "Redeemed", subtitle: "Coupon history", icon: "history" },
   { key: "attempts", label: "Security", subtitle: "Scan audit", icon: "shield" },
   { key: "settlement", label: "Payouts", subtitle: "Dealer & painter payouts", icon: "chart" },
+  { key: "gifts", label: "Gifts", subtitle: "Painter portal", icon: "gift" },
 ];
 
 export const PRICING_MODE_OPTIONS = [

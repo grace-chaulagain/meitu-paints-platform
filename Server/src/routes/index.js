@@ -8,6 +8,7 @@ import productRoutes from "./product.routes.js";
 import productFamilyRoutes from "./productFamily.routes.js";
 import adminCatalogRoutes from "./admin.catalog.routes.js";
 import adminInsightsRoutes from "./admin.insights.routes.js";
+import adminPainterPortalRoutes from "./admin.painterPortal.routes.js";
 import schemeOrderRoutes from "./schemeOrder.routes.js";
 import announcementRoutes from "./announcement.routes.js";
 import dispatcherRoutes from "./dispatcher.routes.js";
@@ -17,6 +18,7 @@ import notificationRoutes from "./notification.routes.js";
 import pushRoutes from "./push.routes.js";
 import stockRoutes from "./stock.routes.js";
 import factoryRoutes from "./factory.routes.js";
+import { painterLookupController } from "../controllers/painterPortal.controller.js";
 import {
   applyForDealershipController,
   verifyDealerEmailController,
@@ -28,10 +30,12 @@ import { auth } from "../middlewares/auth.middleware.js";
 import {
   applicationRateLimit,
   dealerApplicationEmailRateLimit,
+  painterPortalLookupRateLimit,
   publicReadRateLimit,
 } from "../middlewares/rateLimit.middleware.js";
 import { requireRole } from "../middlewares/requireRole.middleware.js";
-import { validateBody } from "../middlewares/validate.middleware.js";
+import { validateBody, validateQuery } from "../middlewares/validate.middleware.js";
+import { painterLookupQuerySchema } from "../validations/painterPortal.validation.js";
 import {
   dealerApplicationBodySchema,
   dealerEmailVerificationBodySchema,
@@ -53,6 +57,7 @@ router.use("/admin/announcements", announcementRoutes);
 // an empty suffix.
 router.use("/admin/insights", adminInsightsRoutes);
 router.use("/admin/scheme-orders", schemeOrderRoutes);
+router.use("/admin/painter-portal", adminPainterPortalRoutes);
 router.use("/admin", adminRoutes);
 
 // Dealer
@@ -87,6 +92,17 @@ router.use("/dealer", auth, requireRole("DEALER"), dealerRoutes);
 // above, which would block dispatchers before requireRole even runs the
 // inner routes.
 router.use("/redemptions", auth, requireRole("DEALER", "DISPATCHER"), redemptionRoutes);
+
+// Painter portal (public, no login). A painter scans a QR, types the ID from
+// their card, and reads their own points and gift ladder. Rate-limited and
+// deliberately narrow: it answers about one painter at a time and returns no
+// contact details - see lookupPainterForPortal.
+router.get(
+  "/painter-portal/lookup",
+  painterPortalLookupRateLimit,
+  validateQuery(painterLookupQuerySchema),
+  painterLookupController,
+);
 
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);
