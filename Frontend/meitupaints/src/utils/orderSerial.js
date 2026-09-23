@@ -15,6 +15,15 @@ export function orderSerialNumber(order) {
   return order.serialNumber ?? null;
 }
 
+// Whether an order is one the server returned for an SN search. It matches on
+// either field, exactly as the server's query does - a scheme SN assigned
+// before the split still sits in serialNumber, so matching on the displayed
+// number alone would miss it.
+export function matchesSerialNumber(order, number) {
+  if (!order || number == null) return false;
+  return order.serialNumber === number || order.schemeSerialNumber === number;
+}
+
 // Same rule the server applies to a search: "SN12" / "sn 12" / "SN-12" is only
 // ever a serial; a bare "12" is a serial too, but may also be part of an order
 // number, so the other fields are still searched for it.
