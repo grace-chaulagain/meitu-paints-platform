@@ -9,7 +9,7 @@ import {
   useVerifyAdminOrderMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
-import { orderSerialNumber, parseSerialSearch } from "../../../utils/orderSerial.js";
+import { matchesSerialNumber, orderSerialNumber, parseSerialSearch } from "../../../utils/orderSerial.js";
 import CreateSchemeOrderModal from "./CreateSchemeOrderModal.jsx";
 import { handleTransitionError, GENERIC_ACTION_ERROR } from "../../../shared/orderConflict.js";
 import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../components/orderflow/TransitionConfirmSheet.jsx";
@@ -859,7 +859,7 @@ export function AdminOrderTimelineRow({
   const flow = orderFlow(item, dealer, dispatcher?.companyName || dispatcher?.name || "");
   const waitingOnAdmin = isWaitingOn(item, "ADMIN");
   const serial = orderSerialNumber(item);
-  const serialIsMatch = highlightSerial != null && serial === highlightSerial;
+  const serialIsMatch = matchesSerialNumber(item, highlightSerial);
 
   return (
     <div
@@ -1921,7 +1921,7 @@ export default function AdminOrdersPage() {
   // Dispatchers' own restock orders are never scheme grants, so this pairing
   // has no answer - asked for anyway, the server would honour the scope and
   // return restock orders under a "Scheme" label. Nothing is fetched instead.
-  const typeConflict = orderType === "SCHEME" && routeMode === "DISPATCHER_REPLENISHMENT" && !serialSearch?.prefixed;
+  const typeConflict = orderType === "SCHEME" && routeMode === "DISPATCHER_REPLENISHMENT" && !serialSearch;
   const ordersQuery = useGetAdminOrdersQuery(orderParams, { pollingInterval: 20000, skip: typeConflict });
   const dispatchersQuery = useGetVerifiedDispatchersQuery();
   const productsQuery = useGetProductsQuery();
@@ -1959,7 +1959,17 @@ export default function AdminOrdersPage() {
     [orders, needsYouEligible],
   );
   const needsYouActive = needsYouEligible && (needsYouOverride ?? needsYouCount > 0);
-  const visibleOrders = needsYouActive ? orders.filter((order) => isWaitingOn(order, "ADMIN")) : orders;
+  // An order the search found by its PI SN is always listed, even while "Needs
+  // you" is narrowing the tab. An SN is only assigned once a Proforma Invoice
+  // is generated, which is past the admin's own step, so every SN match would
+  // otherwise be filtered straight back out - the banner would say the order is
+  // being shown while the list below stayed empty.
+  const visibleOrders =
+    needsYouActive
+      ? orders.filter(
+          (order) => isWaitingOn(order, "ADMIN") || matchesSerialNumber(order, serialSearch?.number ?? null),
+        )
+      : orders;
 
   // Same lane-diff pattern as Dispatcher's Pending queue and Factory's
   // Inbox lane (§2.6/Phase 4-5) - scoped to the Pending tab, the only
