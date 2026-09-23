@@ -155,6 +155,8 @@ export const meituApi = createApi({
   reducerPath: "meituApi",
   baseQuery: axiosBaseQuery(),
   tagTypes: [
+    "Gift",
+    "PainterPortalSettings",
     "Product",
     "ProductCategory",
     "ProductFamily",
@@ -682,6 +684,57 @@ export const meituApi = createApi({
         ...listResponseTags("CouponAttempt", response),
         listTag("CouponAttempt"),
       ],
+    }),
+
+    // Painter portal: the gift ladder painters aim at, and the fiscal year
+    // their points are counted in.
+    getGifts: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/painter-portal/gifts", params }),
+      providesTags: (response) => [...listResponseTags("Gift", response), listTag("Gift")],
+    }),
+
+    createGift: builder.mutation({
+      query: (body) => ({ url: "/api/admin/painter-portal/gifts", method: "POST", data: body }),
+      transformResponse: (response) => getItem(response) || response,
+      invalidatesTags: () => [listTag("Gift")],
+    }),
+
+    updateGift: builder.mutation({
+      query: ({ giftId, ...patch }) => ({
+        url: `/api/admin/painter-portal/gifts/${giftId}`,
+        method: "PATCH",
+        data: patch,
+      }),
+      transformResponse: (response) => getItem(response) || response,
+      invalidatesTags: () => [listTag("Gift")],
+    }),
+
+    deleteGift: builder.mutation({
+      query: (giftId) => ({ url: `/api/admin/painter-portal/gifts/${giftId}`, method: "DELETE" }),
+      invalidatesTags: () => [listTag("Gift")],
+    }),
+
+    uploadGiftImage: builder.mutation({
+      query: ({ giftId, file }) => ({
+        url: `/api/admin/painter-portal/gifts/${giftId}/image`,
+        method: "POST",
+        data: toFormData("image", file),
+        headers: { "Content-Type": "multipart/form-data" },
+      }),
+      transformResponse: (response) => getItem(response) || response,
+      invalidatesTags: () => [listTag("Gift")],
+    }),
+
+    getPainterPortalSettings: builder.query({
+      query: () => ({ url: "/api/admin/painter-portal/settings" }),
+      transformResponse: (response) => getItem(response) || response,
+      providesTags: () => [listTag("PainterPortalSettings")],
+    }),
+
+    updatePainterPortalSettings: builder.mutation({
+      query: (body) => ({ url: "/api/admin/painter-portal/settings", method: "PATCH", data: body }),
+      transformResponse: (response) => getItem(response) || response,
+      invalidatesTags: () => [listTag("PainterPortalSettings")],
     }),
 
     getSettlementReport: builder.query({
@@ -2008,6 +2061,13 @@ export const {
   useGetCouponAttemptsQuery,
   useGetSettlementReportQuery,
   useGetPainterPayoutReportQuery,
+  useGetGiftsQuery,
+  useCreateGiftMutation,
+  useUpdateGiftMutation,
+  useDeleteGiftMutation,
+  useUploadGiftImageMutation,
+  useGetPainterPortalSettingsQuery,
+  useUpdatePainterPortalSettingsMutation,
   useGetAdminSalesQuery,
   useGetAdminSaleQuery,
   useGetAdminOrdersQuery,

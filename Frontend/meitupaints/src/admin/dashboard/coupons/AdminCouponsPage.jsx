@@ -10,6 +10,7 @@ import BatchesTab from "./tabs/BatchesTab.jsx";
 import HistoryTab from "./tabs/HistoryTab.jsx";
 import AttemptsTab from "./tabs/AttemptsTab.jsx";
 import SettlementTab from "./tabs/SettlementTab.jsx";
+import GiftsTab from "./tabs/GiftsTab.jsx";
 
 export default function AdminCouponsPage() {
   // The tab lives in the URL so one redemption row can link straight to
@@ -47,8 +48,10 @@ export default function AdminCouponsPage() {
           <HistoryTab />
         ) : tab === "attempts" ? (
           <AttemptsTab />
-        ) : (
+        ) : tab === "settlement" ? (
           <SettlementTab />
+        ) : (
+          <GiftsTab />
         )}
       </div>
 
