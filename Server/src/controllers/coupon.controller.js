@@ -63,8 +63,8 @@ export const listCouponBatchesController = asyncHandler(async (req, res) => {
 });
 
 export const listCouponRedemptionHistoryController = asyncHandler(async (req, res) => {
-  const { type, dealerId, dispatcherId, q, from, to, page, limit } = req.query || {};
-  const out = await couponService.listRedemptionHistory({ type, dealerId, dispatcherId, q, from, to, page, limit });
+  const { type, dealerId, dispatcherId, painterId, q, from, to, page, limit } = req.query || {};
+  const out = await couponService.listRedemptionHistory({ type, dealerId, dispatcherId, painterId, q, from, to, page, limit });
   res.status(200).json({ ok: true, ...out });
 });
 
@@ -106,5 +106,11 @@ export const listCouponAttemptsController = asyncHandler(async (req, res) => {
 export const getSettlementReportController = asyncHandler(async (req, res) => {
   const { from, to } = req.query || {};
   const out = await couponService.getSettlementReport({ from, to });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const getPainterPayoutReportController = asyncHandler(async (req, res) => {
+  const { from, to } = req.query || {};
+  const out = await couponService.getPainterPayoutReport({ from, to });
   res.status(200).json({ ok: true, ...out });
 });

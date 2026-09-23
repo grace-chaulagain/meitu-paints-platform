@@ -108,6 +108,9 @@ export const couponRedemptionHistoryQuerySchema = z
     // was rejected outright rather than filtered.
     dealerId: optionalTrimmedString(24),
     dispatcherId: optionalTrimmedString(24),
+    // The painter side of the same history - the Payouts tab's painter rows
+    // open their redemptions with this.
+    painterId: optionalTrimmedString(24),
     q: optionalTrimmedString(120),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),

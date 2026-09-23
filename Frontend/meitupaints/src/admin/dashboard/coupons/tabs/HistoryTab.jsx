@@ -13,6 +13,7 @@ import { DashboardIcon } from "../../../../components/dashboard/DashboardIcons.j
 import { DataTable, Pagination, Pill, SearchField, Surface } from "../../../../components/dashboard/DashboardUI.jsx";
 import { AppleDateField, AppleDropdown } from "../../../../components/dashboard/ApplePickers.jsx";
 import {
+  ACTOR_PARAM,
   COUPON_DATE_PRESETS,
   couponTypeLabel,
   formatMoney,
@@ -37,17 +38,19 @@ export default function HistoryTab() {
     const name = p.get("actorName") || "";
     if (p.get("dealerId")) return { kind: "DEALER", id: p.get("dealerId"), name: name || "this dealer" };
     if (p.get("dispatcherId")) return { kind: "DISPATCHER", id: p.get("dispatcherId"), name: name || "this dispatcher" };
+    // Scoped to the painter the points were earned for, rather than to whoever
+    // scanned the coupon - arrives from a painter row in Payouts.
+    if (p.get("painterId")) return { kind: "PAINTER", id: p.get("painterId"), name: name || "this painter" };
     return null;
   }, [location.search]);
 
   function scopeTo(next) {
     const search = new URLSearchParams(location.search);
     search.set("tab", "history");
-    search.delete("dealerId");
-    search.delete("dispatcherId");
+    Object.values(ACTOR_PARAM).forEach((param) => search.delete(param));
     search.delete("actorName");
     if (next) {
-      search.set(next.kind === "DISPATCHER" ? "dispatcherId" : "dealerId", next.id);
+      search.set(ACTOR_PARAM[next.kind] || ACTOR_PARAM.DEALER, next.id);
       search.set("actorName", next.name);
     }
     navigate({ pathname: location.pathname, search: `?${search}` });
@@ -66,6 +69,7 @@ export default function HistoryTab() {
     const params = { type, q, page, limit: PAGE_SIZE };
     if (actor?.kind === "DEALER") params.dealerId = actor.id;
     else if (actor?.kind === "DISPATCHER") params.dispatcherId = actor.id;
+    else if (actor?.kind === "PAINTER") params.painterId = actor.id;
     const { from, to } = resolveCouponDateRange(datePreset, customFrom, customTo);
     if (from) params.from = from;
     if (to) params.to = to;
@@ -247,8 +251,13 @@ export default function HistoryTab() {
             // While the history is scoped to one person the box is replaced by
             // a chip - there is nothing useful to type until it is cleared.
             <span className="coupon-history-scope">
-              <DashboardIcon name={actor.kind === "DISPATCHER" ? "truck" : "store"} size={13} strokeWidth={2} />
+              <DashboardIcon
+                name={actor.kind === "DISPATCHER" ? "truck" : actor.kind === "PAINTER" ? "user" : "store"}
+                size={13}
+                strokeWidth={2}
+              />
               <span className="coupon-history-scope-name">{actor.name}</span>
+              {actor.kind === "PAINTER" ? <span className="coupon-history-scope-kind">Painter</span> : null}
               <button type="button" onClick={() => scopeTo(null)} aria-label="Show every redemption again">
                 <DashboardIcon name="close" size={11} strokeWidth={2.6} />
               </button>

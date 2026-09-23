@@ -91,6 +91,7 @@ import {
   deleteCouponBatchesController,
   listCouponAttemptsController,
   getSettlementReportController,
+  getPainterPayoutReportController,
 } from "../controllers/coupon.controller.js";
 import {
   listPaintersController,
@@ -386,6 +387,12 @@ router.get(
   "/coupons/settlement-report",
   validateQuery(settlementReportQuerySchema),
   getSettlementReportController,
+);
+// The same payouts, counted per painter instead of per dealer/dispatcher.
+router.get(
+  "/coupons/painter-payouts",
+  validateQuery(settlementReportQuerySchema),
+  getPainterPayoutReportController,
 );
 // Order matters: the literal "/coupons/batches" routes must be declared
 // before the "/coupons/:couponId" param route below, or Express would match

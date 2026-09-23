@@ -643,7 +643,7 @@ export async function listCouponBatches({ type = "ALL", q = "", page = 1, limit 
 }
 
 // Admin: redemption history report.
-export async function listRedemptionHistory({ type = "ALL", dealerId = "", dispatcherId = "", q = "", from = "", to = "", page = 1, limit = 50 } = {}) {
+export async function listRedemptionHistory({ type = "ALL", dealerId = "", dispatcherId = "", painterId = "", q = "", from = "", to = "", page = 1, limit = 50 } = {}) {
   const pageNumber = Math.max(1, Number(page || 1));
   const limitNumber = Math.min(200, Math.max(1, Number(limit || 50)));
 
@@ -651,6 +651,10 @@ export async function listRedemptionHistory({ type = "ALL", dealerId = "", dispa
   if (type && type !== "ALL") filter.type = type;
   if (dealerId) filter.dealerId = new mongoose.Types.ObjectId(String(dealerId));
   if (dispatcherId) filter.dispatcherId = new mongoose.Types.ObjectId(String(dispatcherId));
+  // The painter a redemption earned points for - the other side of the same
+  // row. Cash-only redemptions carry no painterId at all, so they are never
+  // part of one painter's history.
+  if (painterId) filter.painterId = new mongoose.Types.ObjectId(String(painterId));
   if (q) filter.couponCode = { $regex: String(q).trim(), $options: "i" };
   if (from || to) {
     filter.redeemedAt = {};
@@ -679,6 +683,57 @@ export async function listRedemptionHistory({ type = "ALL", dealerId = "", dispa
       total,
       pages: Math.max(1, Math.ceil(total / limitNumber)),
     },
+  };
+}
+
+// Admin: the same payout question asked from the painter's side - how many
+// points, and how much cash, each painter has earned. Read off PointLedger
+// (one immutable row per credited redemption) rather than Painter's
+// denormalized totalPoints/totalCashReceived cache, so the table can be
+// narrowed to a period later and can never show a stale total.
+//
+// These rows do NOT add up to the dealer/dispatcher payout table: a cash-only
+// redemption (an unregistered RTP, a TTP with no ID card yet, an expired
+// coupon) pays the painter cash without crediting any points, so it writes no
+// ledger row and belongs to no painter here.
+export async function getPainterPayoutReport({ from = "", to = "" } = {}) {
+  const match = {};
+  if (from || to) {
+    match.createdAt = {};
+    if (from) match.createdAt.$gte = new Date(from);
+    if (to) match.createdAt.$lte = new Date(to);
+  }
+
+  const rows = await PointLedger.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: "$painterId",
+        totalPoints: { $sum: "$points" },
+        totalCashPaid: { $sum: "$cashAmount" },
+        redemptionCount: { $sum: 1 },
+        lastRedeemedAt: { $max: "$createdAt" },
+      },
+    },
+    { $sort: { totalPoints: -1 } },
+  ]);
+
+  const painters = rows.length
+    ? await Painter.find({ _id: { $in: rows.map((row) => row._id).filter(Boolean) } })
+        .select("name type status phones")
+        .lean()
+    : [];
+  const painterById = new Map(painters.map((painter) => [String(painter._id), painter]));
+
+  return {
+    items: rows.map((row) => ({
+      painterId: row._id,
+      painter: painterById.get(String(row._id)) || null,
+      totalPoints: row.totalPoints || 0,
+      totalCashPaid: row.totalCashPaid || 0,
+      redemptionCount: row.redemptionCount || 0,
+      lastRedeemedAt: row.lastRedeemedAt || null,
+    })),
   };
 }
 

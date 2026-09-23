@@ -16,7 +16,7 @@ export const COUPON_TABS = [
   { key: "coupons", label: "Batches", subtitle: "Generated sets", icon: "invoice" },
   { key: "history", label: "Redeemed", subtitle: "Coupon history", icon: "history" },
   { key: "attempts", label: "Security", subtitle: "Scan audit", icon: "shield" },
-  { key: "settlement", label: "Payouts", subtitle: "Dealer & dispatcher payouts", icon: "chart" },
+  { key: "settlement", label: "Payouts", subtitle: "Dealer & painter payouts", icon: "chart" },
 ];
 
 export const PRICING_MODE_OPTIONS = [
@@ -277,10 +277,20 @@ export function looksLikeCouponCode(text) {
 
 // The scope a "See redeem history" click applies, as URL params on the coupons
 // page. Lives here so Payouts and Redeemed build the identical link.
+//
+// A painter is scoped the same way as the two who redeem on their behalf: the
+// Payouts tab's painter rows lead here too, and land on Redeemed showing every
+// coupon ever scanned for that painter.
+export const ACTOR_PARAM = {
+  DEALER: "dealerId",
+  DISPATCHER: "dispatcherId",
+  PAINTER: "painterId",
+};
+
 export function redeemHistorySearch(actor) {
   const search = new URLSearchParams();
   search.set("tab", "history");
-  search.set(actor.kind === "DISPATCHER" ? "dispatcherId" : "dealerId", actor.id);
+  search.set(ACTOR_PARAM[actor.kind] || ACTOR_PARAM.DEALER, actor.id);
   search.set("actorName", actor.name);
   return `?${search}`;
 }

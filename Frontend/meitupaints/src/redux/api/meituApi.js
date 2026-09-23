@@ -689,6 +689,13 @@ export const meituApi = createApi({
       providesTags: () => [listTag("CouponSettlement")],
     }),
 
+    // The same payouts counted per painter. Shares CouponSettlement's tag, so
+    // a redemption invalidates both sides of the Payouts tab at once.
+    getPainterPayoutReport: builder.query({
+      query: (params = {}) => ({ url: "/api/admin/coupons/painter-payouts", params }),
+      providesTags: () => [listTag("CouponSettlement")],
+    }),
+
     getAdminSales: builder.query({
       query: (params = {}) => ({ url: "/api/admin/sales", params }),
       keepUnusedDataFor: ORDER_CACHE_SECONDS,
@@ -2000,6 +2007,7 @@ export const {
   useDeleteCouponBatchesMutation,
   useGetCouponAttemptsQuery,
   useGetSettlementReportQuery,
+  useGetPainterPayoutReportQuery,
   useGetAdminSalesQuery,
   useGetAdminSaleQuery,
   useGetAdminOrdersQuery,
