@@ -6,6 +6,7 @@ import {
   EmptyState,
   GhostButton,
   ListRow,
+  Pagination,
   Pill,
   SearchField,
   SectionHeader,
@@ -18,7 +19,6 @@ import { groupOrdersByDay } from "../../utils/orderDayGrouping.js";
 import {
   factoryQueueTimestamp,
   money,
-  orderMatchesLane,
   priorityForOrder,
   productCount,
   statusTone,
@@ -38,6 +38,21 @@ const ORDER_LANES = [
   { key: "COMPLETED", label: "Completed", icon: "checkmark" },
   { key: "REJECTED", label: "Rejected", icon: "reject" },
 ];
+
+// One lane is fetched at a time. Asking for every status at once meant the
+// page pulled the newest 100 orders of ANY status and split them in the
+// browser - so once the register passed 100 (on production it is past 200,
+// nearly all of them completed), the older ones were unreachable: no tab, no
+// search and no scroll could reach them. Each lane now pages through its own
+// status on the server, so the register can grow without hiding anything.
+const LANE_QUERY = {
+  INBOX: { stage: "INBOX" },
+  SHIPMENT: { stage: "SHIPMENT" },
+  COMPLETED: { status: "COMPLETED" },
+  REJECTED: { status: "REJECTED" },
+};
+
+const PAGE_SIZE = 25;
 
 const PRIORITY_OPTIONS = [
   { key: "ALL", label: "All priorities" },
@@ -205,6 +220,7 @@ function OrderRow({ order, onOpen, isArrived }) {
 
 export default function FactoryOrdersPage() {
   const [lane, setLane] = useState("INBOX");
+  const [page, setPage] = useState(1);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [draftQuery, setDraftQuery] = useState("");
   const [query, setQuery] = useState("");
@@ -218,19 +234,18 @@ export default function FactoryOrdersPage() {
   const [toast, setToast] = useState(null);
 
   const listQuery = useGetFactoryOrdersQuery(
-    { stage: "ALL", q: query, limit: 100, ...routeModeParams(routeMode) },
+    { ...(LANE_QUERY[lane] || LANE_QUERY.INBOX), q: query, page, limit: PAGE_SIZE, ...routeModeParams(routeMode) },
     { pollingInterval: 20000 },
   );
   const allOrders = listQuery.data?.items || [];
+  const pagination = listQuery.data?.pagination || { page: 1, pages: 1, total: allOrders.length };
 
-  const counts = ORDER_LANES.reduce((acc, item) => {
-    acc[item.key] = allOrders.filter((order) => orderMatchesLane(order, item.key)).length;
-    return acc;
-  }, {});
+  // Counted by the server across the whole register, not just this page, so a
+  // tab's number is the real size of that lane.
+  const counts = listQuery.data?.counts || {};
 
   const items = [...allOrders]
     .filter((order) => {
-      if (!orderMatchesLane(order, lane)) return false;
       if (date && todayKey(order.createdAt) !== date) return false;
       if (dealer && !String(order.dealerSnapshot?.companyName || "").toLowerCase().includes(dealer.toLowerCase())) return false;
       if (priority !== "ALL" && priorityForOrder(order) !== priority) return false;
@@ -262,6 +277,23 @@ export default function FactoryOrdersPage() {
     setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
   }
 
+  // Anything that changes what is being listed starts at page 1 - staying on
+  // page 4 of a lane that now has two pages would show an empty screen.
+  function changeLane(next) {
+    setLane(next);
+    setPage(1);
+  }
+
+  function applySearch(next) {
+    setQuery(next);
+    setPage(1);
+  }
+
+  function changeRouteMode(next) {
+    setRouteMode(next);
+    setPage(1);
+  }
+
   function clearFilters() {
     setDraftQuery("");
     setQuery("");
@@ -271,6 +303,7 @@ export default function FactoryOrdersPage() {
     setRouteMode("FACTORY");
     setSort("received-desc");
     setSortOrder("desc");
+    setPage(1);
   }
 
   const loadError = listQuery.error ? getQueryErrorMessage(listQuery.error, "Failed to load factory orders.") : "";
@@ -283,7 +316,7 @@ export default function FactoryOrdersPage() {
   // about to unmount.
   function handleDispatched(order) {
     setSelectedOrderId(null);
-    setLane("SHIPMENT");
+    changeLane("SHIPMENT");
     setToast({
       tone: "success",
       title: "Order dispatched",
@@ -293,7 +326,7 @@ export default function FactoryOrdersPage() {
 
   function handleDelivered(order) {
     setSelectedOrderId(null);
-    setLane("COMPLETED");
+    changeLane("COMPLETED");
     setToast({
       tone: "success",
       title: "Order completed",
@@ -320,7 +353,7 @@ export default function FactoryOrdersPage() {
           <FactoryOrderTabs
             options={ORDER_LANES.map((lane_) => ({ ...lane_, count: counts[lane_.key] || 0 }))}
             value={lane}
-            onChange={setLane}
+            onChange={changeLane}
           />
         </div>
 
@@ -329,11 +362,11 @@ export default function FactoryOrdersPage() {
             <SearchField
               value={draftQuery}
               onChange={setDraftQuery}
-              onSubmit={() => setQuery(draftQuery.trim())}
+              onSubmit={() => applySearch(draftQuery.trim())}
               placeholder="Search order number or dealer…"
             />
           </div>
-          <FactoryRouteMenu value={routeMode} onChange={setRouteMode} />
+          <FactoryRouteMenu value={routeMode} onChange={changeRouteMode} />
           <GhostButton onClick={toggleSortOrder}>
             <span
               style={{
@@ -423,6 +456,16 @@ export default function FactoryOrdersPage() {
           ))}
         </div>
       )}
+
+      {pagination.pages > 1 ? (
+        <Pagination
+          page={pagination.page}
+          totalPages={pagination.pages}
+          totalCount={pagination.total}
+          itemLabel="orders"
+          onChange={setPage}
+        />
+      ) : null}
 
       <FactoryOrderModal
         key={selectedOrderId || "none"}

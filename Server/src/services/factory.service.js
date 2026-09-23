@@ -307,14 +307,35 @@ export async function listFactoryOrders({
 
   if (dealerId) query.dealerId = dealerId;
 
-  const [items, total] = await Promise.all([
+  // Every lane's size, counted across the whole register rather than within
+  // the page being returned. The dashboard fetches one lane at a time, so
+  // without this its tabs could only ever count what they had already
+  // fetched - and a tab that says 94 when 206 exist is worse than no number.
+  // The stage/status narrowing is dropped for the count (that is what picks
+  // the lane), while search, routing and dealer stay, so the tabs count the
+  // same register the list is drawn from.
+  const countQuery = { ...query };
+  delete countQuery.status;
+  const [items, total, laneCounts] = await Promise.all([
     Order.find(query)
       .sort({ updatedAt: -1, createdAt: -1 })
       .skip((pageNumber - 1) * limitNumber)
       .limit(limitNumber)
       .lean(),
     Order.countDocuments(query),
+    Order.aggregate([
+      { $match: { ...countQuery, status: baseFactoryQuery(fulfillmentMode).status } },
+      { $group: { _id: "$status", n: { $sum: 1 } } },
+    ]),
   ]);
+
+  const byStatus = Object.fromEntries(laneCounts.map((row) => [row._id, row.n]));
+  const counts = {
+    INBOX: byStatus[ORDER_STATUS.VERIFIED] || 0,
+    SHIPMENT: byStatus[ORDER_STATUS.DISPATCHED] || 0,
+    COMPLETED: byStatus[ORDER_STATUS.COMPLETED] || 0,
+    REJECTED: byStatus[ORDER_STATUS.REJECTED] || 0,
+  };
 
   const invoices = await Invoice.find({ orderId: { $in: items.map((item) => item._id) } })
     .select("orderId invoiceNumber issuedAt")
@@ -331,6 +352,7 @@ export async function listFactoryOrders({
 
   return {
     items: enrichedItems,
+    counts,
     pagination: {
       page: pageNumber,
       limit: limitNumber,
