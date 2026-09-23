@@ -73,6 +73,25 @@ export default function AdminCouponsPage() {
           font-size:13px;
           font-weight:600;
         }
+        /* --- sortable table headers (Payouts) --- */
+        .coupon-sort-header{
+          display:inline-flex; align-items:center; gap:5px; width:100%;
+          padding:0; border:0; background:none; font:inherit; color:inherit;
+          letter-spacing:inherit; text-transform:inherit; cursor:pointer;
+          transition:color .12s ease;
+        }
+        .coupon-sort-header:hover{ color:var(--color-ink,#1d1d1f); }
+        .coupon-sort-header.is-active{ color:var(--color-azure,#0071e3); }
+        .coupon-sort-header:focus-visible{
+          outline:2px solid rgba(0,113,227,.36); outline-offset:3px; border-radius:6px;
+        }
+        /* The arrow is always in the layout, hidden until its column sorts, so
+           a header never shifts sideways when it becomes the active one. */
+        .coupon-sort-arrow{ flex:none; transition:transform .16s var(--ease-out, cubic-bezier(.23,1,.32,1)), opacity .12s ease; }
+        @media (prefers-reduced-motion: reduce){
+          .coupon-sort-header, .coupon-sort-arrow{ transition:none!important; }
+        }
+
         /* --- dealer search + per-dealer history --- */
         .coupon-history-search{ position:relative; display:inline-flex; }
         .coupon-history-suggest{
@@ -99,6 +118,14 @@ export default function AdminCouponsPage() {
           font-size:13.5px; font-weight:600;
         }
         .coupon-history-scope-name{ max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* Says which side of a redemption the chip names - a painter earned
+           the points, a dealer or dispatcher handed over the cash. Only the
+           painter needs saying: the other two are the ones this tab already
+           reads as "redeemed by". */
+        .coupon-history-scope-kind{
+          padding:1px 7px; border-radius:999px; background:rgba(0,113,227,.16);
+          font-size:10.5px; font-weight:700; letter-spacing:.02em; text-transform:uppercase;
+        }
         .coupon-history-scope button{
           width:22px; height:22px; display:grid; place-items:center; border:0; border-radius:50%;
           background:rgba(0,113,227,.16); color:inherit; cursor:pointer;
