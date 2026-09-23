@@ -846,8 +846,20 @@ export async function getSettlementReport({ from = "", to = "" } = {}) {
   const rows = await CouponRedemptionHistory.aggregate([
     { $match: match },
     {
+      // $ifNull, because a missing field and an explicit null are two
+      // different group keys to Mongo. dispatcherId was added to this schema
+      // after redemptions were already being written, and a Mongoose default
+      // does not backfill existing documents - so the older rows have no
+      // dispatcherId field at all while newer ones hold null. Grouping on the
+      // raw values split every dealer who redeemed on both sides of that
+      // change into two rows, each carrying part of their money (on
+      // production: Three Brothers Decoration Store as 69 + 13, Royal Granite
+      // texture paint as 9 + 7), and both rows answered to the same id.
       $group: {
-        _id: { dealerId: "$dealerId", dispatcherId: "$dispatcherId" },
+        _id: {
+          dealerId: { $ifNull: ["$dealerId", null] },
+          dispatcherId: { $ifNull: ["$dispatcherId", null] },
+        },
         totalCashPaid: { $sum: "$cashAmount" },
         totalPoints: { $sum: "$points" },
         redemptionCount: { $sum: 1 },

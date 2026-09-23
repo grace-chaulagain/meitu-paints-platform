@@ -330,7 +330,9 @@ export default function SettlementTab() {
           columns={columns}
           rows={sortedItems}
           onRowClick={(row) => setRowMenu((current) => (current === row ? null : row))}
-          getRowKey={(row) => row.dealerId || row.dispatcherId}
+          // Named by side as well as id: a dealer and a dispatcher could
+          // otherwise only be told apart by which field happened to be filled.
+          getRowKey={(row) => `${row.actorType}:${row.dealerId || row.dispatcherId || "unknown"}`}
           loading={settlementQuery.isLoading && !settlementQuery.data}
           footerCells={footerCells}
           emptyState={{ icon: "invoice", title: "No cash payouts yet", subtitle: "Dealer and dispatcher cash payout totals will show up here once coupons are redeemed." }}
