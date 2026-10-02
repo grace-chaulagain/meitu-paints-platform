@@ -6,91 +6,100 @@
 import Order from "../../models/Order.model.js";
 import Payment from "../../models/Payment.model.js";
 import DealerProfile from "../../models/DealerProfile.model.js";
+import Dispatcher from "../../models/Dispatcher.model.js";
 import {
-  AR_EXCLUDED_ORDER_STATUSES,
-  INTERNAL_ORDER_ORIGINS,
+  MEITU_DEALER_BILL_MATCH,
+  MEITU_DISPATCHER_BILL_MATCH,
   PAID_PAYMENT_STATUSES,
-  applyDealerScope,
+  REPORTING_TIMEZONE,
   numberValue,
-  resolveDealerIdScope,
-  resolveEntityMatch,
+  receivedPaymentMatch,
+  resolveReceivableScope,
 } from "./insightsShared.js";
 
-// Per-dealer outstanding balance = everything they've ever ordered (minus
-// rejected/cancelled orders) less everything they've actually paid.
-// Deliberately left SIGNED (an overpaid dealer shows a negative balance,
-// i.e. a credit owed back to them) rather than clamped at 0 - a real
-// account-keeping view needs to surface that, not hide it.
-export async function getArSummaryByDealer(filters = {}) {
-  // Orders carry routing on the snapshot, but payments only carry
-  // dealerId - so the same scope is expressed two ways (see
-  // resolveDealerIdScope in insightsShared.js).
-  const entity = resolveEntityMatch(filters);
-  const dealerScope = await resolveDealerIdScope(filters);
+const partyKey = (partyType, partyId) => `${partyType}:${partyId}`;
 
-  const [orderedRows, paidRows] = await Promise.all([
-    Order.aggregate([
-      {
-        $match: {
-          status: { $nin: AR_EXCLUDED_ORDER_STATUSES },
-          isDeleted: { $ne: true },
-          ...entity,
-          // Dispatcher-replenishment orders have no dealerId (they use
-          // dispatcherCustomerId instead) - without this, "$dealerId"
-          // groups them under a null _id, which then blows up the
-          // DealerProfile lookup below (String(null) === "null", an
-          // invalid ObjectId).
-          orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
-          dealerId: { $ne: null },
-        },
-      },
-      { $group: { _id: "$dealerId", totalOrdered: { $sum: "$totals.total" } } },
-    ]),
+// Every party's balance with Meitu: what Meitu billed them (see the bill
+// matches in insightsShared.js - dealers for factory-supplied orders,
+// dispatchers for restock) less what they've paid. This one function feeds
+// Statements & AR, the Outstanding AR KPI and the Payments tab's dues, so
+// those can never disagree about who owes what.
+// Deliberately left SIGNED (an overpaid party shows a negative balance, i.e.
+// a credit owed back to them) rather than clamped at 0 - a real
+// account-keeping view needs to surface that, not hide it.
+export async function getReceivableBalances(filters = {}) {
+  const scope = resolveReceivableScope(filters);
+
+  const [dealerBills, dispatcherBills, paidRows] = await Promise.all([
+    scope.dealers
+      ? Order.aggregate([
+          { $match: { ...MEITU_DEALER_BILL_MATCH, ...scope.dealers } },
+          { $group: { _id: "$dealerId", billed: { $sum: "$totals.total" } } },
+        ])
+      : [],
+    scope.dispatchers
+      ? Order.aggregate([
+          { $match: { ...MEITU_DISPATCHER_BILL_MATCH, ...scope.dispatchers } },
+          { $group: { _id: "$dispatcherCustomerId", billed: { $sum: "$totals.total" } } },
+        ])
+      : [],
     Payment.aggregate([
-      {
-        $match: applyDealerScope(
-          { status: { $in: PAID_PAYMENT_STATUSES }, dealerId: { $ne: null } },
-          dealerScope,
-        ),
-      },
-      { $group: { _id: "$dealerId", totalPaid: { $sum: "$amount" } } },
+      { $match: { status: { $in: PAID_PAYMENT_STATUSES }, ...(await receivedPaymentMatch(filters)) } },
+      { $group: { _id: { dealerId: "$dealerId", dispatcherId: "$dispatcherId" }, paid: { $sum: "$amount" } } },
     ]),
   ]);
 
-  const orderedByDealer = new Map(
-    orderedRows.filter((row) => row._id).map((row) => [String(row._id), numberValue(row.totalOrdered)]),
-  );
-  const paidByDealer = new Map(
-    paidRows.filter((row) => row._id).map((row) => [String(row._id), numberValue(row.totalPaid)]),
-  );
+  const balances = new Map();
+  const entry = (partyType, partyId) => {
+    const key = partyKey(partyType, partyId);
+    if (!balances.has(key)) balances.set(key, { partyType, partyId, billed: 0, paid: 0 });
+    return balances.get(key);
+  };
+  dealerBills.forEach((row) => { entry("DEALER", String(row._id)).billed += numberValue(row.billed); });
+  dispatcherBills.forEach((row) => { entry("DISPATCHER", String(row._id)).billed += numberValue(row.billed); });
+  paidRows.forEach((row) => {
+    // A Payment names exactly one party (see Payment.model.js).
+    const { dealerId, dispatcherId } = row._id || {};
+    if (dispatcherId) entry("DISPATCHER", String(dispatcherId)).paid += numberValue(row.paid);
+    else if (dealerId) entry("DEALER", String(dealerId)).paid += numberValue(row.paid);
+  });
 
-  const dealerIds = Array.from(new Set([...orderedByDealer.keys(), ...paidByDealer.keys()]));
-
-  const dealers = dealerIds.length
-    ? await DealerProfile.find({ _id: { $in: dealerIds } })
-        .select("companyName contactName email phone")
-        .lean()
-    : [];
+  const idsOf = (type) => [...balances.values()].filter((b) => b.partyType === type).map((b) => b.partyId);
+  const [dealers, dispatchers] = await Promise.all([
+    DealerProfile.find({ _id: { $in: idsOf("DEALER") } }).select("companyName contactName email phone").lean(),
+    Dispatcher.find({ _id: { $in: idsOf("DISPATCHER") } }).select("companyName contactName").lean(),
+  ]);
   const dealerById = new Map(dealers.map((dealer) => [String(dealer._id), dealer]));
+  const dispatcherById = new Map(dispatchers.map((dispatcher) => [String(dispatcher._id), dispatcher]));
 
-  const rows = dealerIds.map((dealerId) => {
-    const totalOrdered = orderedByDealer.get(dealerId) || 0;
-    const totalPaid = paidByDealer.get(dealerId) || 0;
+  const rows = [...balances.values()].map(({ partyType, partyId, billed, paid }) => {
+    const dealer = partyType === "DEALER" ? dealerById.get(partyId) || null : null;
+    const dispatcher = partyType === "DISPATCHER" ? dispatcherById.get(partyId) || null : null;
+    const profile = dealer || dispatcher;
     return {
-      dealerId,
-      dealer: dealerById.get(dealerId) || null,
-      totalOrdered,
-      totalPaid,
-      outstanding: totalOrdered - totalPaid,
+      key: partyKey(partyType, partyId),
+      partyType,
+      partyId,
+      name: profile?.companyName || profile?.contactName || (partyType === "DEALER" ? "Unknown dealer" : "Unknown dispatcher"),
+      // Kept for existing consumers that read dealer rows by these names.
+      dealerId: partyType === "DEALER" ? partyId : null,
+      dealer,
+      totalOrdered: billed,
+      totalPaid: paid,
+      outstanding: billed - paid,
     };
   });
 
   return rows.sort((a, b) => b.outstanding - a.outstanding);
 }
 
-// Fleet-wide AR position: sum of every dealer's signed outstanding balance
-// (so dealer credit balances net against dealer debts, mirroring how the
-// per-dealer figures above are computed).
+// Statements & AR rows - dealers and dispatchers, see getReceivableBalances.
+export async function getArSummaryByDealer(filters = {}) {
+  return getReceivableBalances(filters);
+}
+
+// Fleet-wide AR position: sum of every party's signed outstanding balance
+// (so credit balances net against debts, mirroring the per-party figures).
 export async function getFleetArTotal(filters = {}) {
   const rows = await getArSummaryByDealer(filters);
   return rows.reduce((sum, row) => sum + row.outstanding, 0);
@@ -116,17 +125,16 @@ const AGING_BUCKET_LABELS = {
 // the $lookup's working set, not just a nice-to-have.
 export async function getArAgingBuckets(filters = {}) {
   const now = new Date();
-  const entity = resolveEntityMatch(filters);
+  // The same bills as getReceivableBalances, so the buckets add up to the
+  // outstanding balances (apart from credits, which aging never shows).
+  const scope = resolveReceivableScope(filters);
+  const bills = [
+    scope.dealers && { ...MEITU_DEALER_BILL_MATCH, ...scope.dealers },
+    scope.dispatchers && { ...MEITU_DISPATCHER_BILL_MATCH, ...scope.dispatchers },
+  ].filter(Boolean);
+
   const rows = await Order.aggregate([
-    {
-      $match: {
-        status: { $nin: AR_EXCLUDED_ORDER_STATUSES },
-        isDeleted: { $ne: true },
-        orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
-        closedAt: null,
-        ...entity,
-      },
-    },
+    { $match: { closedAt: null, $or: bills } },
     {
       // Counts BOTH order-linked payments and the per-order slices of
       // on-account payments (Payment.allocations). Without the second
@@ -170,7 +178,7 @@ export async function getArAgingBuckets(filters = {}) {
       $addFields: {
         outstanding: { $max: [{ $subtract: ["$totals.total", "$paid"] }, 0] },
         ageDays: {
-          $dateDiff: { startDate: "$createdAt", endDate: now, unit: "day" },
+          $dateDiff: { startDate: "$createdAt", endDate: now, unit: "day", timezone: REPORTING_TIMEZONE },
         },
       },
     },

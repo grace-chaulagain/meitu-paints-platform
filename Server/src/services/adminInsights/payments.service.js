@@ -1,19 +1,21 @@
 import mongoose from "mongoose";
 import Payment from "../../models/Payment.model.js";
-import Order from "../../models/Order.model.js";
+import Order, { ORDER_ORIGIN } from "../../models/Order.model.js";
 import DealerProfile from "../../models/DealerProfile.model.js";
 import Dispatcher from "../../models/Dispatcher.model.js";
 import ApiError from "../../utils/apiError.js";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "../../constants/statuses.js";
 import {
-  AR_EXCLUDED_ORDER_STATUSES,
+  ACCEPTED_ORDER_STATUSES,
   INTERNAL_ORDER_ORIGINS,
+  MEITU_DEALER_BILL_MATCH,
   PAID_PAYMENT_STATUSES,
   numberValue,
   normalize,
   normalizeUpper,
   resolveDateRange,
 } from "./insightsShared.js";
+import { getReceivableBalances } from "./dealerStatements.service.js";
 
 function objectId(value, label) {
   if (!mongoose.Types.ObjectId.isValid(String(value))) {
@@ -22,13 +24,20 @@ function objectId(value, label) {
   return new mongoose.Types.ObjectId(String(value));
 }
 
-// Only factory-routed dealers and dispatchers are the admin's to record.
-// A dealer served by a dispatcher pays that dispatcher, not Meitu, so
-// admitting them here would double-count the same money once the
-// dispatcher settles their own account.
+// The parties whose payments the admin records: every dispatcher (for
+// their restock), and every dealer who owes Meitu - served by the factory
+// now, or with factory-supplied orders from before they moved to a
+// dispatcher. A dealer only ever supplied by a dispatcher pays that
+// dispatcher, not Meitu, so admitting them here would double-count the same
+// money once the dispatcher settles their own account.
 export async function listPayableParties() {
+  const billedDealerIds = await Order.distinct("dealerId", MEITU_DEALER_BILL_MATCH);
   const [dealers, dispatchers] = await Promise.all([
-    DealerProfile.find({ fulfillmentMode: "FACTORY" })
+    // `$ne` rather than "FACTORY": a profile with no stored mode is a
+    // factory dealer (the schema default).
+    DealerProfile.find({
+      $or: [{ fulfillmentMode: { $ne: "DISPATCHER" } }, { _id: { $in: billedDealerIds } }],
+    })
       .select("companyName contactName")
       .sort({ companyName: 1 })
       .lean(),
@@ -51,20 +60,39 @@ export async function listPayableParties() {
   ];
 }
 
-function partyMatch({ partyType, partyId }) {
-  if (partyType === "DISPATCHER") return { dispatcherId: objectId(partyId, "partyId") };
-  return { dealerId: objectId(partyId, "partyId") };
+// `payment` is how a Payment names this party; `orders` is which orders
+// bill them (the bill matches in insightsShared.js, minus the status
+// filter - a payment may be recorded against an order before it is
+// accepted). A dispatcher is billed only for their own replenishment
+// orders (where they are the customer, `dispatcherCustomerId`) - NOT for
+// dealer orders routed through them (`dispatcherId`), which their dealers
+// owe them. A dealer is billed only for orders the factory supplied.
+function partyScope({ partyType, partyId }) {
+  const id = objectId(partyId, "partyId");
+  if (partyType === "DISPATCHER") {
+    return {
+      payment: { dispatcherId: id },
+      orders: { dispatcherCustomerId: id, orderOrigin: ORDER_ORIGIN.DISPATCHER_REPLENISHMENT },
+    };
+  }
+  return {
+    payment: { dealerId: id },
+    orders: {
+      dealerId: id,
+      orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+      "dealerSnapshot.fulfillmentMode": { $ne: "DISPATCHER" },
+    },
+  };
 }
 
 // Orders that still owe money for this party, oldest first. `paid` counts
 // both order-linked payments and allocations written by earlier
 // on-account payments, so the same rupee is never applied twice.
-async function openOrdersOldestFirst(match) {
+async function openOrdersOldestFirst(ordersMatch) {
   const orderMatch = {
-    ...match,
+    ...ordersMatch,
     isDeleted: { $ne: true },
-    orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
-    status: { $nin: AR_EXCLUDED_ORDER_STATUSES },
+    status: { $in: ACCEPTED_ORDER_STATUSES },
     closedAt: null,
   };
 
@@ -133,8 +161,8 @@ function allocateOldestFirst(openOrders, amount) {
 }
 
 export async function previewAllocation({ partyType, partyId, amount }) {
-  const match = partyMatch({ partyType, partyId });
-  const openOrders = await openOrdersOldestFirst(match);
+  const scope = partyScope({ partyType, partyId });
+  const openOrders = await openOrdersOldestFirst(scope.orders);
   const { allocations, unallocated } = allocateOldestFirst(openOrders, amount);
   const byId = new Map(openOrders.map((order) => [String(order._id), order]));
 
@@ -168,21 +196,27 @@ export async function createAdminPayment(payload = {}, adminUserId = null) {
     throw new ApiError(400, "Invalid payment status");
   }
 
-  const match = partyMatch({ partyType, partyId: payload.partyId });
+  const scope = partyScope({ partyType, partyId: payload.partyId });
+  const party = scope.payment;
 
   // Dispatcher-served dealers pay their dispatcher, not Meitu - recording
-  // them here would double-count once the dispatcher settles up.
+  // them here would double-count once the dispatcher settles up. The
+  // exception is a dealer who moved to a dispatcher but still owes Meitu
+  // for what the factory supplied before the move.
   if (partyType === "DEALER") {
-    const dealer = await DealerProfile.findById(match.dealerId).select("fulfillmentMode").lean();
+    const dealer = await DealerProfile.findById(party.dealerId).select("fulfillmentMode").lean();
     if (!dealer) throw new ApiError(404, "Dealer not found");
-    if (dealer.fulfillmentMode !== "FACTORY") {
+    if (
+      dealer.fulfillmentMode === "DISPATCHER" &&
+      !(await Order.exists({ ...MEITU_DEALER_BILL_MATCH, dealerId: party.dealerId }))
+    ) {
       throw new ApiError(
         400,
         "This dealer is served by a dispatcher - their payments are recorded by that dispatcher, not by admin",
       );
     }
   } else {
-    const dispatcher = await Dispatcher.findById(match.dispatcherId).select("_id").lean();
+    const dispatcher = await Dispatcher.findById(party.dispatcherId).select("_id").lean();
     if (!dispatcher) throw new ApiError(404, "Dispatcher not found");
   }
 
@@ -191,19 +225,34 @@ export async function createAdminPayment(payload = {}, adminUserId = null) {
 
   if (normalize(payload.orderId)) {
     orderId = objectId(payload.orderId, "orderId");
-    const order = await Order.findOne({ _id: orderId, ...match }).select("_id").lean();
-    if (!order) throw new ApiError(404, "Order not found for this party");
+    const order = await Order.findOne({ _id: orderId, ...scope.orders }).select("_id").lean();
+    if (!order) {
+      const viaDispatcher =
+        partyType === "DEALER" &&
+        (await Order.exists({
+          _id: orderId,
+          dealerId: party.dealerId,
+          "dealerSnapshot.fulfillmentMode": "DISPATCHER",
+        }));
+      if (viaDispatcher) {
+        throw new ApiError(
+          400,
+          "That order was supplied by a dispatcher - the dealer pays the dispatcher for it, not Meitu",
+        );
+      }
+      throw new ApiError(404, "Order not found for this party");
+    }
   } else {
     // On account: split oldest-first so AR aging (computed per order)
     // still sees the money.
-    const openOrders = await openOrdersOldestFirst(match);
+    const openOrders = await openOrdersOldestFirst(scope.orders);
     allocations = allocateOldestFirst(openOrders, amount).allocations;
   }
 
   const payment = await Payment.create({
     orderId,
-    dealerId: match.dealerId || null,
-    dispatcherId: match.dispatcherId || null,
+    dealerId: party.dealerId || null,
+    dispatcherId: party.dispatcherId || null,
     allocations,
     method,
     amount,
@@ -276,47 +325,30 @@ export async function listAdminPayments(filters = {}) {
 }
 
 // Per-party dues: what they've been billed, what they've paid, what's left.
+// The balances are the same ones Statements & AR shows (unscoped), so the
+// two tabs always agree; the payable-party list only adds settled parties
+// with nothing on their account, for the "show settled" view.
 export async function getPartyDues(filters = {}) {
-  const parties = await listPayableParties();
+  const [parties, balances] = await Promise.all([listPayableParties(), getReceivableBalances({})]);
 
-  const [orderRows, paymentRows] = await Promise.all([
-    Order.aggregate([
-      {
-        $match: {
-          isDeleted: { $ne: true },
-          orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
-          status: { $nin: AR_EXCLUDED_ORDER_STATUSES },
-        },
-      },
-      { $group: { _id: "$dealerId", billed: { $sum: "$totals.total" } } },
-    ]),
-    Payment.aggregate([
-      { $match: { status: { $in: PAID_PAYMENT_STATUSES } } },
-      {
-        $group: {
-          _id: { dealerId: "$dealerId", dispatcherId: "$dispatcherId" },
-          paid: { $sum: "$amount" },
-        },
-      },
-    ]),
-  ]);
-
-  const billedByDealer = new Map(orderRows.filter((row) => row._id).map((row) => [String(row._id), numberValue(row.billed)]));
-  const paidByParty = new Map();
-  paymentRows.forEach((row) => {
-    const id = String(row._id.dispatcherId || row._id.dealerId || "");
-    if (!id) return;
-    paidByParty.set(id, (paidByParty.get(id) || 0) + numberValue(row.paid));
+  const rows = new Map(
+    parties.map((party) => [party.key, { ...party, billed: 0, paid: 0, due: 0 }]),
+  );
+  balances.forEach((balance) => {
+    rows.set(balance.key, {
+      key: balance.key,
+      partyType: balance.partyType,
+      partyId: balance.partyId,
+      name: rows.get(balance.key)?.name || balance.name,
+      billed: balance.totalOrdered,
+      paid: balance.totalPaid,
+      due: balance.outstanding,
+    });
   });
 
   const showSettled = String(filters.settled || "") === "true";
 
-  return parties
-    .map((party) => {
-      const billed = party.partyType === "DEALER" ? billedByDealer.get(party.partyId) || 0 : 0;
-      const paid = paidByParty.get(party.partyId) || 0;
-      return { ...party, billed, paid, due: billed - paid };
-    })
+  return [...rows.values()]
     .filter((row) => (showSettled ? true : row.billed > 0 || row.paid > 0))
     .sort((a, b) => b.due - a.due);
 }

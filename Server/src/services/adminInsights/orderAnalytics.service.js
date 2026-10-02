@@ -2,6 +2,8 @@ import Order from "../../models/Order.model.js";
 import {
   ACCEPTED_ORDER_STATUSES,
   INTERNAL_ORDER_ORIGINS,
+  REPORTING_TIMEZONE,
+  nepalDateString,
   numberValue,
   resolveDateRange,
   resolveEntityMatch,
@@ -33,16 +35,17 @@ export async function getOrderTrend(filters = {}) {
     { $match: { ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } } },
     {
       $group: {
-        _id: { $dateTrunc: { date: "$createdAt", unit: granularity } },
+        _id: { $dateTrunc: { date: "$createdAt", unit: granularity, timezone: REPORTING_TIMEZONE } },
         revenue: { $sum: "$totals.total" },
         orderCount: { $sum: 1 },
       },
     },
     { $sort: { _id: 1 } },
+    { $addFields: { date: nepalDateString("$_id") } },
   ]);
 
   return rows.map((row) => ({
-    date: row._id,
+    date: row.date,
     revenue: numberValue(row.revenue),
     orderCount: numberValue(row.orderCount),
     averageOrderValue: row.orderCount ? numberValue(row.revenue) / row.orderCount : 0,
@@ -99,7 +102,7 @@ export async function getOrderDayOfWeekPattern(filters = {}) {
     { $match: { ...baseMatch(range, resolveEntityMatch(filters)), status: { $in: ACCEPTED_ORDER_STATUSES } } },
     {
       $group: {
-        _id: { $dayOfWeek: "$createdAt" },
+        _id: { $dayOfWeek: { date: "$createdAt", timezone: REPORTING_TIMEZONE } },
         count: { $sum: 1 },
         revenue: { $sum: "$totals.total" },
       },

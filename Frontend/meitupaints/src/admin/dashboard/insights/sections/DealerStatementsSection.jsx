@@ -6,7 +6,7 @@ import {
   useLazyGetAdminOrderStatementReportQuery,
 } from "../../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../../redux/api/selectors.js";
-import { Surface, DataTable, PrimaryButton } from "../../../../components/dashboard/DashboardUI.jsx";
+import { Surface, DataTable, PrimaryButton, Pill } from "../../../../components/dashboard/DashboardUI.jsx";
 import { money } from "../insightsFormatting.js";
 import { downloadOrderStatementsReportPdf } from "../../../../utils/downloadOrderStatementsReportPdf.js";
 import { CURRENCY, twoColStyle } from "./sectionLayout.js";
@@ -15,10 +15,13 @@ import SectionViewFrame from "./SectionViewFrame.jsx";
 import ArAgingBarChart from "./charts/ArAgingBarChart.jsx";
 
 function outstandingColor(value) {
-  if (value < 0) return "#15803d"; // credit owed back to the dealer
+  if (value < 0) return "#15803d"; // credit owed back to the dealer/dispatcher
   if (value > 0) return "#b42318"; // owed to Meitu
   return "var(--color-ink, #1d1d1f)";
 }
+
+// Rows are Meitu's receivables: dealers for orders the factory supplied,
+// dispatchers for their restock (see getReceivableBalances on the server).
 
 export default function DealerStatementsSection({ dateFilters, view, onViewChange }) {
   // AR is a balance-to-date figure, so the server ignores the date window
@@ -52,9 +55,18 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
   const arColumns = useMemo(
     () => [
       {
-        key: "dealer",
-        header: "Dealer",
-        render: (row) => <span style={{ fontWeight: 700 }}>{row.dealer?.companyName || "Unknown dealer"}</span>,
+        key: "name",
+        header: "Account",
+        render: (row) => (
+          <span>
+            <span style={{ fontWeight: 700 }}>{row.name}</span>
+            {row.partyType === "DISPATCHER" ? (
+              <Pill tone="neutral" size="small" style={{ marginLeft: 6 }}>
+                Dispatcher
+              </Pill>
+            ) : null}
+          </span>
+        ),
       },
       {
         key: "totalOrdered",
@@ -87,7 +99,7 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
 
   const arFooter = arRows.length
     ? [
-        { key: "dealer", content: "Total", align: "left" },
+        { key: "name", content: "Total", align: "left" },
         { key: "totalOrdered", content: money(arTotals.totalOrdered, CURRENCY), align: "right" },
         { key: "totalPaid", content: money(arTotals.totalPaid, CURRENCY), align: "right" },
         {
@@ -157,15 +169,15 @@ export default function DealerStatementsSection({ dateFilters, view, onViewChang
   const dataView = (
     <>
       <Surface padding={0}>
-        <PanelHead eyebrow="Accounts receivable" icon="invoice" title="Dealer outstanding balances" />
+        <PanelHead eyebrow="Accounts receivable" icon="invoice" title="Outstanding balances" />
         <PanelBody>
           <DataTable
             columns={arColumns}
             rows={arRows}
-            getRowKey={(row) => row.dealerId}
+            getRowKey={(row) => row.key}
             loading={arSummaryQuery.isLoading && !arSummaryQuery.data}
             footerCells={arFooter}
-            emptyState={{ icon: "invoice", title: "No outstanding balances", subtitle: "Every dealer is settled." }}
+            emptyState={{ icon: "invoice", title: "No outstanding balances", subtitle: "Everyone is settled." }}
             minWidth={640}
           />
         </PanelBody>

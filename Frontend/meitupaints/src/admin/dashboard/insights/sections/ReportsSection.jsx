@@ -52,7 +52,8 @@ export default function ReportsSection({ dateFilters }) {
 
   function exportArSummary() {
     const rows = (arSummaryQuery.data || []).map((row) => ({
-      Dealer: row.dealer?.companyName || "Unknown dealer",
+      Account: row.name,
+      Type: row.partyType === "DISPATCHER" ? "Dispatcher" : "Dealer",
       "Total Ordered": money(row.totalOrdered, CURRENCY),
       "Total Paid": money(row.totalPaid, CURRENCY),
       Outstanding: money(row.outstanding, CURRENCY),
@@ -104,7 +105,7 @@ export default function ReportsSection({ dateFilters }) {
     {
       key: "ar-summary",
       title: "AR Summary (CSV)",
-      description: "Outstanding balance per dealer.",
+      description: "What each dealer and dispatcher owes Meitu.",
       onClick: exportArSummary,
     },
     {

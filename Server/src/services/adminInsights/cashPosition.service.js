@@ -1,9 +1,14 @@
 import Order from "../../models/Order.model.js";
+import Payment from "../../models/Payment.model.js";
 import {
   ACCEPTED_ORDER_STATUSES,
   INTERNAL_ORDER_ORIGINS,
+  PAID_PAYMENT_STATUSES,
+  REPORTING_TIMEZONE,
+  nepalDateString,
   numberValue,
   growth,
+  receivedPaymentMatch,
   resolveDateRange,
   resolveEntityMatch,
 } from "./insightsShared.js";
@@ -48,28 +53,40 @@ async function revenueTrend(range, granularity, entity) {
     { $match: match },
     {
       $group: {
-        _id: { $dateTrunc: { date: "$createdAt", unit: granularity } },
+        _id: { $dateTrunc: { date: "$createdAt", unit: granularity, timezone: REPORTING_TIMEZONE } },
         revenue: { $sum: "$totals.total" },
         orderCount: { $sum: 1 },
       },
     },
     { $sort: { _id: 1 } },
+    { $addFields: { date: nepalDateString("$_id") } },
   ]);
 
   return rows.map((row) => ({
-    date: row._id,
+    date: row.date,
     revenue: numberValue(row.revenue),
     orderCount: numberValue(row.orderCount),
   }));
 }
 
-async function paymentMethodMix(range, entity) {
-  const match = acceptedRevenueMatch(range, entity);
+// How the window's accepted orders said they would be paid - the method the
+// dealer chose on the order. An intention, not money received (see
+// paymentMethodMix), but until payments are recorded it is the only payment
+// information there is, so it is shown as "payment terms", not dropped.
+async function paymentTermsMix(range, entity) {
   const rows = await Order.aggregate([
-    { $match: match },
+    { $match: acceptedRevenueMatch(range, entity) },
     {
       $group: {
-        _id: { $ifNull: ["$payment.method", "Unspecified"] },
+        // The schema defaults the method to "", so a blank one and a
+        // missing one must land in the same bucket.
+        _id: {
+          $cond: [
+            { $gt: [{ $strLenCP: { $ifNull: ["$payment.method", ""] } }, 0] },
+            "$payment.method",
+            "Unspecified",
+          ],
+        },
         revenue: { $sum: "$totals.total" },
         orderCount: { $sum: 1 },
       },
@@ -81,6 +98,34 @@ async function paymentMethodMix(range, entity) {
     method: row._id,
     revenue: numberValue(row.revenue),
     orderCount: numberValue(row.orderCount),
+  }));
+}
+
+// Money actually received in the window, by how it was paid - from the
+// Payment ledger, scoped to the same parties as Meitu's receivables (see
+// receivedPaymentMatch).
+async function paymentMethodMix(range, filters) {
+  const match = { status: { $in: PAID_PAYMENT_STATUSES }, ...(await receivedPaymentMatch(filters)) };
+  if (!range.isAllTime) {
+    match.createdAt = { $gte: range.start, $lte: range.end };
+  }
+
+  const rows = await Payment.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $ifNull: ["$method", "Unspecified"] },
+        amount: { $sum: "$amount" },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { amount: -1 } },
+  ]);
+
+  return rows.map((row) => ({
+    method: row._id,
+    amount: numberValue(row.amount),
+    count: numberValue(row.count),
   }));
 }
 
@@ -99,11 +144,12 @@ export async function getCashPosition(filters = {}) {
         createdAt: { $gte: range.previousStart, $lte: range.previousEnd },
       };
 
-  const [current, previous, trend, paymentMix, arOutstanding, arOverdue] = await Promise.all([
+  const [current, previous, trend, paymentTerms, paymentMix, arOutstanding, arOverdue] = await Promise.all([
     revenueTotals(currentMatch),
     previousMatch ? revenueTotals(previousMatch) : Promise.resolve({ revenue: 0, orderCount: 0 }),
     revenueTrend(range, granularity, entity),
-    paymentMethodMix(range, entity),
+    paymentTermsMix(range, entity),
+    paymentMethodMix(range, filters),
     getFleetArTotal(filters),
     getOverdueArTotal(filters),
   ]);
@@ -125,6 +171,7 @@ export async function getCashPosition(filters = {}) {
       overdueAr: arOverdue,
     },
     trend,
+    paymentTerms,
     paymentMix,
   };
 }
