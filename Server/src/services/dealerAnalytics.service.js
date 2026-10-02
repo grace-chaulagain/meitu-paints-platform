@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import ApiError from "../utils/apiError.js";
 import DealerProfile from "../models/DealerProfile.model.js";
 import Order from "../models/Order.model.js";
+import { ACCEPTED_ORDER_STATUSES, INTERNAL_ORDER_ORIGINS } from "./adminInsights/insightsShared.js";
 
 const DAY_MS = 86400000;
 const APPROVED_STATUS = "COMPLETED";
@@ -619,8 +620,15 @@ export async function getDealerLeaderboard({
   const recent30 = new Date(now.getTime() - 30 * DAY_MS);
   const previous30 = new Date(now.getTime() - 60 * DAY_MS);
 
+  // Same sales the insights revenue figures count: every accepted dealer
+  // order. Not COMPLETED alone - an order a dispatcher supplied finishes at
+  // DISPATCHED and never reaches COMPLETED, so those dealers' sales went
+  // missing - and never a restock or scheme order, which has no dealer and
+  // used to show up as an unnamed "dealer" at the top of the board.
   const match = {
-    status: APPROVED_STATUS,
+    status: { $in: ACCEPTED_ORDER_STATUSES },
+    orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+    dealerId: { $ne: null },
     isDeleted: { $ne: true },
   };
 
