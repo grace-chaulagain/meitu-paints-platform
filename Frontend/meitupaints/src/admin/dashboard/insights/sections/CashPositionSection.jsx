@@ -22,8 +22,15 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
     [data],
   );
 
+  // Terms = how orders said they'd be paid; received = money actually
+  // recorded. Until payments are being recorded only the first has data,
+  // which is exactly why the two are never merged into one chart.
+  const paymentTermsItems = useMemo(
+    () => (data?.paymentTerms || []).map((row) => ({ label: row.method, value: row.revenue })),
+    [data],
+  );
   const paymentMixItems = useMemo(
-    () => (data?.paymentMix || []).map((row) => ({ label: row.method, value: row.revenue })),
+    () => (data?.paymentMix || []).map((row) => ({ label: row.method, value: row.amount })),
     [data],
   );
 
@@ -47,7 +54,7 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
           label="Outstanding AR"
           value={loading ? "…" : money(kpis.outstandingAr, CURRENCY)}
           tone={Number(kpis.outstandingAr || 0) < 0 ? "accent" : "neutral"}
-          helper={Number(kpis.outstandingAr || 0) < 0 ? "Net dealer credit" : "Owed to Meitu"}
+          helper={Number(kpis.outstandingAr || 0) < 0 ? "Net credit" : "Owed to Meitu"}
         />
         <KpiTile
           icon="warning"
@@ -59,20 +66,30 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
   );
 
   const charts = (
-    <div style={twoColStyle()}>
+    <>
       <Surface padding={0}>
         <PanelHead eyebrow="Revenue" icon="chart" title="Revenue over time" />
         <RevenueTrendChart data={trendPoints} currency={CURRENCY} />
       </Surface>
-      <Surface padding={0}>
-        <PanelHead eyebrow="Composition" icon="invoice" title="Payment method mix" />
-        <MagnitudeBarChart
-          items={paymentMixItems}
-          formatValue={(v) => money(v, CURRENCY)}
-          empty="No accepted orders in this window."
-        />
-      </Surface>
-    </div>
+      <div style={twoColStyle()}>
+        <Surface padding={0}>
+          <PanelHead eyebrow="As ordered" icon="orders" title="Payment terms on orders" />
+          <MagnitudeBarChart
+            items={paymentTermsItems}
+            formatValue={(v) => money(v, CURRENCY)}
+            empty="No accepted orders in this window."
+          />
+        </Surface>
+        <Surface padding={0}>
+          <PanelHead eyebrow="Cash in" icon="invoice" title="Payments received" />
+          <MagnitudeBarChart
+            items={paymentMixItems}
+            formatValue={(v) => money(v, CURRENCY)}
+            empty="No payments recorded in this window."
+          />
+        </Surface>
+      </div>
+    </>
   );
 
   // The same two series the charts above render, as auditable rows - this
@@ -110,7 +127,7 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
         </PanelBody>
       </Surface>
       <Surface padding={0}>
-        <PanelHead eyebrow="Composition" icon="list" title="Payment method mix" />
+        <PanelHead eyebrow="As ordered" icon="list" title="Payment terms on orders" />
         <PanelBody>
           <DataTable
             columns={[
@@ -124,16 +141,45 @@ export default function CashPositionSection({ dateFilters, view, onViewChange })
               },
               {
                 key: "revenue",
-                header: "Revenue",
+                header: "Order value",
                 align: "right",
                 cellClassName: () => "dash-table-tabular",
                 render: (row) => money(row.revenue, CURRENCY),
               },
             ]}
+            rows={data?.paymentTerms || []}
+            getRowKey={(row) => String(row.method)}
+            loading={loading}
+            emptyState={{ icon: "orders", title: "No accepted orders", subtitle: "Try a wider date range." }}
+            minWidth={480}
+          />
+        </PanelBody>
+      </Surface>
+      <Surface padding={0}>
+        <PanelHead eyebrow="Cash in" icon="list" title="Payments received" />
+        <PanelBody>
+          <DataTable
+            columns={[
+              { key: "method", header: "Method", render: (row) => row.method || "Unspecified" },
+              {
+                key: "count",
+                header: "Payments",
+                align: "right",
+                cellClassName: () => "dash-table-tabular",
+                render: (row) => number(row.count),
+              },
+              {
+                key: "amount",
+                header: "Received",
+                align: "right",
+                cellClassName: () => "dash-table-tabular",
+                render: (row) => money(row.amount, CURRENCY),
+              },
+            ]}
             rows={data?.paymentMix || []}
             getRowKey={(row) => String(row.method)}
             loading={loading}
-            emptyState={{ icon: "invoice", title: "No accepted orders", subtitle: "Nothing to break down yet." }}
+            emptyState={{ icon: "invoice", title: "No payments recorded", subtitle: "Recorded payments appear here." }}
             minWidth={480}
           />
         </PanelBody>

@@ -1,22 +1,25 @@
 import mongoose from "mongoose";
 import ApiError from "../../utils/apiError.js";
 import { PAYMENT_STATUS } from "../../constants/statuses.js";
-import { ORDER_STATUS } from "../../models/Order.model.js";
+import Order, { ORDER_STATUS } from "../../models/Order.model.js";
 
 export const DAY_MS = 86400000;
 
+// The business runs on Nepal time; every day boundary, day/week/month
+// bucket and weekday in these reports is computed in it. Without this,
+// Mongo buckets in UTC and an order placed 00:00-05:45 NPT lands on the
+// previous day - and date filters shift with whatever TZ the host has.
+export const REPORTING_TIMEZONE = "Asia/Kathmandu";
+const REPORTING_UTC_OFFSET = "+05:45";
+
 // Orders that count as real, accepted revenue for reporting purposes.
+// Also the only orders that carry a balance in AR/dues views: a SUBMITTED
+// order hasn't been accepted yet, so nobody owes anything on it, and a
+// rejected or cancelled one never will.
 export const ACCEPTED_ORDER_STATUSES = [
   ORDER_STATUS.VERIFIED,
   ORDER_STATUS.DISPATCHED,
   ORDER_STATUS.COMPLETED,
-];
-
-// Orders excluded from AR/account-keeping views entirely - a rejected or
-// cancelled order was never fulfilled, so it can't carry a real balance.
-export const AR_EXCLUDED_ORDER_STATUSES = [
-  ORDER_STATUS.REJECTED,
-  ORDER_STATUS.CANCELLED,
 ];
 
 // Order origins that reuse the Order pipeline but aren't dealer sales, so
@@ -27,6 +30,33 @@ export const AR_EXCLUDED_ORDER_STATUSES = [
 //     value down and show each giveaway as a fully-settled bill.
 // Both remain fully visible in Order Analytics and Inventory.
 export const INTERNAL_ORDER_ORIGINS = ["DISPATCHER_REPLENISHMENT", "SCHEME"];
+
+// What is owed to Meitu, and by whom. Decided by who SUPPLIED each order
+// (its snapshot), never by the dealer's current setting - dealers move
+// between the factory and dispatchers, and a dealer who moved still owes
+// Meitu for what the factory supplied before the move:
+//   - a dealer order the factory supplied: the dealer owes Meitu;
+//   - a dealer order a dispatcher supplied: the dealer owes that
+//     dispatcher, so it is never part of Meitu's receivables;
+//   - a dispatcher's restock order: the dispatcher owes Meitu.
+// Every "owed to Meitu" figure (AR, aging, dues, payment allocation) is
+// built from these two matches, so the sections cannot disagree.
+// `$ne: "DISPATCHER"` keeps an order with no stored mode, which the schema
+// defaults to FACTORY.
+export const MEITU_DEALER_BILL_MATCH = Object.freeze({
+  isDeleted: { $ne: true },
+  orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+  status: { $in: ACCEPTED_ORDER_STATUSES },
+  dealerId: { $ne: null },
+  "dealerSnapshot.fulfillmentMode": { $ne: "DISPATCHER" },
+});
+
+export const MEITU_DISPATCHER_BILL_MATCH = Object.freeze({
+  isDeleted: { $ne: true },
+  orderOrigin: "DISPATCHER_REPLENISHMENT",
+  status: { $in: ACCEPTED_ORDER_STATUSES },
+  dispatcherCustomerId: { $ne: null },
+});
 
 // Payment statuses that count as money actually received. VERIFIED is the
 // normal case; PARTIAL/PAID also represent real received amounts (the
@@ -129,18 +159,81 @@ export function applyDealerScope(query, scope) {
   return query;
 }
 
+// Which receivable parties the workspace's entity scope selects, as extra
+// conditions on each bill match (null = that kind of party is out of scope):
+//   picked dealer         -> that dealer only
+//   Factory route         -> dealers only
+//   dispatcher route(s)   -> dispatchers only (one, if picked) - the dealer
+//                            orders on that route are owed to the
+//                            dispatcher, so what Meitu is owed there is the
+//                            dispatchers' own restock
+//   no scope              -> everyone
+export function resolveReceivableScope(filters = {}) {
+  if (normalize(filters.dealerId)) {
+    return { dealers: { dealerId: objectId(filters.dealerId, "dealerId") }, dispatchers: null };
+  }
+  if (normalize(filters.dispatcherId)) {
+    return {
+      dealers: null,
+      dispatchers: { dispatcherCustomerId: objectId(filters.dispatcherId, "dispatcherId") },
+    };
+  }
+  const mode = normalizeUpper(filters.fulfillmentMode);
+  if (mode === "FACTORY") return { dealers: {}, dispatchers: null };
+  if (mode === "DISPATCHER") return { dealers: null, dispatchers: {} };
+  return { dealers: {}, dispatchers: {} };
+}
+
+// Payments that are money received by Meitu, within a receivable scope. A
+// dealer's payment against an order a dispatcher supplied (dealers can
+// submit those from their portal) went to that dispatcher, so it is left out.
+export async function receivedPaymentMatch(filters = {}) {
+  const scope = resolveReceivableScope(filters);
+  const dispatcherSupplied = scope.dealers
+    ? await Order.distinct("_id", {
+        orderOrigin: { $nin: INTERNAL_ORDER_ORIGINS },
+        "dealerSnapshot.fulfillmentMode": "DISPATCHER",
+      })
+    : [];
+
+  const dealerSide = scope.dealers && {
+    dealerId: scope.dealers.dealerId || { $ne: null },
+    orderId: { $nin: dispatcherSupplied },
+  };
+  const dispatcherSide = scope.dispatchers && {
+    dispatcherId: scope.dispatchers.dispatcherCustomerId || { $ne: null },
+  };
+
+  if (dealerSide && dispatcherSide) return { $or: [dealerSide, dispatcherSide] };
+  return dealerSide || dispatcherSide;
+}
+
+// Start/end of a calendar day in Nepal time, independent of the host TZ.
+function nepalDayBoundary(isoDay, endOfDay = false) {
+  return new Date(`${isoDay}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}${REPORTING_UTC_OFFSET}`);
+}
+
+function nepalToday() {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: REPORTING_TIMEZONE }).format(new Date());
+}
+
 function parseDateBoundary(value, endOfDay = false) {
   if (!value) return null;
-  const date = new Date(value);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+    ? nepalDayBoundary(String(value), endOfDay)
+    : new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new ApiError(400, "Invalid insights date range");
   }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
-    date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-  }
-
   return date;
+}
+
+// Bucket key for a $dateTrunc result, as the Nepal calendar day it starts
+// on. Sent as a plain YYYY-MM-DD string because the UTC instant of a
+// Nepal midnight is still the previous date in UTC.
+export function nepalDateString(dateExpression) {
+  return { $dateToString: { format: "%Y-%m-%d", date: dateExpression, timezone: REPORTING_TIMEZONE } };
 }
 
 // Resolves a filter's {from,to,range} into concrete boundaries, plus an
@@ -148,9 +241,7 @@ function parseDateBoundary(value, endOfDay = false) {
 export function resolveDateRange(filters = {}) {
   const { from, to } = filters;
   const requestedRange = normalizeUpper(filters.range || filters.preset);
-  const now = new Date();
-  const fallbackTo = new Date(now);
-  fallbackTo.setHours(23, 59, 59, 999);
+  const fallbackTo = nepalDayBoundary(nepalToday(), true);
 
   if (requestedRange === "ALL") {
     return {
@@ -162,8 +253,9 @@ export function resolveDateRange(filters = {}) {
     };
   }
 
-  const fallbackFrom = new Date(fallbackTo.getTime() - 29 * DAY_MS);
-  fallbackFrom.setHours(0, 0, 0, 0);
+  // Midnight 29 days before today's end, i.e. a 30-day window. Nepal has
+  // no DST, so fixed-length day arithmetic is exact.
+  const fallbackFrom = new Date(fallbackTo.getTime() + 1 - 30 * DAY_MS);
 
   const start = parseDateBoundary(from, false) || fallbackFrom;
   const end = parseDateBoundary(to, true) || fallbackTo;
