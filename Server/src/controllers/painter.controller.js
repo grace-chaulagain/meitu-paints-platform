@@ -50,6 +50,20 @@ export const promotePainterController = asyncHandler(async (req, res) => {
   res.status(200).json({ ok: true, ...out });
 });
 
+// Admin: suspend a painter - locks them out of earning on coupons, the
+// painter portal and ID issuance until reinstated. The reason is optional.
+export const suspendPainterController = asyncHandler(async (req, res) => {
+  const { painterId } = req.params;
+  const out = await painterService.suspendPainter(painterId, { reason: req.body?.reason, actorUser: req.user });
+  res.status(200).json({ ok: true, ...out });
+});
+
+export const reinstatePainterController = asyncHandler(async (req, res) => {
+  const { painterId } = req.params;
+  const out = await painterService.reinstatePainter(painterId);
+  res.status(200).json({ ok: true, ...out });
+});
+
 // Admin: mints a fresh, short-lived Cloudinary download URL for the TTP
 // card PDF and returns it as JSON (not a server-side redirect) - the route
 // itself is Bearer-token authenticated, but the returned Cloudinary URL is

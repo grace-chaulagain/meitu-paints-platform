@@ -13,7 +13,8 @@ import PointLedger from "../models/PointLedger.model.js";
 import PointsCatalogProduct from "../models/PointsCatalogProduct.model.js";
 import ApiError from "../utils/apiError.js";
 import { buildPublicAppUrl } from "../utils/publicUrl.js";
-import { DEALER_STATUS } from "../constants/statuses.js";
+import { DEALER_STATUS, PAINTER_STATUS } from "../constants/statuses.js";
+import { isPainterBlocked } from "./painter.service.js";
 import {
   COUPON_STATUS,
   COUPON_REDEMPTION_OUTCOME,
@@ -149,10 +150,14 @@ function classifyCouponFailure(existing) {
 }
 
 function assertPainterEligible(painter) {
-  if (["SUSPENDED", "INACTIVE", "BLACKLISTED"].includes(painter.status)) {
-    throw new ApiError(403, "This painter is not eligible to receive rewards right now.", {
-      code: "PAINTER_NOT_ELIGIBLE",
-    });
+  if (isPainterBlocked(painter)) {
+    throw new ApiError(
+      403,
+      painter.status === PAINTER_STATUS.SUSPENDED
+        ? "This painter is suspended and cannot receive rewards. Ask them to contact Meitu."
+        : "This painter is not eligible to receive rewards right now.",
+      { code: "PAINTER_NOT_ELIGIBLE" },
+    );
   }
 }
 

@@ -8,6 +8,7 @@ import { SkeletonSwap } from "../../dealer/mobile/SkeletonSwap.jsx";
 import { SegmentedControl } from "../../dealer/mobile/SegmentedControl.jsx";
 import { StatusChip } from "../../dealer/mobile/StatusChip.jsx";
 import { rankBySearch } from "../../utils/searchMatch.js";
+import { isPainterBlocked, painterBlockedLabel } from "../dashboard/painters/painterStatus.js";
 
 const SEGMENTS = [
   { key: "ALL", label: "All" },
@@ -132,6 +133,7 @@ export function AdminPaintersMobileView() {
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <StatusChip tone={typeTone(painter.type)}>{typeLabel(painter.type)}</StatusChip>
                     {card ? <StatusChip tone={card.tone}>{card.label}</StatusChip> : null}
+                    {isPainterBlocked(painter) ? <StatusChip tone="critical">{painterBlockedLabel(painter)}</StatusChip> : null}
                   </span>
                 </button>
               );

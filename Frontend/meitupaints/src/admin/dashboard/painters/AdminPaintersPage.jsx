@@ -25,6 +25,7 @@ import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
 import { AdminPaintersMobileView } from "../../mobile/AdminPaintersMobileView.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
+import { isPainterBlocked, painterBlockedLabel } from "./painterStatus.js";
 
 const TYPE_FILTER_OPTIONS = [
   { key: "ALL", label: "All types" },
@@ -215,6 +216,7 @@ function PainterListRow({ painter, showPoints, onOpen, onEdit, onDelete }) {
           </span>
           <Pill tone={painterTypeTone(painter.type)} size="small">{painterTypeLabel(painter.type)}</Pill>
           <IdCardStatusPill painter={painter} />
+          {isPainterBlocked(painter) ? <Pill tone="critical" size="small">{painterBlockedLabel(painter)}</Pill> : null}
         </div>
         <div style={{ marginTop: 2, fontSize: 12, fontWeight: 500, color: "var(--color-graphite,#707070)" }}>
           {formatPhones(painter.phones)}
@@ -311,6 +313,9 @@ function PaintersGridCard({ painter, showPoints, onOpen, onEdit, onDelete }) {
         </div>
         <div className="painter-grid-phones">{formatPhones(painter.phones)}</div>
         <IdCardStatusPill painter={painter} style={{ justifySelf: "start" }} />
+        {isPainterBlocked(painter) ? (
+          <Pill tone="critical" size="small" style={{ justifySelf: "start" }}>{painterBlockedLabel(painter)}</Pill>
+        ) : null}
       </div>
 
       <div className="painter-grid-actions" onClick={(event) => event.stopPropagation()}>

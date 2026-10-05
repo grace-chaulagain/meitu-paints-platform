@@ -6,6 +6,8 @@ import {
   useGetPainterPointsQuery,
   useGetPainterSalesQuery,
   usePromotePainterToTtpMutation,
+  useReinstatePainterMutation,
+  useSuspendPainterMutation,
   useUpdatePainterMutation,
 } from "../../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../../redux/api/selectors.js";
@@ -25,6 +27,7 @@ import { Toast } from "../../../components/dashboard/Toast.jsx";
 import ConfirmActionModal from "../../catalog/components/ConfirmActionModal.jsx";
 import PainterFormModal from "./PainterFormModal.jsx";
 import PainterIdCardModal from "./PainterIdCardModal.jsx";
+import { isPainterBlocked, painterBlockedLabel } from "./painterStatus.js";
 import { useIsMobileAdmin } from "../../mobile/useIsMobileAdmin.js";
 import { AdminPainterProfileMobileView } from "../../mobile/AdminPainterProfileMobileView.jsx";
 
@@ -175,6 +178,9 @@ export default function AdminPainterProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [idCardModalOpen, setIdCardModalOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [reinstateOpen, setReinstateOpen] = useState(false);
   const [actionError, setActionError] = useState("");
   const [toast, setToast] = useState(null);
   const [pointsPage, setPointsPage] = useState(1);
@@ -196,6 +202,33 @@ export default function AdminPainterProfilePage() {
   const [updatePainter, { isLoading: saving }] = useUpdatePainterMutation();
   const [deletePainter, { isLoading: deleting }] = useDeletePainterMutation();
   const [promotePainter, { isLoading: promoting }] = usePromotePainterToTtpMutation();
+  const [suspendPainter, { isLoading: suspending }] = useSuspendPainterMutation();
+  const [reinstatePainter, { isLoading: reinstating }] = useReinstatePainterMutation();
+
+  async function handleSuspend() {
+    try {
+      setActionError("");
+      await suspendPainter({ painterId, reason: suspendReason.trim() }).unwrap();
+      setSuspendOpen(false);
+      setSuspendReason("");
+      setToast({ tone: "success", title: "Painter suspended", description: `${painter?.name || "Painter"} can no longer earn points or use the painter portal.` });
+    } catch (err) {
+      setActionError(getQueryErrorMessage(err, "Failed to suspend painter."));
+      setSuspendOpen(false);
+    }
+  }
+
+  async function handleReinstate() {
+    try {
+      setActionError("");
+      await reinstatePainter(painterId).unwrap();
+      setReinstateOpen(false);
+      setToast({ tone: "success", title: "Painter reinstated", description: `${painter?.name || "Painter"} is active again.` });
+    } catch (err) {
+      setActionError(getQueryErrorMessage(err, "Failed to reinstate painter."));
+      setReinstateOpen(false);
+    }
+  }
 
   async function handlePromote() {
     try {
@@ -244,6 +277,10 @@ export default function AdminPainterProfilePage() {
         onBack={goBackToPainters}
         onPromote={() => promotePainter({ painterId, payload: {} }).unwrap()}
         promoting={promoting}
+        onSuspend={(reason) => suspendPainter({ painterId, reason }).unwrap()}
+        suspending={suspending}
+        onReinstate={() => reinstatePainter(painterId).unwrap()}
+        reinstating={reinstating}
       />
     );
   }
@@ -283,6 +320,11 @@ export default function AdminPainterProfilePage() {
     );
   }
 
+  // A blocked painter is not issued anything, so the two issuing actions
+  // (Promote, ID card) step aside for Reinstate - the server refuses them too.
+  const blocked = isPainterBlocked(painter);
+  const suspended = painter.status === "SUSPENDED";
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {backButton}
@@ -295,21 +337,32 @@ export default function AdminPainterProfilePage() {
               <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--color-ink,#1d1d1f)" }}>
                 {painter.name || "Unnamed Painter"}
               </div>
-              <div style={{ marginTop: 4 }}>
+              <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <Pill tone={painterTypeTone(painter.type)} size="small">{painterTypeLabel(painter.type)}</Pill>
+                {blocked ? <Pill tone="critical" size="small">{painterBlockedLabel(painter)}</Pill> : null}
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            {painter.type !== "TTP" ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {!blocked && painter.type !== "TTP" ? (
               <GhostButton icon="checkmark" onClick={() => setPromoteOpen(true)}>
                 Promote to TTP
               </GhostButton>
             ) : null}
-            {painter.type === "TTP" ? (
+            {!blocked && painter.type === "TTP" ? (
               <GhostButton icon="download" onClick={() => setIdCardModalOpen(true)}>
                 Download ID Card
+              </GhostButton>
+            ) : null}
+            {suspended ? (
+              <GhostButton icon="refresh" onClick={() => setReinstateOpen(true)}>
+                Reinstate
+              </GhostButton>
+            ) : null}
+            {!blocked ? (
+              <GhostButton danger icon="lock" onClick={() => setSuspendOpen(true)}>
+                Suspend
               </GhostButton>
             ) : null}
             <GhostButton icon="edit" onClick={() => setEditOpen(true)}>
@@ -320,6 +373,18 @@ export default function AdminPainterProfilePage() {
             </GhostButton>
           </div>
         </div>
+
+        {blocked ? (
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.06)", color: "#b42318", fontSize: 13, fontWeight: 600, lineHeight: 1.5 }}>
+            {painterBlockedLabel(painter)}
+            {suspended && painter.suspendedAt ? ` since ${formatDate(painter.suspendedAt)}` : ""} — cannot earn points on coupons, use the painter portal or be issued an ID card.
+            {painter.suspensionReason ? (
+              <div style={{ marginTop: 2, fontWeight: 500, color: "var(--color-slate,#474747)", wordBreak: "break-word" }}>
+                Reason: {painter.suspensionReason}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {error ? (
           <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(180,35,24,.08)", color: "#b42318", fontSize: 13, fontWeight: 600 }}>
@@ -463,6 +528,58 @@ export default function AdminPainterProfilePage() {
         loading={promoting}
         onClose={() => setPromoteOpen(false)}
         onConfirm={handlePromote}
+      />
+
+      <ConfirmActionModal
+        open={suspendOpen}
+        title="Suspend painter?"
+        description={
+          <>
+            {painter.name || "This painter"} will not be able to earn points on coupons, use the painter portal or be issued an ID card until reinstated. Points already earned are kept.
+            <textarea
+              value={suspendReason}
+              onChange={(event) => setSuspendReason(event.target.value)}
+              placeholder="Reason (optional, only admins see this)"
+              aria-label="Reason for suspension"
+              maxLength={300}
+              rows={2}
+              style={{
+                display: "block",
+                width: "100%",
+                boxSizing: "border-box",
+                marginTop: 14,
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(29,29,31,.14)",
+                background: "#fff",
+                font: "inherit",
+                fontSize: 13.5,
+                fontWeight: 500,
+                color: "var(--color-ink,#1d1d1f)",
+                resize: "vertical",
+              }}
+            />
+          </>
+        }
+        confirmText="Suspend"
+        danger
+        loading={suspending}
+        onClose={() => {
+          if (!suspending) setSuspendOpen(false);
+        }}
+        onConfirm={handleSuspend}
+      />
+
+      <ConfirmActionModal
+        open={reinstateOpen}
+        title="Reinstate painter?"
+        description={`${painter.name || "This painter"} will be able to earn points and use the painter portal again.`}
+        confirmText="Reinstate"
+        loading={reinstating}
+        onClose={() => {
+          if (!reinstating) setReinstateOpen(false);
+        }}
+        onConfirm={handleReinstate}
       />
 
       {idCardModalOpen ? (

@@ -94,6 +94,14 @@ export const promotePainterBodySchema = z
   })
   .strict();
 
+// The reason is for the admin's own record (shown on the painter's profile);
+// it is never sent to the painter, a dealer or the portal.
+export const suspendPainterBodySchema = z
+  .object({
+    reason: optionalTrimmedString(300),
+  })
+  .strict();
+
 export const painterPointsQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).max(10000).optional(),

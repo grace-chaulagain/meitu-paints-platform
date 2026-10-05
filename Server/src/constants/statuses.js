@@ -18,6 +18,18 @@ export const DEALER_STATUS = Object.freeze({
   SUSPENDED: "SUSPENDED",
 });
 
+// Painter.model.js's `status`. ACTIVE is the only one that can use anything -
+// see painter.service.js:isPainterBlocked. SUSPENDED is the one an admin sets
+// and lifts (suspendPainter/reinstatePainter); nothing in the app writes
+// INACTIVE or BLACKLISTED, they are kept because the schema has always
+// allowed them.
+export const PAINTER_STATUS = Object.freeze({
+  ACTIVE: "ACTIVE",
+  SUSPENDED: "SUSPENDED",
+  INACTIVE: "INACTIVE",
+  BLACKLISTED: "BLACKLISTED",
+});
+
 // ORDER_STATUS used to be duplicated here (and had drifted from the real
 // enum - it had an extra UNDER_REVIEW member that Order.model.js never
 // had). Order.model.js is the single source of truth now; re-exported here
