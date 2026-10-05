@@ -141,6 +141,9 @@ export default function PainterPortalPage() {
         setResult(body);
       } else if (response.status === 404) {
         setError(t.notFound);
+      } else if (response.status === 403) {
+        // Suspended by an admin: the portal shows nothing about the account.
+        setError(t.inactive);
       } else if (response.status === 429) {
         setError(t.rateLimited);
       } else if (response.status === 400) {
@@ -241,7 +244,6 @@ export default function PainterPortalPage() {
               ) : null}
 
               {points === 0 ? <p className="pp-zero">{t.zeroPoints}</p> : null}
-              {result.painter && result.painter.isActive === false ? <p className="pp-zero">{t.inactive}</p> : null}
             </section>
 
             <section className="pp-card pp-enter" style={{ "--i": 1 }}>

@@ -81,11 +81,18 @@ export function ChoiceCard({ icon, title, subtitle, onClick, tone = "neutral" })
 
 // A masked painter search result row - shared by TtpPainterSearchStep and
 // RtpPainterSearchStep.
+//
+// A painter Meitu has suspended is shown, so the counter knows they were
+// found, but cannot be picked: the redemption would be refused anyway
+// (coupon.service.js:assertPainterEligible), and this says so before the
+// dealer reaches the confirm step.
 export function PainterResultRow({ painter, maskedIdLabel, onClick }) {
+  const blocked = Boolean(painter.status) && painter.status !== "ACTIVE";
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={blocked}
       style={{
         width: "100%",
         display: "flex",
@@ -95,8 +102,8 @@ export function PainterResultRow({ painter, maskedIdLabel, onClick }) {
         padding: "12px 14px",
         borderRadius: 12,
         border: "1px solid rgba(0,0,0,.07)",
-        background: "#fff",
-        cursor: "pointer",
+        background: blocked ? "var(--color-fog, #f5f5f7)" : "#fff",
+        cursor: blocked ? "not-allowed" : "pointer",
         textAlign: "left",
       }}
     >
@@ -105,8 +112,15 @@ export function PainterResultRow({ painter, maskedIdLabel, onClick }) {
         <div style={{ marginTop: 2, fontSize: 11.5, color: "var(--color-graphite, #707070)" }}>
           {maskedIdLabel}
         </div>
+        {blocked ? (
+          <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 600, color: "#b42318" }}>
+            Suspended by Meitu - cannot receive rewards.
+          </div>
+        ) : null}
       </div>
-      <DashboardIcon name="chevron" size={13} strokeWidth={2.2} style={{ flexShrink: 0, color: "var(--color-graphite, #707070)" }} />
+      {blocked ? null : (
+        <DashboardIcon name="chevron" size={13} strokeWidth={2.2} style={{ flexShrink: 0, color: "var(--color-graphite, #707070)" }} />
+      )}
     </button>
   );
 }

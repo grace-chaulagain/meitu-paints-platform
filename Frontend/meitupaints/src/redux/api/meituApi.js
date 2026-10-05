@@ -1946,6 +1946,23 @@ export const meituApi = createApi({
       invalidatesTags: (_result, _error, arg) => [listTag("Painter"), { type: "Painter", id: arg?.painterId }],
     }),
 
+    suspendPainter: builder.mutation({
+      query: ({ painterId, reason = "" }) => ({
+        url: `/api/admin/painters/${painterId}/suspend`,
+        method: "POST",
+        data: { reason },
+      }),
+      invalidatesTags: (_result, _error, arg) => [listTag("Painter"), { type: "Painter", id: arg?.painterId }],
+    }),
+
+    reinstatePainter: builder.mutation({
+      query: (painterId) => ({
+        url: `/api/admin/painters/${painterId}/reinstate`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, painterId) => [listTag("Painter"), { type: "Painter", id: painterId }],
+    }),
+
     getPainterPoints: builder.query({
       query: ({ painterId, ...params }) => ({ url: `/api/admin/painters/${painterId}/points`, params }),
       providesTags: (_response, _error, arg) => [{ type: "Painter", id: `${arg?.painterId}:points` }],
@@ -2200,6 +2217,8 @@ export const {
   useDeletePainterMutation,
   useGetPainterSalesQuery,
   usePromotePainterToTtpMutation,
+  useSuspendPainterMutation,
+  useReinstatePainterMutation,
   useGetPainterPointsQuery,
   useLazyGetPainterIdCardUrlQuery,
   useLazyGetPainterIdCardPhotoUrlQuery,

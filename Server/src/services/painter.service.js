@@ -7,9 +7,26 @@ import ApiError from "../utils/apiError.js";
 import { maskId } from "../utils/maskId.js";
 import cloudinary from "../utils/cloudinary.js";
 import { generatePainterIdCardPdf } from "./painterIdCard.service.js";
+import { PAINTER_STATUS } from "../constants/statuses.js";
 
 function actorId(actorUser) {
   return actorUser?.id || actorUser?._id || actorUser?.sub || null;
+}
+
+// The one definition of "this painter may not use anything" - earning on a
+// coupon (coupon.service.js), the painter portal (painterPortal.service.js)
+// and being issued a Painter ID or ID card (below) all ask this. A legacy
+// record with no status at all counts as active.
+export function isPainterBlocked(painter) {
+  return Boolean(painter?.status) && painter.status !== PAINTER_STATUS.ACTIVE;
+}
+
+function assertPainterNotBlocked(painter) {
+  if (isPainterBlocked(painter)) {
+    throw new ApiError(409, "This painter is suspended. Reinstate them first.", {
+      code: "PAINTER_SUSPENDED",
+    });
+  }
 }
 
 function sortSpec(sort) {
@@ -285,6 +302,7 @@ export async function getPainterIdCardDownloadUrl(painterId) {
   if (!painter.licenseId || !painter.idCardGeneratedAt) {
     throw new ApiError(404, "This painter does not have a generated ID card yet.");
   }
+  assertPainterNotBlocked(painter);
   // idCardGeneratedAt alone can mean a blank-photo card auto-generated on
   // TTP promotion - refuse to hand out a download link until a real photo
   // has actually been composited in, mirroring the frontend's own gate
@@ -319,6 +337,7 @@ export async function regeneratePainterIdCardWithPhoto(painterId, photoFile) {
   if (painter.type !== "TTP" || !painter.licenseId) {
     throw new ApiError(400, "Promote this painter to TTP before generating an ID card.");
   }
+  assertPainterNotBlocked(painter);
 
   const pdfBuffer = await generatePainterIdCardPdf({
     licenseId: painter.licenseId,
@@ -379,9 +398,68 @@ export async function promotePainterToTtp(painterId, { licenseIssuedAt, licenseS
       code: "ALREADY_PROMOTED",
     });
   }
+  assertPainterNotBlocked(painter);
 
   await assignTtpLicense(painter, { licenseIssuedAt, licenseStatus });
   return { item: painter.toObject() };
+}
+
+// Admin: locks a painter out of everything a painter can use - see
+// isPainterBlocked for the three places that read this. Nothing is deleted
+// or reversed: the points and cash already earned stay on the record, and
+// reinstatePainter below puts the painter back exactly where they were.
+//
+// One atomic update rather than load-and-save: a few legacy contacts still
+// have no `type`, and a full save() would fail them on that required path
+// (see the schema comment) for a change that has nothing to do with it.
+// Only an ACTIVE painter can be suspended, so this can never quietly turn a
+// BLACKLISTED record into one that reinstatePainter would then make active.
+export async function suspendPainter(painterId, { reason = "", actorUser } = {}) {
+  const painter = await Painter.findOneAndUpdate(
+    { _id: painterId, status: { $in: [PAINTER_STATUS.ACTIVE, null] } },
+    {
+      $set: {
+        status: PAINTER_STATUS.SUSPENDED,
+        suspendedAt: new Date(),
+        suspendedByUserId: actorId(actorUser),
+        suspensionReason: String(reason || "").trim(),
+      },
+    },
+    { new: true },
+  ).lean();
+  if (painter) return { item: painter };
+
+  const existing = await Painter.findById(painterId).select("status").lean();
+  if (!existing) throw new ApiError(404, "Painter not found");
+  throw new ApiError(
+    409,
+    existing.status === PAINTER_STATUS.SUSPENDED
+      ? "This painter is already suspended."
+      : `This painter is already blocked (${existing.status}).`,
+    { code: "PAINTER_ALREADY_SUSPENDED" },
+  );
+}
+
+// Admin: lifts a suspension. Only ever from SUSPENDED - the status this
+// feature sets - so it is not a back door out of INACTIVE or BLACKLISTED.
+export async function reinstatePainter(painterId) {
+  const painter = await Painter.findOneAndUpdate(
+    { _id: painterId, status: PAINTER_STATUS.SUSPENDED },
+    {
+      $set: {
+        status: PAINTER_STATUS.ACTIVE,
+        suspendedAt: null,
+        suspendedByUserId: null,
+        suspensionReason: "",
+      },
+    },
+    { new: true },
+  ).lean();
+  if (painter) return { item: painter };
+
+  const existing = await Painter.findById(painterId).select("status").lean();
+  if (!existing) throw new ApiError(404, "Painter not found");
+  throw new ApiError(409, "This painter is not suspended.", { code: "PAINTER_NOT_SUSPENDED" });
 }
 
 // Admin: paginated PointLedger rows for one painter, plus lifetime/yearly/

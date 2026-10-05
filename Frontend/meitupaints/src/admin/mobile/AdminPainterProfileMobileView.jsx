@@ -7,6 +7,7 @@ import { StatusChip } from "../../dealer/mobile/StatusChip.jsx";
 import { toast } from "../../dealer/mobile/useToast.js";
 import { useLazyGetPainterIdCardUrlQuery } from "../../redux/api/meituApi.js";
 import { getQueryErrorMessage } from "../../redux/api/selectors.js";
+import { isPainterBlocked, painterBlockedLabel } from "../dashboard/painters/painterStatus.js";
 
 function money(value, currency = "NPR") {
   return `${currency} ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -45,8 +46,26 @@ function painterCardFilename(painter) {
 // PainterIdCardModal's photo-crop flow for painters still "Photo Needed" -
 // this view surfaces that state honestly rather than reimplementing the
 // cropper, with a note pointing back to desktop.
-export function AdminPainterProfileMobileView({ painter, salesSummary, loading, loadError, onBack, onPromote, promoting }) {
+//
+// Suspend/Reinstate is here as well, unlike Edit/Delete: it is the one
+// action an admin may need the moment a problem is reported, wherever they
+// are, and it is fully reversible.
+export function AdminPainterProfileMobileView({
+  painter,
+  salesSummary,
+  loading,
+  loadError,
+  onBack,
+  onPromote,
+  promoting,
+  onSuspend,
+  suspending,
+  onReinstate,
+  reinstating,
+}) {
   const [promoteSheetOpen, setPromoteSheetOpen] = useState(false);
+  const [statusSheetOpen, setStatusSheetOpen] = useState(false);
+  const [suspendReason, setSuspendReason] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [fetchIdCardUrl] = useLazyGetPainterIdCardUrlQuery();
 
@@ -66,6 +85,25 @@ export function AdminPainterProfileMobileView({ painter, salesSummary, loading, 
 
   const isTtp = painter?.type === "TTP";
   const idReady = isTtp && Boolean(painter?.idCardPhotoAddedAt);
+  const blocked = isPainterBlocked(painter);
+  const suspended = painter?.status === "SUSPENDED";
+  const changingStatus = suspending || reinstating;
+
+  async function handleStatusChange() {
+    try {
+      if (suspended) {
+        await onReinstate();
+        toast(`${painter?.name || "Painter"} reinstated`);
+      } else {
+        await onSuspend(suspendReason.trim());
+        setSuspendReason("");
+        toast(`${painter?.name || "Painter"} suspended`);
+      }
+      setStatusSheetOpen(false);
+    } catch (err) {
+      toast(getQueryErrorMessage(err, suspended ? "Failed to reinstate painter." : "Failed to suspend painter."));
+    }
+  }
 
   async function handleDownload() {
     setDownloading(true);
@@ -121,7 +159,15 @@ export function AdminPainterProfileMobileView({ painter, salesSummary, loading, 
             <div style={{ marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <StatusChip tone={typeTone(painter.type)}>{typeLabel(painter.type)}</StatusChip>
               {isTtp ? <StatusChip tone={idReady ? "positive" : "caution"}>{idReady ? "ID Ready" : "Photo Needed"}</StatusChip> : null}
+              {blocked ? <StatusChip tone="critical">{painterBlockedLabel(painter)}</StatusChip> : null}
             </div>
+
+            {blocked ? (
+              <div style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.5, color: "#b42318" }}>
+                Cannot earn points, use the painter portal or be issued an ID card.
+                {painter.suspensionReason ? ` Reason: ${painter.suspensionReason}` : ""}
+              </div>
+            ) : null}
 
             <div className="admin-m-card" style={{ marginTop: 16 }}>
               <div className="admin-m-section-title">Painter Information</div>
@@ -193,7 +239,7 @@ export function AdminPainterProfileMobileView({ painter, salesSummary, loading, 
               </div>
             </div>
 
-            {!isTtp ? (
+            {blocked ? null : !isTtp ? (
               <button type="button" className="dealer-m-newsale-ghost" style={{ marginTop: 8 }} onClick={() => setPromoteSheetOpen(true)}>
                 Promote to TTP
               </button>
@@ -206,9 +252,47 @@ export function AdminPainterProfileMobileView({ painter, salesSummary, loading, 
                 Add a photo on desktop to finish this painter's ID card.
               </div>
             )}
+
+            {suspended || !blocked ? (
+              <button type="button" className="dealer-m-newsale-ghost" style={{ marginTop: 8 }} onClick={() => setStatusSheetOpen(true)}>
+                {suspended ? "Reinstate painter" : "Suspend painter"}
+              </button>
+            ) : null}
           </>
         ) : null}
       </SkeletonSwap>
+
+      <MobileSheet
+        open={statusSheetOpen}
+        onClose={() => {
+          if (!changingStatus) setStatusSheetOpen(false);
+        }}
+        ariaLabel={suspended ? "Reinstate painter" : "Suspend painter"}
+        footer={
+          <PrimaryButton loading={changingStatus} onClick={handleStatusChange}>
+            {suspended ? "Reinstate" : "Suspend"}
+          </PrimaryButton>
+        }
+      >
+        <div className="dealer-m-newsale-title">
+          {suspended ? "Reinstate" : "Suspend"} {painter?.name}?
+        </div>
+        <div style={{ marginTop: 6, fontSize: 13, color: "var(--color-graphite, #707070)" }}>
+          {suspended
+            ? "They will be able to earn points and use the painter portal again."
+            : "They will not be able to earn points on coupons, use the painter portal or be issued an ID card until reinstated. Points already earned are kept."}
+        </div>
+        {suspended ? null : (
+          <input
+            className="dealer-m-newsale-input"
+            value={suspendReason}
+            onChange={(event) => setSuspendReason(event.target.value)}
+            placeholder="Reason (optional, only admins see this)"
+            aria-label="Reason for suspension"
+            maxLength={300}
+          />
+        )}
+      </MobileSheet>
 
       <MobileSheet
         open={promoteSheetOpen}

@@ -101,6 +101,8 @@ import {
   deletePainterController,
   listPainterSalesController,
   promotePainterController,
+  suspendPainterController,
+  reinstatePainterController,
   getPainterIdCardDownloadUrlController,
   getPainterIdCardPhotoUrlController,
   regeneratePainterIdCardWithPhotoController,
@@ -157,6 +159,7 @@ import {
   painterListQuerySchema,
   painterSalesQuerySchema,
   promotePainterBodySchema,
+  suspendPainterBodySchema,
   painterPointsQuerySchema,
 } from "../validations/painter.validation.js";
 import {
@@ -482,6 +485,17 @@ router.post(
   validateParams(painterIdParamsSchema),
   validateBody(promotePainterBodySchema),
   promotePainterController,
+);
+router.post(
+  "/painters/:painterId/suspend",
+  validateParams(painterIdParamsSchema),
+  validateBody(suspendPainterBodySchema),
+  suspendPainterController,
+);
+router.post(
+  "/painters/:painterId/reinstate",
+  validateParams(painterIdParamsSchema),
+  reinstatePainterController,
 );
 router.get(
   "/painters/:painterId/points",

@@ -39,6 +39,14 @@ const PainterSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Who suspended this painter, when, and why - written by
+    // painter.service.js:suspendPainter and cleared again by reinstatePainter.
+    // Bookkeeping for the admin only: `status` above is the one field every
+    // eligibility check reads.
+    suspendedAt: { type: Date, default: null },
+    suspendedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    suspensionReason: { type: String, trim: true, default: "" },
+
     // TTP-only (Golden License Card fields). Deliberately no `default`
     // (not even `null`) on licenseId/citizenshipNumber below - the sparse
     // unique indexes on them only exclude documents where the field is

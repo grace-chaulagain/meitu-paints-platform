@@ -8,6 +8,7 @@ import PainterPortalSettings from "../models/PainterPortalSettings.model.js";
 import streamifier from "streamifier";
 
 import cloudinary from "../utils/cloudinary.js";
+import { isPainterBlocked } from "./painter.service.js";
 
 // Same local helper the product catalog uses (admin.catalog.service.js) -
 // cloudinary.js exports the configured client, not an upload function.
@@ -179,12 +180,25 @@ export async function lookupPainterForPortal({ query } = {}) {
     throw new ApiError(400, "Enter your Painter ID, citizenship number or phone number.");
   }
 
-  const painter = await Painter.findOne(filter)
+  // A phone number is not unique - two painters can share one - so a phone
+  // lookup can match more than one record. A suspended painter must never
+  // stand in front of an active one who shares their number and lock that
+  // painter out, so an active match is always preferred.
+  const matches = await Painter.find(filter)
     .select("name type status licenseId totalPoints")
+    .limit(10)
     .lean();
+  const painter = matches.find((match) => !isPainterBlocked(match)) || matches[0];
   if (!painter) {
     throw new ApiError(404, "We could not find that ID. Check the number on your card, or ask your dealer.", {
       code: "PAINTER_NOT_FOUND",
+    });
+  }
+  // A suspended painter is locked out of the portal too: no points, no
+  // ladder, not even their name - only where to turn next.
+  if (isPainterBlocked(painter)) {
+    throw new ApiError(403, "Your account is not active right now. Please contact Meitu.", {
+      code: "PAINTER_SUSPENDED",
     });
   }
 
@@ -221,7 +235,6 @@ export async function lookupPainterForPortal({ query } = {}) {
       name: painter.name,
       type: painter.type || "",
       licenseId: painter.licenseId || "",
-      isActive: (painter.status || "ACTIVE") === "ACTIVE",
     },
     period: { mode: period.mode, label: period.label, from: period.from, to: period.to },
     points: {
