@@ -143,9 +143,16 @@ export const publicWriteRateLimit = rateLimit({
   ),
 });
 
+// One redeemed coupon costs three requests (preview, redeem, and the
+// preview refetch the redeem triggers), and the window is per IP, so dealers
+// on a shared connection draw from the same budget. At 20, the eighth coupon
+// in a row was refused for the rest of the 15 minutes - a painter handing
+// over a stack locked the counter out. Both routes sit behind auth and the
+// token is a random secret, so this is only a backstop against a runaway
+// client, not the defense against guessing.
 export const couponRedemptionRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitResponse(
