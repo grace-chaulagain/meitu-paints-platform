@@ -45,7 +45,11 @@ app.use(
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
         objectSrc: ["'none'"],
-        scriptSrc: ["'self'"],
+        // 'wasm-unsafe-eval' lets @react-pdf/renderer compile its WebAssembly
+        // layout engine (yoga) - without it every browser-built PDF (Proforma
+        // Invoice, order summary, coupon print) fails. It permits WebAssembly
+        // compilation only, not eval() or inline script.
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
         fontSrc: ["'self'", "data:"],
