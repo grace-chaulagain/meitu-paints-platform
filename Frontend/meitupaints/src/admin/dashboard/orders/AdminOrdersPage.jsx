@@ -16,7 +16,7 @@ import { TransitionConfirmSheet, TransitionConfirmSheetStyles } from "../../../c
 import { DashboardIcon } from "../../../components/dashboard/DashboardIcons.jsx";
 import { adminOrderStatusMeta, formatTime, groupOrdersByDay, money } from "./orderFormatting.js";
 import { normalizeStatus, resolveOrderItemImage } from "../../../dealer/orderDetailLogic.js";
-import { getTierPrice } from "../../../dealer/pricing.js";
+import { buildCart, getTierPrice } from "../../../dealer/pricing.js";
 import {
   EmptyState as DashboardEmptyState,
   GhostButton,
@@ -1342,7 +1342,7 @@ function ProductSearchPicker({ onSelect, onRemove, onCancel }) {
   );
 }
 
-function LineEditor({ item, productsById, onChange, onRemove, currency = "NPR" }) {
+function LineEditor({ item, onChange, onRemove, currency = "NPR" }) {
   // Whether to search is tracked as local UI state, not by clearing
   // item.productId - that way clicking "Change" and then backing out
   // (Cancel) leaves the previously-selected product completely intact
@@ -1375,7 +1375,7 @@ function LineEditor({ item, productsById, onChange, onRemove, currency = "NPR" }
             quantity,
             unitPrice,
             lineTotal: deriveLineTotal(quantity, unitPrice),
-          });
+          }, "product");
           setSearching(false);
         }}
       />
@@ -1409,24 +1409,11 @@ function LineEditor({ item, productsById, onChange, onRemove, currency = "NPR" }
             type="number"
             min="0"
             value={item.quantity ?? 0}
-            onChange={(e) => {
-              const quantity = toSafeNumber(e.target.value);
-              // Re-price against the product's own tiers for the new
-              // quantity - this is the actual fix: quantity used to change
-              // without ever re-checking which tier it now falls into, so
-              // the line total just scaled at whatever rate was already
-              // sitting there. Falls back to the existing rate if the
-              // product isn't in the live catalog (e.g. deactivated since
-              // this order was placed) rather than guessing.
-              const product = productsById?.get(String(item.productId));
-              const unitPrice = resolveTierUnitPrice(product, quantity) ?? item.unitPrice;
-              onChange({
-                ...item,
-                quantity,
-                unitPrice,
-                lineTotal: deriveLineTotal(quantity, unitPrice),
-              });
-            }}
+            onChange={(e) =>
+              // AmendModal re-prices this line and its sibling sizes - a
+              // quantity change can move the whole family into another tier.
+              onChange({ ...item, quantity: toSafeNumber(e.target.value) }, "quantity")
+            }
             style={inputStyle}
           />
         </div>
@@ -1442,7 +1429,7 @@ function LineEditor({ item, productsById, onChange, onRemove, currency = "NPR" }
                 ...item,
                 unitPrice: toSafeNumber(e.target.value),
                 lineTotal: deriveLineTotal(item.quantity, e.target.value),
-              })
+              }, "rate")
             }
             style={inputStyle}
           />
@@ -1519,6 +1506,47 @@ function resolveTierUnitPrice(product, quantity) {
   return unitPrice > 0 ? unitPrice : null;
 }
 
+// Dealer tiers are shared by every size of a product: the dealer cart
+// (dealer/pricing.js:buildCart) adds up the whole family's (same product
+// `code`) volume or pack count, and every size is priced at the tier that
+// combined total lands in. Re-pricing only the edited line left its sibling
+// sizes on the tier from before the amendment, so this runs that same engine
+// over the amended lines and applies the result to every line in the touched
+// families. A rate the admin typed by hand (rateOverridden) is kept, though
+// its quantity still counts toward the family total. A line with no live
+// product or no tier match keeps its price instead of being zeroed.
+function repriceTierFamilies(items, productsById, touchedItems) {
+  const productFor = (item) => productsById?.get(String(item?.productId)) || null;
+  const familyKeyFor = (item) => {
+    const product = productFor(item);
+    return product ? product.code || product.sku || null : null;
+  };
+
+  const touchedFamilies = new Set(touchedItems.map(familyKeyFor).filter(Boolean));
+  if (touchedFamilies.size === 0) return items;
+
+  // The same inputs the dealer cart prices from: catalog products and
+  // quantities, both keyed by SKU.
+  const productsMap = {};
+  const quantities = {};
+  for (const item of items) {
+    const product = productFor(item);
+    if (!product?.sku) continue;
+    productsMap[product.sku] = product;
+    quantities[product.sku] = (quantities[product.sku] || 0) + toSafeNumber(item.quantity);
+  }
+  const unitPriceBySku = new Map(
+    buildCart(productsMap, quantities).map((line) => [line.sku, line.unitPrice]),
+  );
+
+  return items.map((item) => {
+    if (item.rateOverridden || !touchedFamilies.has(familyKeyFor(item))) return item;
+    const unitPrice = unitPriceBySku.get(productFor(item).sku);
+    if (!(unitPrice > 0)) return item;
+    return { ...item, unitPrice, lineTotal: deriveLineTotal(item.quantity, unitPrice) };
+  });
+}
+
 export function AmendModal({ open, order, saving, onClose, onSave }) {
   const [items, setItems] = useState(() => buildAmendItems(order));
   // Full active catalog (a separate, unfiltered cache entry from
@@ -1568,23 +1596,39 @@ export function AmendModal({ open, order, saving, onClose, onSave }) {
     0,
   );
 
-  function updateItem(index, nextItem) {
-    setItems((prev) =>
-      prev.map((item, idx) =>
+  // A dispatcher's own replenishment order is priced from flat per-SKU
+  // dispatcher rates, not dealer tiers, so a quantity change there keeps
+  // the rate it already has.
+  const tierPriced = order?.orderOrigin !== "DISPATCHER_REPLENISHMENT";
+
+  // `change` is "quantity", "product" or "rate". A typed rate sticks until
+  // that line's own quantity or product changes.
+  function updateItem(index, nextItem, change) {
+    const repricesFamily = change === "quantity" || change === "product";
+    setItems((prev) => {
+      const next = prev.map((item, idx) =>
         idx === index
           ? {
               ...nextItem,
               quantity: toSafeNumber(nextItem.quantity),
               unitPrice: toSafeNumber(nextItem.unitPrice),
               lineTotal: deriveLineTotal(nextItem.quantity, nextItem.unitPrice),
+              rateOverridden: change === "rate" || (!repricesFamily && Boolean(nextItem.rateOverridden)),
             }
           : item,
-      ),
-    );
+      );
+      if (!repricesFamily || !tierPriced) return next;
+      // Both the line's old and new product, so swapping a line out of a
+      // family re-prices the sizes it left behind too.
+      return repriceTierFamilies(next, productsById, [prev[index], next[index]]);
+    });
   }
 
   function removeItem(index) {
-    setItems((prev) => prev.filter((_, idx) => idx !== index));
+    setItems((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      return tierPriced ? repriceTierFamilies(next, productsById, [prev[index]]) : next;
+    });
   }
 
   function addItem() {
@@ -1646,8 +1690,7 @@ export function AmendModal({ open, order, saving, onClose, onSave }) {
                 <LineEditor
                   key={`${item.sku || item.code || "line"}-${index}`}
                   item={item}
-                  productsById={productsById}
-                  onChange={(nextItem) => updateItem(index, nextItem)}
+                  onChange={(nextItem, change) => updateItem(index, nextItem, change)}
                   onRemove={() => removeItem(index)}
                   currency={currency}
                 />
@@ -1737,12 +1780,16 @@ export function AmendModal({ open, order, saving, onClose, onSave }) {
 
               setLocalError("");
               onSave({
-                items: items.map((item) => ({
-                  ...item,
-                  quantity: toSafeNumber(item.quantity),
-                  unitPrice: toSafeNumber(item.unitPrice),
-                  lineTotal: deriveLineTotal(item.quantity, item.unitPrice),
-                })),
+                items: items.map((line) => {
+                  // rateOverridden is modal-only state; the order item schema is strict.
+                  const { rateOverridden: _rateOverridden, ...item } = line;
+                  return {
+                    ...item,
+                    quantity: toSafeNumber(item.quantity),
+                    unitPrice: toSafeNumber(item.unitPrice),
+                    lineTotal: deriveLineTotal(item.quantity, item.unitPrice),
+                  };
+                }),
                 dealerNote: dealerNote.trim(),
                 internalNote: internalNote.trim(),
                 reason: reason.trim(),
